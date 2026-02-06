@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiosk</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@700&display=swap');
+        :root { 
+            --timer-size: 8rem; --score-size: 15rem; --name-size: 3rem; 
+            --list-size: 1.5rem; --center-flex: 1.2; 
+            --list-padding: 0.5rem; --text-stroke: 0px;
+            --photo-size: 150px; 
+            --font-family: 'Roboto Mono';
+        }
+        body { background-color: #000; color: white; overflow: hidden; font-family: var(--font-family), monospace; display: flex; flex-direction: column; height: 100vh; }
+        .stroked { -webkit-text-stroke: var(--text-stroke) black; }
+        .timer-container { flex: none; display: flex; justify-content: center; align-items: center; background: #000; padding: 1vh 0; position: relative; }
+        .timer-box { font-size: var(--timer-size); line-height: 1; }
+        .timer-break { color: #facc15; }
+        .prio-light { width: 40px; height: 40px; border-radius: 50%; background: #222; border: 2px solid #444; opacity: 0; transition: opacity 0.3s; margin: 0 40px; }
+        .prio-active { opacity: 1; background: white; border-color: #fff; box-shadow: 0 0 25px white; }
+        .main-body { flex: 1; display: flex; width: 100%; overflow: hidden; }
+        .fencer-col { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .fencer-name { font-size: var(--name-size); font-weight: bold; text-align: center; margin-bottom: 20px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .score-container { display: flex; align-items: center; justify-content: center; gap: 20px; width: 100%; margin: 20px 0; }
+        .score-box { font-size: var(--score-size); line-height: 1; }
+        .fencer-photo { width: var(--photo-size); height: auto; aspect-ratio: 3/4; border-radius: 10px; object-fit: cover; border: 3px solid #333; transition: box-shadow 0.3s, border-color 0.3s; display: none; }
+        .photo-prio { border-color: white !important; box-shadow: 0 0 30px white; }
+        .card-box { display: flex; gap: 10px; justify-content: center; width: 100%; margin-top: auto; padding-bottom: 20px; }
+        .card-indicator { width: 50px; height: 75px; border-radius: 6px; opacity: 0; transition: opacity 0.2s; display: flex; align-items: center; justify-content: center; font-size: 3rem; font-weight: bold; color: black; }
+        .card-active { opacity: 1; box-shadow: 0 0 15px rgba(255,255,255,0.4); border: 2px solid white; }
+        .c-yellow { background-color: #fbbf24; } .c-red { background-color: #ef4444; } .c-black { background-color: #111; border: 2px solid #555; color: white; }
+        .center-col { flex: var(--center-flex); background: transparent; display: flex; flex-direction: column; padding: 10px; overflow: hidden; }
+        .list-title { text-align: center; color: #555; font-size: 1.2rem; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 2px; }
+        .match-list { width: 100%; display: flex; flex-direction: column; gap: 2px; }
+        .match-item { background: rgba(30, 30, 30, 0.5); padding: var(--list-padding) 0; font-size: var(--list-size); text-align: center; color: #888; border-bottom: 1px solid #333; }
+        .match-item:nth-child(even) { background: rgba(50, 50, 50, 0.5); }
+        .match-item span { color: #ccc; }
+        #qr-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 10px; text-align: center; color: black; display: none; z-index: 50; }
+        .wifi-gear { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); font-size: 3rem; color: #ff3300; cursor: pointer; display: none; animation: pulse 2s infinite; text-decoration: none; }
+        @keyframes pulse { 0% { opacity: 0.6; transform: translateY(-50%) scale(1); } 50% { opacity: 1; transform: translateY(-50%) scale(1.1); } 100% { opacity: 0.6; transform: translateY(-50%) scale(1); } }
+        #startup-info { position: absolute; top: 10px; right: 10px; background: rgba(0, 100, 0, 0.9); color: white; padding: 15px; border-radius: 8px; z-index: 9999; font-size: 1.2rem; border: 2px solid #00ff00; display: none; }
+    </style>
+</head>
+<body class="cursor-none">
+    <div id="startup-info"></div>
+    <div class="timer-container">
+        <div id="prio-l" class="prio-light"></div>
+        <div id="timer" class="timer-box stroked text-white font-bold">3:00</div>
+        <div id="prio-r" class="prio-light"></div>
+        <a href="/wifi" id="wifi-icon" class="wifi-gear">&#9881;</a>
+    </div>
+    
+    <div class="main-body">
+        <div class="fencer-col">
+            <h1 id="n-l" class="fencer-name stroked text-red-500">SX</h1>
+            <div class="score-container">
+                <img id="ph-l" src="" class="fencer-photo border-red-800" onerror="this.src='/static/photos/default.png'">
+                <span id="s-l" class="score-box stroked text-red-600 font-bold">0</span>
+            </div>
+            <div class="card-box">
+                <div id="c-l-y" class="card-indicator c-yellow"></div>
+                <div id="c-l-r" class="card-indicator c-red"></div>
+                <div id="c-l-b" class="card-indicator c-black"></div>
+                <div id="p-l-y" class="card-indicator c-yellow">P</div>
+                <div id="p-l-r" class="card-indicator c-red">P</div>
+                <div id="p-l-b" class="card-indicator c-black">P</div>
+            </div>
+        </div>
+        <div class="center-col">
+            <div class="list-title">Prossimi Incontri</div>
+            <div id="match-list-container" class="match-list"></div>
+        </div>
+        <div class="fencer-col">
+            <h1 id="n-r" class="fencer-name stroked text-green-500">DX</h1>
+            <div class="score-container">
+                <span id="s-r" class="score-box stroked text-green-600 font-bold">0</span>
+                <img id="ph-r" src="" class="fencer-photo border-green-800" onerror="this.src='/static/photos/default.png'">
+            </div>
+            <div class="card-box">
+                <div id="c-r-y" class="card-indicator c-yellow"></div>
+                <div id="c-r-r" class="card-indicator c-red"></div>
+                <div id="c-r-b" class="card-indicator c-black"></div>
+                <div id="p-r-y" class="card-indicator c-yellow">P</div>
+                <div id="p-r-r" class="card-indicator c-red">P</div>
+                <div id="p-r-b" class="card-indicator c-black">P</div>
+            </div>
+        </div>
+    </div>
+    <div id="qr-overlay">
+        <h2 class="text-2xl mb-2 font-bold">Scansiona</h2>
+        <img id="qr-img" src="" alt="QR" width="300" height="300">
+        <p id="ip-addr" class="mt-2 text-xl font-bold text-blue-600">...</p>
+    </div>
+    <script>
+        const socket = io();
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let audioUnlocked = false; let animInterval = null;
+        let currentGirone = 'rosso'; 
+
+        document.body.addEventListener('click', () => { if(audioCtx.state==='suspended') audioCtx.resume(); audioUnlocked=true; }, {once:true});
+        function playBeep() {
+            if (!audioUnlocked) return;
+            const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+            o.type='square'; o.frequency.setValueAtTime(440, audioCtx.currentTime);
+            o.connect(g); g.connect(audioCtx.destination);
+            o.start(); o.stop(audioCtx.currentTime+1.5);
+        }
+        const updateTimer = (t, phase) => {
+            const el = document.getElementById('timer');
+            el.innerText = t>10 ? `${Math.floor(t/60)}:${(Math.floor(t%60)<10?'0':'')+Math.floor(t%60)}` : t.toFixed(1);
+            if (phase === 'BREAK') { el.classList.add('timer-break'); el.classList.remove('text-white'); } else { el.classList.add('text-white'); el.classList.remove('timer-break'); }
+        };
+        const handlePrio = (prio) => {
+            const elL = document.getElementById('prio-l'); const elR = document.getElementById('prio-r');
+            const phL = document.getElementById('ph-l'); const phR = document.getElementById('ph-r');
+            if (animInterval) { clearInterval(animInterval); animInterval = null; }
+            phL.classList.remove('photo-prio'); phR.classList.remove('photo-prio');
+            if (prio === 'animating') {
+                let state = false;
+                animInterval = setInterval(() => { state=!state; elL.style.opacity=state?'1':'0'; elR.style.opacity=!state?'1':'0'; elL.classList.toggle('prio-active', state); elR.classList.toggle('prio-active', !state); }, 100);
+            } else if (prio === 'left') { elL.style.opacity='1'; elR.style.opacity='0'; elL.classList.add('prio-active'); phL.classList.add('photo-prio'); } 
+            else if (prio === 'right') { elL.style.opacity='0'; elR.style.opacity='1'; elR.classList.add('prio-active'); phR.classList.add('photo-prio'); } 
+            else { elL.style.opacity='0'; elR.style.opacity='0'; elL.classList.remove('prio-active'); elR.classList.remove('prio-active'); }
+        };
+        socket.on('timer_update', d => updateTimer(d.time, d.phase));
+        socket.on('time_expired', () => { playBeep(); document.body.style.backgroundColor='#300'; setTimeout(()=>document.body.style.backgroundColor='#000',500); });
+        
+        socket.on('wifi_info', info => {
+             const box = document.getElementById('startup-info');
+             if (!window.infoShown) {
+                 box.innerHTML = `<strong>WiFi:</strong> ${info.ssid || 'N/A'}<br><strong>IP:</strong> ${info.ip}`;
+                 box.style.display = 'block';
+                 window.infoShown = true;
+                 setTimeout(() => box.style.display = 'none', 30000);
+             }
+        });
+
+        socket.on('state_update', s => {
+            if(s.settings) {
+                const r = document.documentElement;
+                r.style.setProperty('--timer-size', s.settings.font_timer + 'rem');
+                r.style.setProperty('--score-size', s.settings.font_score + 'rem');
+                r.style.setProperty('--name-size', s.settings.font_name + 'rem');
+                r.style.setProperty('--list-size', s.settings.font_list + 'rem');
+                r.style.setProperty('--center-flex', s.settings.col_center_width);
+                r.style.setProperty('--list-padding', s.settings.list_padding + 'rem');
+                r.style.setProperty('--text-stroke', s.settings.text_border + 'rem');
+                r.style.setProperty('--font-family', s.settings.font_family);
+                const pSize = s.settings.photo_size;
+                r.style.setProperty('--photo-size', pSize + 'px');
+                const displayStyle = pSize > 0 ? 'block' : 'none';
+                document.getElementById('ph-l').style.display = displayStyle;
+                document.getElementById('ph-r').style.display = displayStyle;
+            }
+            document.getElementById('n-l').innerText=s.fencer_left.name; document.getElementById('s-l').innerText=s.fencer_left.score;
+            document.getElementById('n-r').innerText=s.fencer_right.name; document.getElementById('s-r').innerText=s.fencer_right.score;
+            const imgL = document.getElementById('ph-l'); const imgR = document.getElementById('ph-r');
+            if (s.fencer_left.photo && imgL.src.split('?')[0] !== window.location.origin + s.fencer_left.photo.split('?')[0]) imgL.src = s.fencer_left.photo;
+            if (s.fencer_right.photo && imgR.src.split('?')[0] !== window.location.origin + s.fencer_right.photo.split('?')[0]) imgR.src = s.fencer_right.photo;
+            updateTimer(s.timer, s.phase); handlePrio(s.priority);
+            
+            const wifiIcon = document.getElementById('wifi-icon');
+            if (s.wifi_connected) { 
+                wifiIcon.style.display = 'none'; 
+                document.body.style.cursor = 'none'; 
+            } else { 
+                wifiIcon.style.display = 'block'; 
+                document.body.style.cursor = 'default'; 
+            }
+
+            const listC = document.getElementById('match-list-container');
+            if (s.match_list && s.match_list.length > 0) {
+                const pending = s.match_list.filter(m => (parseInt(m.p_sx)||0)===0 && (parseInt(m.p_dx)||0)===0);
+                listC.innerHTML = pending.slice(0, 8).map(m => `<div class="match-item"><span>${m.sx.replace(/./g,"")}</span> vs <span>${m.dx.replace(/./g,"")}</span></div>`).join('');
+            } else { listC.innerHTML = ''; }
+            const upC = (side, data) => {
+                document.getElementById(`c-${side}-y`).classList.toggle('card-active', data.cards.Y);
+                document.getElementById(`c-${side}-r`).classList.toggle('card-active', data.cards.R);
+                document.getElementById(`c-${side}-b`).classList.toggle('card-active', data.cards.B);
+                document.getElementById(`p-${side}-y`).classList.toggle('card-active', data.p_cards.Y);
+                document.getElementById(`p-${side}-r`).classList.toggle('card-active', data.p_cards.R);
+                document.getElementById(`p-${side}-b`).classList.toggle('card-active', data.p_cards.B);
+            };
+            upC('l', s.fencer_left); upC('r', s.fencer_right);
+            const qr = document.getElementById('qr-overlay');
+            if(s.admin_connected) qr.style.display='none';
+            else {
+                qr.style.display='block';
+                const url = `http://${s.server_ip}:5000/telecomando`;
+                document.getElementById('ip-addr').innerText=url.replace('http://','');
+                document.getElementById('qr-img').src=`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`;
+            }
+        });
+    </script>
+</body>
+</html>

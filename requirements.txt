@@ -1,0 +1,1 @@
+Flask==2.3.3Flask-SocketIO==5.3.6eventlet==0.33.3requests==2.31.0werkzeug

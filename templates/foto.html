@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Gestione Foto</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body{background:#111;color:white;padding:20px;font-family:sans-serif}
+        .photo-card{background:#222;padding:10px;border-radius:8px;text-align:center;cursor:pointer;border:2px solid transparent}
+        .photo-card:hover{border-color:#666}
+        .has-photo{border-color:#00aa00}
+    </style>
+</head>
+<body>
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold text-blue-400">Gestione Foto Atleti</h1>
+        <button onclick="window.location.href='/telecomando'" class="bg-gray-600 px-4 py-2 rounded font-bold">Indietro</button>
+    </div>
+    
+    <div class="bg-gray-800 p-6 rounded-lg mb-8 text-center border-2 border-dashed border-gray-500" id="drop-zone">
+        <h2 class="text-2xl font-bold mb-2">Maxi Upload (Trascina qui)</h2>
+        <p class="text-gray-400 mb-4">Carica file tipo "Cognome_Nome.jpg" o "Nome Cognome.png".<br>Il sistema li collegherà automaticamente.</p>
+        <input type="file" id="maxi-input" multiple class="hidden" accept="image/*">
+        <button onclick="document.getElementById('maxi-input').click()" class="bg-blue-600 px-6 py-3 rounded font-bold text-lg">Seleziona Cartella / File</button>
+        <p id="upload-status" class="mt-4 text-yellow-400 font-bold"></p>
+    </div>
+    
+    <h2 class="text-xl mb-4">Lista Atleti (da G-Sheets)</h2>
+    <div id="athletes-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+    <input type="file" id="single-input" class="hidden" accept="image/*">
+    
+    <script>
+        let currentAthlete=null;
+        function loadAthletes(){
+            fetch('/api/get_athletes').then(r=>r.json()).then(d=>{
+                const g=document.getElementById('athletes-grid'); g.innerHTML='';
+                const dd=document.createElement('div'); dd.className='photo-card border-blue-500';
+                dd.innerHTML='<img src="/static/photos/default.png?v='+Date.now()+'" class="w-24 h-24 rounded-full mx-auto object-cover mb-2"><p class="font-bold">DEFAULT</p>';
+                dd.onclick=()=>triggerUpload('DEFAULT',true);
+                g.appendChild(dd);
+                d.forEach(a=>{
+                    const b=document.createElement('div'); b.className='photo-card '+(a.has_photo?'has-photo':'');
+                    b.innerHTML='<div class="w-24 h-24 rounded-full mx-auto bg-gray-700 flex items-center justify-center overflow-hidden mb-2">'+(a.has_photo?'<span class="text-green-500 text-4xl">✓</span>':'<span class="text-gray-500 text-4xl">?</span>')+'</div><p class="text-sm">'+a.name+'</p>';
+                    b.onclick=()=>triggerUpload(a.name,false);
+                    g.appendChild(b)
+                })
+            })
+        }
+        function triggerUpload(n,d){currentAthlete={name:n,isDefault:d};document.getElementById('single-input').click()}
+        document.getElementById('single-input').onchange=(e)=>{
+            if(!e.target.files[0])return;
+            const f=new FormData(); f.append('file',e.target.files[0]); f.append('name',currentAthlete.name); f.append('is_default',currentAthlete.isDefault);
+            fetch('/api/upload_photo',{method:'POST',body:f}).then(r=>r.json()).then(r=>{if(r.success){alert('Foto caricata!');loadAthletes()}})
+        };
+        const mi=document.getElementById('maxi-input');
+        mi.onchange=hF;
+        function hF(e){const f=e.target.files;if(!f.length)return;uF(f)}
+        function uF(fs){
+            const s=document.getElementById('upload-status'); s.innerText=`Caricamento di ${fs.length} file...`;
+            const f=new FormData(); for(let i=0;i<fs.length;i++){f.append('files[]',fs[i])}
+            fetch('/api/maxi_upload',{method:'POST',body:f}).then(r=>r.json()).then(r=>{s.innerText=`Completato! ${r.processed} foto abbinate.`;loadAthletes()}).catch(e=>{s.innerText="Errore upload.";console.error(e)})
+        }
+        loadAthletes()
+    </script>
+</body>
+</html>

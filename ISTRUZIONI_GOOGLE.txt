@@ -1,0 +1,35 @@
+ISTRUZIONI PER ABILITARE LA SCRITTURA PUNTEGGI SU GOOGLE SHEETS
+Apri il tuo Foglio Google dove tieni i gironi/assalti.
+Nel menu in alto, vai su Estensioni > Apps Script.
+Cancella tutto il codice che vedi nell'editor e incolla il seguente blocco:
+// --- INIZIO CODICE DA INCOLLARE ---
+function doPost(e) { var lock = LockService.getScriptLock(); try { // Aspetta fino a 10 secondi per evitare sovrapposizioni di scrittura lock.waitLock(10000);
+var jsonString = e.postData.contents;
+var data = JSON.parse(jsonString);
+
+var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(data.sheet_name);
+if (!sheet) {
+  return ContentService.createTextOutput(JSON.stringify({"status":"error", "message": "Foglio non trovato: " + data.sheet_name}));
+}
+
+// Scrive i punteggi nelle celle indicate
+// Nota: data.row e data.col sono indici numerici (es. colonna A = 1)
+sheet.getRange(parseInt(data.row), parseInt(data.col_sx)).setValue(data.val_sx);
+sheet.getRange(parseInt(data.row), parseInt(data.col_dx)).setValue(data.val_dx);
+
+return ContentService.createTextOutput(JSON.stringify({"status":"success"}));
+
+
+} catch (err) { return ContentService.createTextOutput(JSON.stringify({"status":"error", "message": err.toString()})); } finally { lock.releaseLock(); } }
+// --- FINE CODICE DA INCOLLARE ---
+Clicca sull'icona del Floppy Disk (Salva) e dai un nome al progetto (es. "Segnapunti").
+Clicca sul pulsante blu in alto a destra "Esegui il deployment" > "Nuovo deployment".
+Clicca sull'icona dell'ingranaggio (Impostazioni) accanto a "Seleziona tipo" e scegli "Applicazione web".
+Configura così:
+Descrizione: (facoltativo, es. v1)
+Esegui come: "Me stesso" (la tua email)
+Chi può accedere: "Chiunque" (IMPORTANTE: Se metti "Solo io", il Raspberry non potrà scrivere).
+Clicca su "Esegui il deployment".
+Potrebbe chiederti di "Autorizzare l'accesso". Clicca "Rivedi autorizzazioni", scegli il tuo account, poi clicca su "Avanzate" (in piccolo) e infine su "Apri [Nome Progetto] (non sicura)". Infine clicca "Consenti".
+Copia l'URL sotto la voce "App web" (deve finire con /exec).
+Incolla questo URL nella pagina Impostazioni del tuo Segnapunti (icona ingranaggio sul telecomando).

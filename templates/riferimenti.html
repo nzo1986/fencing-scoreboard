@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Riferimenti Colonne</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body{background:#111;color:#eee;font-family:sans-serif;padding:20px}
+        input{background:#222;color:white;border:1px solid #444;padding:8px;border-radius:4px;width:100%;text-align:center;text-transform:uppercase;font-weight:bold}
+        table{width:100%;border-collapse:collapse;margin-top:20px}
+        th{text-align:left;padding:10px;border-bottom:2px solid #444;color:#aaa}
+        td{padding:10px;border-bottom:1px solid #333}
+        tr:hover{background:#222}
+    </style>
+</head>
+<body>
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold text-green-500">Mappatura Colonne Excel</h1>
+        <button onclick="window.location.href='/settings'" class="bg-gray-600 px-4 py-2 rounded font-bold">Indietro</button>
+    </div>
+    <p class="mb-4 text-gray-400">Inserisci la LETTERA della colonna corrispondente nel foglio Google.<br>Esempio: se il nome SX è nella colonna A, scrivi "A".</p>
+    
+    <form onsubmit="save(event)">
+        <table>
+            <thead><tr><th>Girone</th><th>Nome SX</th><th>Punti SX</th><th>Punti DX</th><th>Nome DX</th></tr></thead>
+            <tbody id="table-body"></tbody>
+        </table>
+        <button type="submit" class="w-full bg-green-600 p-4 rounded font-bold text-xl mt-6">SALVA MODIFICHE</button>
+    </form>
+    
+    <script>
+        const socket=io();
+        const gironi=['rosso','giallo','blu','verde','32'];
+        let currentCols={};
+        
+        socket.on('state_update',s=>{if(s.settings && s.settings.columns){currentCols=s.settings.columns;renderTable()}});
+        
+        function renderTable(){
+            const t=document.getElementById('table-body'); t.innerHTML='';
+            gironi.forEach(g=>{
+                const row=document.createElement('tr');
+                const cols=currentCols[g]||{sx:'',psx:'',pdx:'',dx:''};
+                row.innerHTML=`<td class="capitalize font-bold text-blue-400">${g}</td>
+                <td><input type="text" name="${g}_sx" value="${cols.sx}" maxlength="2"></td>
+                <td><input type="text" name="${g}_psx" value="${cols.psx}" maxlength="2"></td>
+                <td><input type="text" name="${g}_pdx" value="${cols.pdx}" maxlength="2"></td>
+                <td><input type="text" name="${g}_dx" value="${cols.dx}" maxlength="2"></td>`;
+                t.appendChild(row)
+            })
+        }
+        
+        function save(e){
+            e.preventDefault();
+            const formData=new FormData(e.target); let newCols={};
+            gironi.forEach(g=>{
+                newCols[g]={
+                    sx:formData.get(g+'_sx').toUpperCase(),
+                    psx:formData.get(g+'_psx').toUpperCase(),
+                    pdx:formData.get(g+'_pdx').toUpperCase(),
+                    dx:formData.get(g+'_dx').toUpperCase()
+                }
+            });
+            socket.emit('update_settings',{columns:newCols});
+            alert('Mappatura Salvata!')
+        }
+    </script>
+</body>
+</html>

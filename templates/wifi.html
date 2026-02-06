@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Configurazione WiFi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body{background:#111;color:white;font-family:sans-serif;padding:20px}
+        .net-btn{width:100%;text-align:left;padding:15px;margin-bottom:10px;background:#222;border:1px solid #444;font-size:1.2rem;border-radius:8px;display:flex;justify-content:space-between;align-items:center}
+        .net-btn:active{background:#444}
+        input{color:black;font-size:1.5rem;padding:10px;width:100%;margin-bottom:20px}
+        .action-btn{width:100%;padding:20px;font-size:1.5rem;font-weight:bold;border-radius:8px;margin-bottom:10px}
+        .key-btn{padding:15px;font-size:1.2rem;background:#333;border-radius:4px;font-weight:bold}
+        .key-btn:active{background:#555}
+        .del-btn{background:#cc0000;color:white;padding:5px 15px;border-radius:5px;margin-left:10px;font-size:1rem;}
+    </style>
+</head>
+<body>
+    <h1 class="text-3xl font-bold mb-4 text-center text-orange-500">Configurazione WiFi</h1>
+    <div id="scan-view">
+        <div class="flex gap-2 mb-4">
+            <button onclick="scan()" class="action-btn bg-blue-600 text-white flex-1">Scansiona Reti</button>
+            <button onclick="loadSaved()" class="action-btn bg-purple-600 text-white flex-1">Reti Salvate</button>
+        </div>
+        <div id="network-list"></div>
+        <button onclick="window.location.href='/'" class="action-btn bg-gray-600 text-white mt-4">Indietro</button>
+    </div>
+    
+    <div id="connect-view" style="display:none">
+        <h2 id="ssid-title" class="text-2xl mb-4 text-green-400">Connetti a:</h2>
+        <input type="text" id="wifi-pass" placeholder="Password">
+        <div class="grid grid-cols-10 gap-1 mb-4"><button class="key-btn" onclick="typeKey('1')">1</button><button class="key-btn" onclick="typeKey('2')">2</button><button class="key-btn" onclick="typeKey('3')">3</button><button class="key-btn" onclick="typeKey('4')">4</button><button class="key-btn" onclick="typeKey('5')">5</button><button class="key-btn" onclick="typeKey('6')">6</button><button class="key-btn" onclick="typeKey('7')">7</button><button class="key-btn" onclick="typeKey('8')">8</button><button class="key-btn" onclick="typeKey('9')">9</button><button class="key-btn" onclick="typeKey('0')">0</button></div>
+        <div class="grid grid-cols-10 gap-1 mb-4"><button class="key-btn" onclick="typeKey('q')">q</button><button class="key-btn" onclick="typeKey('w')">w</button><button class="key-btn" onclick="typeKey('e')">e</button><button class="key-btn" onclick="typeKey('r')">r</button><button class="key-btn" onclick="typeKey('t')">t</button><button class="key-btn" onclick="typeKey('y')">y</button><button class="key-btn" onclick="typeKey('u')">u</button><button class="key-btn" onclick="typeKey('i')">i</button><button class="key-btn" onclick="typeKey('o')">o</button><button class="key-btn" onclick="typeKey('p')">p</button></div>
+        <div class="grid grid-cols-10 gap-1 mb-4"><button class="key-btn" onclick="typeKey('a')">a</button><button class="key-btn" onclick="typeKey('s')">s</button><button class="key-btn" onclick="typeKey('d')">d</button><button class="key-btn" onclick="typeKey('f')">f</button><button class="key-btn" onclick="typeKey('g')">g</button><button class="key-btn" onclick="typeKey('h')">h</button><button class="key-btn" onclick="typeKey('j')">j</button><button class="key-btn" onclick="typeKey('k')">k</button><button class="key-btn" onclick="typeKey('l')">l</button><button class="key-btn bg-red-800 col-span-1" onclick="delKey()">DEL</button></div>
+        <div class="grid grid-cols-10 gap-1 mb-4"><button class="key-btn" onclick="typeKey('z')">z</button><button class="key-btn" onclick="typeKey('x')">x</button><button class="key-btn" onclick="typeKey('c')">c</button><button class="key-btn" onclick="typeKey('v')">v</button><button class="key-btn" onclick="typeKey('b')">b</button><button class="key-btn" onclick="typeKey('n')">n</button><button class="key-btn" onclick="typeKey('m')">m</button><button class="key-btn" onclick="typeKey('.')">.</button><button class="key-btn" onclick="typeKey('-')">-</button><button class="key-btn" onclick="typeKey('_')">_</button></div>
+        <button onclick="connect()" class="action-btn bg-green-600 text-white">CONNETTI</button>
+        <button onclick="showScan()" class="action-btn bg-red-600 text-white">Indietro</button>
+    </div>
+    
+    <div id="loading-view" style="display:none" class="text-center mt-10">
+        <h2 class="text-3xl animate-pulse">Connessione in corso...</h2>
+        <p class="text-gray-400 mt-2">Attendere fino a 30 secondi.</p>
+        <p id="ip-result" class="text-green-500 text-2xl font-bold mt-4"></p>
+    </div>
+
+    <script>
+        let selectedSSID="";
+        function typeKey(k){document.getElementById('wifi-pass').value+=k}
+        function delKey(){const i=document.getElementById('wifi-pass');i.value=i.value.slice(0,-1)}
+        function scan(){
+            document.getElementById('network-list').innerHTML='<p>Ricerca...</p>';
+            fetch('/api/scan_wifi').then(r=>r.json()).then(n=>{
+                const l=document.getElementById('network-list');l.innerHTML='';
+                if(n.length===0)l.innerHTML='<p>Nessuna rete trovata (Riprova)</p>';
+                n.forEach(e=>{
+                    const b=document.createElement('div');
+                    b.className='net-btn'; b.innerText=e;
+                    b.onclick=()=>selectNetwork(e);
+                    l.appendChild(b)
+                })
+            })
+        }
+        function loadSaved(){
+            document.getElementById('network-list').innerHTML='<p>Caricamento...</p>';
+            fetch('/api/saved_wifi').then(r=>r.json()).then(n=>{
+                const l=document.getElementById('network-list');l.innerHTML='';
+                if(n.length===0)l.innerHTML='<p>Nessuna rete salvata</p>';
+                n.forEach(e=>{
+                    const row=document.createElement('div'); row.className='net-btn';
+                    const name=document.createElement('span'); name.innerText=e;
+                    name.onclick=()=>selectNetwork(e);
+                    const del=document.createElement('button'); del.className='del-btn'; del.innerText='Elimina';
+                    del.onclick=(evt)=>{evt.stopPropagation();deleteNet(e)};
+                    row.appendChild(name); row.appendChild(del);
+                    l.appendChild(row)
+                })
+            })
+        }
+        function deleteNet(ssid){
+            if(confirm("Eliminare la rete "+ssid+"?")){
+                fetch('/api/delete_wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:ssid})})
+                .then(r=>r.json()).then(d=>{if(d.status==='success'){alert('Eliminata!');loadSaved()}else{alert('Errore eliminazione.')}})
+            }
+        }
+        function selectNetwork(s){
+            selectedSSID=s;
+            document.getElementById('ssid-title').innerText="Connetti a: "+s;
+            document.getElementById('scan-view').style.display='none';
+            document.getElementById('connect-view').style.display='block'
+        }
+        function showScan(){
+            document.getElementById('scan-view').style.display='block';
+            document.getElementById('connect-view').style.display='none'
+        }
+        function connect(){
+            const p=document.getElementById('wifi-pass').value;
+            document.getElementById('connect-view').style.display='none';
+            document.getElementById('loading-view').style.display='block';
+            const c=new AbortController(); const t=setTimeout(()=>c.abort(),20000);
+            fetch('/api/connect_wifi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:selectedSSID,password:p}),signal:c.signal})
+            .then(r=>r.json()).then(d=>{
+                clearTimeout(t);
+                if(d.status==='success'){
+                    document.getElementById('ip-result').innerText="CONNESSO! IP: "+d.ip;
+                    setTimeout(()=>window.location.href='/',3000)
+                }else{
+                    alert('Errore connessione. Controlla la password.');
+                    showScan(); document.getElementById('loading-view').style.display='none'
+                }
+            }).catch(e=>{
+                console.log(e);
+                document.getElementById('ip-result').innerText="Connessione Forzata (Timeout). Controlla il display.";
+                setTimeout(()=>window.location.href='/',5000)
+            })
+        }
+        scan()
+    </script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Impostazioni</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body{background:#111;color:#eee;font-family:sans-serif;touch-action:manipulation}
+        .adjust-btn{width:50px;height:50px;font-size:1.5rem;font-weight:bold;border-radius:50%;border:none;display:flex;align-items:center;justify-content:center}
+        .btn-minus{background:#d32f2f;color:white}.btn-plus{background:#388e3c;color:white}
+        .val-display{font-size:1.5rem;font-weight:bold;min-width:60px;text-align:center}
+        .row-ctrl{display:flex;align-items:center;justify-content:space-between;background:#222;padding:10px;margin-bottom:10px;border-radius:8px}
+        .lbl{font-size:1.1rem}
+        .font-btn{padding:10px 15px;margin:5px;background:#333;border:1px solid #555;border-radius:5px;cursor:pointer;text-align:left;display:block;width:100%;color:white}
+        .font-btn:hover{background:#444}.font-btn.active{border-color:#00aa00;background:#224422}
+        #font-list{max-height:250px;overflow-y:auto}
+    </style>
+</head>
+<body class="p-4">
+    <div class="flex justify-between items-center mb-4 border-b border-gray-600 pb-2">
+        <h1 class="text-2xl font-bold">Impostazioni Live</h1>
+        <button onclick="window.location.href='/telecomando'" class="bg-gray-600 px-4 py-2 rounded font-bold">Indietro</button>
+    </div>
+    
+    <div class="mb-6">
+        <h2 class="text-xl text-yellow-400 mb-2 font-bold">Carattere (Font)</h2>
+        <div id="font-list" class="bg-gray-800 p-2 rounded"><p>Caricamento font...</p></div>
+    </div>
+    
+    <div class="mb-6">
+        <h2 class="text-xl text-yellow-400 mb-2 font-bold">Aspetto Display</h2>
+        <div class="row-ctrl"><span class="lbl">Timer Size</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('font_timer',-0.5)">-</button><span id="val_font_timer" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('font_timer',0.5)">+</button></div></div>
+        <div class="row-ctrl"><span class="lbl">Score Size</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('font_score',-0.5)">-</button><span id="val_font_score" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('font_score',0.5)">+</button></div></div>
+        <div class="row-ctrl"><span class="lbl">Name Size</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('font_name',-0.2)">-</button><span id="val_font_name" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('font_name',0.2)">+</button></div></div>
+        <div class="row-ctrl"><span class="lbl">Font Lista</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('font_list',-0.1)">-</button><span id="val_font_list" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('font_list',0.1)">+</button></div></div>
+        <div class="row-ctrl"><span class="lbl">Larghezza Lista</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('col_center_width',-0.1)">-</button><span id="val_col_center_width" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('col_center_width',0.1)">+</button></div></div>
+        <div class="row-ctrl"><span class="lbl">Spaziatura Lista</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('list_padding',-0.1)">-</button><span id="val_list_padding" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('list_padding',0.1)">+</button></div></div>
+        <div class="row-ctrl"><span class="lbl">Foto (px)</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('photo_size',-10)">-</button><span id="val_photo_size" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('photo_size',10)">+</button></div></div>
+        <div class="row-ctrl"><span class="lbl">Bordo Testo</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('text_border',-0.05)">-</button><span id="val_text_border" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('text_border',0.05)">+</button></div></div>
+    </div>
+    
+    <div class="mb-6">
+        <h2 class="text-xl text-blue-400 mb-2 font-bold">Tempi (Secondi)</h2>
+        <div class="row-ctrl"><span class="lbl">Match</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('time_match',-10)">-</button><span id="val_time_match" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('time_match',10)">+</button></div></div>
+        <div class="row-ctrl"><span class="lbl">Pausa</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('time_break',-10)">-</button><span id="val_time_break" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('time_break',10)">+</button></div></div>
+        <div class="row-ctrl"><span class="lbl">Medico</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('time_medical',-10)">-</button><span id="val_time_medical" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('time_medical',10)">+</button></div></div>
+        <div class="row-ctrl"><span class="lbl">Refresh Dati (s)</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('refresh_rate',-5)">-</button><span id="val_refresh_rate" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('refresh_rate',5)">+</button></div></div>
+    </div>
+    
+    <div class="mb-6">
+        <h2 class="text-xl text-green-400 mb-2 font-bold">Nomi Default (Reset)</h2>
+        <div class="space-y-2">
+            <div><label class="block text-sm text-gray-400">Atleta Sinistra</label><input type="text" id="val_default_name_left" class="w-full p-3 rounded bg-gray-800 text-white border border-gray-600 font-bold" onchange="updateText('default_name_left',this.value)"></div>
+            <div><label class="block text-sm text-gray-400">Atleta Destra</label><input type="text" id="val_default_name_right" class="w-full p-3 rounded bg-gray-800 text-white border border-gray-600 font-bold" onchange="updateText('default_name_right',this.value)"></div>
+        </div>
+    </div>
+    
+    <div class="mb-6">
+        <h2 class="text-xl text-green-400 mb-2 font-bold">Gestione Colonne</h2>
+        <button onclick="window.location.href='/riferimenti'" class="w-full bg-green-700 p-4 rounded font-bold text-xl mb-2">GESTIONE COLONNE EXCEL</button>
+    </div>
+    
+    <div class="mb-6">
+        <h2 class="text-xl text-purple-400 mb-2 font-bold">Integrazione Cloud</h2>
+        <div><label class="block text-sm text-gray-400">URL Google Apps Script</label><input type="text" id="val_google_script_url" class="w-full p-3 rounded bg-gray-800 text-white border border-gray-600" placeholder="https://script.google.com/..." onchange="updateText('google_script_url',this.value)"></div>
+        <div class="mt-4"><button onclick="window.location.href='/wifi'" class="w-full bg-orange-700 p-4 rounded font-bold text-xl mb-2">CONFIGURA WIFI</button></div>
+    </div>
+    
+    <div class="mb-6">
+        <h2 class="text-xl text-purple-400 mb-2 font-bold">Gestione</h2>
+        <button onclick="window.location.href='/foto'" class="w-full bg-blue-700 p-4 rounded font-bold text-xl mb-2">GESTIONE FOTO ATLETI</button>
+        <button onclick="window.location.href='/download'" class="w-full bg-cyan-700 p-4 rounded font-bold text-xl mb-2 mt-2">AREA DOWNLOAD</button>
+    </div>
+    
+    <script>
+        const socket=io();
+        let settings={};
+        const numKeys=['font_timer','font_score','font_name','col_center_width','font_list','list_padding','text_border','time_match','time_break','time_medical','photo_size','refresh_rate'];
+        const textKeys=['default_name_left','default_name_right','google_script_url'];
+        
+        fetch('/api/get_fonts').then(r=>r.json()).then(f=>{
+            const l=document.getElementById('font-list');
+            l.innerHTML='';
+            f.forEach(fn=>{
+                const b=document.createElement('button');
+                b.className='font-btn';
+                b.style.fontFamily=fn;
+                b.innerHTML=`<span style="font-size:1.2rem">${fn}</span> <span style="float:right;font-weight:bold;">3:00</span>`;
+                b.onclick=()=>selectFont(fn);
+                if(settings.font_family===fn)b.classList.add('active');
+                l.appendChild(b)
+            })
+        });
+        
+        socket.on('state_update',s=>{
+            if(s.settings){
+                settings=s.settings;
+                numKeys.forEach(k=>{const el=document.getElementById('val_'+k);if(el)el.innerText=settings[k]});
+                textKeys.forEach(k=>{const el=document.getElementById('val_'+k);if(el&&document.activeElement!==el)el.value=settings[k]});
+                const btns=document.querySelectorAll('.font-btn');
+                btns.forEach(b=>{
+                    if(b.style.fontFamily.replace(/['"]+/g,'')===settings.font_family)b.classList.add('active');
+                    else b.classList.remove('active')
+                })
+            }
+        });
+        
+        function change(k,d){
+            let v=parseFloat(settings[k])||0;
+            v+=d; v=Math.round(v*100)/100;
+            if(v<0)v=0; settings[k]=v;
+            document.getElementById('val_'+k).innerText=v;
+            socket.emit('update_settings',{[k]:v})
+        }
+        function updateText(k,v){socket.emit('update_settings',{[k]:v})}
+        function selectFont(f){socket.emit('update_settings',{font_family:f})}
+    </script>
+</body>
+</html>
