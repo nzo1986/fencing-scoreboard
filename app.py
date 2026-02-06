@@ -27,8 +27,11 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PHOTOS_DIR = os.path.join(BASE_DIR, 'static', 'photos')
 STATE_FILE = "match_state.json"
+
+# URL DEL FOGLIO GOOGLE
 SHEET_DISPLAY_URL = "https://docs.google.com/spreadsheets/d/179tfN2PDrSTYtiAdVeFQKXF9OtwZj4k4EbQ1dWXH5Yg/gviz/tq?tqx=out:csv&sheet=display3gir"
-SHEET_ATLETI_URL = "https://docs.google.com/spreadsheets/d/179tfN2PDrSTYtiAdVeFQKXF9OtwZj4k4EbQ1dWXH5Yg/gviz/tq?tqx=out:csv&sheet=Atleti"
+# MODIFICATO: Punta al foglio "Rank" per la lista atleti
+SHEET_ATLETI_URL = "https://docs.google.com/spreadsheets/d/179tfN2PDrSTYtiAdVeFQKXF9OtwZj4k4EbQ1dWXH5Yg/gviz/tq?tqx=out:csv&sheet=Rank"
 
 # Mappa Scrittura (1-based per Google Script)
 GIRONI_MAP_WRITE = { 'rosso': [2, 3], 'giallo': [7, 8], 'blu': [12, 13], 'verde': [17, 18], '32': [22, 23] }
@@ -83,7 +86,6 @@ def get_photo_url(name):
 
 def new_fencer(name):
     c_name = clean_fencer_name(name)
-    # R_count tiene traccia del numero di rossi accumulati
     return { 
         "name": c_name, 
         "score": 0, 
@@ -269,6 +271,7 @@ def upload_photo():
         if r == clean_name_file: current_state['fencer_right']['photo'] = get_photo_url(clean_name_file)
         emit('state_update', current_state, broadcast=True)
     return jsonify({"success": True})
+
 @app.route('/api/get_athletes')
 def get_athletes():
     try:
@@ -279,11 +282,16 @@ def get_athletes():
         atleti = []
         reader = csv.reader(lines)
         rows = list(reader)
+        
+        # NUOVA LOGICA: Foglio "Rank", colonna E3:E
         for i, row in enumerate(rows):
-            if i >= 4 and i < 44:
-                if len(row) > 12:
-                    val = row[12].strip()
+            # i >= 2 significa dalla riga 3 in poi (0,1,2...)
+            if i >= 2:
+                # La colonna E è l'indice 4 (A=0, B=1, C=2, D=3, E=4)
+                if len(row) > 4:
+                    val = row[4].strip()
                     if val: atleti.append(clean_fencer_name(val))
+        
         result = []
         for a in atleti:
             if not a: continue
@@ -291,6 +299,7 @@ def get_athletes():
             result.append({"name": a, "has_photo": has_photo})
         return jsonify(result)
     except: return jsonify([])
+
 @app.route('/api/maxi_upload', methods=['POST'])
 def maxi_upload():
     if 'files[]' not in request.files: return jsonify({"error": "No files"}), 400
