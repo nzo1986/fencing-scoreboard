@@ -175,7 +175,8 @@
             const listC = document.getElementById('match-list-container');
             if (s.match_list && s.match_list.length > 0) {
                 const pending = s.match_list.filter(m => (parseInt(m.p_sx)||0)===0 && (parseInt(m.p_dx)||0)===0);
-                listC.innerHTML = pending.slice(0, 8).map(m => `<div class="match-item"><span>${m.sx.replace(/./g,"")}</span> vs <span>${m.dx.replace(/./g,"")}</span></div>`).join('');
+                // FIX: Ho rimosso il replace che cancellava tutto. Ora mostra i nomi così come sono.
+                listC.innerHTML = pending.slice(0, 8).map(m => `<div class="match-item"><span>${m.sx}</span> vs <span>${m.dx}</span></div>`).join('');
             } else { listC.innerHTML = ''; }
             const upC = (side, data) => {
                 document.getElementById(`c-${side}-y`).classList.toggle('card-active', data.cards.Y);
