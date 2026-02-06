@@ -1,5 +1,6 @@
-Flask==2.3.3
-Flask-SocketIO==5.3.6
-eventlet==0.33.3
-requests==2.31.0
+Flask
+Flask-SocketIO
+eventlet>=0.35.2
+requests
 werkzeug
+simple-websocket
