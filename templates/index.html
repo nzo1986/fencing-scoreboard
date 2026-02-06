@@ -100,6 +100,13 @@
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         let audioUnlocked = false; let animInterval = null;
         let currentGirone = 'rosso'; 
+        
+        // --- LOGICA QR CODE A TEMPO (30s) ---
+        let qrExpired = false;
+        setTimeout(() => {
+            qrExpired = true;
+            document.getElementById('qr-overlay').style.display = 'none';
+        }, 30000); // 30 secondi
 
         document.body.addEventListener('click', () => { if(audioCtx.state==='suspended') audioCtx.resume(); audioUnlocked=true; }, {once:true});
         function playBeep() {
@@ -175,7 +182,6 @@
             const listC = document.getElementById('match-list-container');
             if (s.match_list && s.match_list.length > 0) {
                 const pending = s.match_list.filter(m => (parseInt(m.p_sx)||0)===0 && (parseInt(m.p_dx)||0)===0);
-                // FIX: Ho rimosso il replace che cancellava tutto. Ora mostra i nomi così come sono.
                 listC.innerHTML = pending.slice(0, 8).map(m => `<div class="match-item"><span>${m.sx}</span> vs <span>${m.dx}</span></div>`).join('');
             } else { listC.innerHTML = ''; }
             const upC = (side, data) => {
@@ -187,8 +193,11 @@
                 document.getElementById(`p-${side}-b`).classList.toggle('card-active', data.p_cards.B);
             };
             upC('l', s.fencer_left); upC('r', s.fencer_right);
+            
+            // --- GESTIONE QR CODE ---
             const qr = document.getElementById('qr-overlay');
-            if(s.admin_connected) qr.style.display='none';
+            // Se l'admin è connesso OPPURE sono passati i 30 secondi, nascondilo
+            if(s.admin_connected || qrExpired) qr.style.display='none';
             else {
                 qr.style.display='block';
                 const url = `http://${s.server_ip}:5000/telecomando`;
