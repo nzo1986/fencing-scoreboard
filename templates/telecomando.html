@@ -37,7 +37,7 @@
         .status-green{background:#00cc00;box-shadow:0 0 8px #00cc00;border-color:#fff}
         .status-red{background:#cc0000}
         .status-yellow{background:#eab308}
-        .status-blue{background:#3b82f6; box-shadow: 0 0 8px #3b82f6; border-color:#fff} /* Nuova classe per spia blu */
+        .status-blue{background:#3b82f6; box-shadow: 0 0 8px #3b82f6; border-color:#fff}
         
         #timer-display{font-size:1.5rem;padding:15px}
         .swipe-btn { color: #ff4444; font-weight: bold; background: #220000; border: 2px solid #550000; }
@@ -121,7 +121,6 @@
     <div class="bottom-controls">
         <div id="stat-wifi" class="status-icon status-red" title="Internet"></div>
         <button onclick="window.location.href='/settings'" class="gear-btn">&#9881;</button>
-        <!-- Spia Upload Centrale -->
         <div id="stat-upload" class="status-icon" style="border: 2px solid #555; background-color: transparent;" title="Stato Invio"></div>
         <div id="stat-google" class="status-icon status-red" title="Google Sheet"></div>
     </div>
@@ -171,10 +170,8 @@
             }
         });
 
-        // GESTIONE SPIA UPLOAD
         socket.on('upload_status', (data) => {
             const el = document.getElementById('stat-upload');
-            // Reset classi
             el.classList.remove('status-green', 'status-red', 'status-yellow', 'status-blue');
             el.style.backgroundColor = 'transparent';
             
@@ -182,7 +179,6 @@
             else if (data.color === 'yellow') el.classList.add('status-yellow');
             else if (data.color === 'red') el.classList.add('status-red');
             else if (data.color === 'green') el.classList.add('status-green');
-            // 'none' lascia trasparente
         });
 
         setInterval(()=>socket.emit('admin_heartbeat',{active:true}),2000);
@@ -270,13 +266,23 @@
                 if(d.cards.B)document.getElementById(`btn-${sc}-B`).classList.add('active')
             };
             upC('left',s.fencer_left);
-            upC('right',s.fencer_right)
+            upC('right',s.fencer_right);
+
+            // AGGIUNTA: SINCRONIZZA LA TENDINA CON IL MATCH ATTIVO
+            if (s.current_row_idx && matches.length > 0) {
+                const idx = matches.findIndex(m => m.row === s.current_row_idx);
+                const sel = document.getElementById('sel');
+                if (idx !== -1 && sel.value != idx) {
+                    sel.value = idx;
+                }
+            }
         });
         
         socket.on('gironi_cache_update', (cache) => {
             matches = cache[currentGirone] || [];
             const sel = document.getElementById('sel');
-            const currentVal = sel.value; 
+            const currentVal = sel.value; // Salva la selezione corrente (se manuale)
+            
             sel.innerHTML='<option value="">Seleziona Assalto...</option>';
             matches.forEach((m,i)=>{
                 let o=document.createElement('option');
@@ -284,6 +290,8 @@
                 o.text=`${m.sx} (${m.p_sx}) - (${m.p_dx}) ${m.dx}`;
                 sel.appendChild(o)
             });
+            
+            // Ripristina solo se è ancora valido, altrimenti aspetta state_update
             if(currentVal && currentVal < matches.length) sel.value = currentVal;
         });
     </script>
