@@ -296,9 +296,8 @@ def get_athletes():
         result = []
         for a in atleti:
             if not a: continue
-            url = get_photo_url(a) # Ottieni URL completo (con timestamp anti-cache)
+            url = get_photo_url(a) 
             has_photo = "/static/photos/default.png" not in url
-            # Invio sia l'indicatore che l'URL per l'anteprima
             result.append({"name": a, "has_photo": has_photo, "photo_url": url})
         return jsonify(result)
     except: return jsonify([])
@@ -494,6 +493,8 @@ def r_timer():
 def f_sheet(d=None):
     if d and 'girone' in d:
         current_state['current_girone'] = d['girone']
+        # MODIFICA: Reset manual selection to trigger auto-load of first 0-0 match
+        current_state['manual_selection'] = False 
         save_state()
     current_state['match_list'] = []
     emit('state_update', current_state, broadcast=True)
@@ -718,6 +719,7 @@ def update_all_gironi_data():
         current_state['match_list'] = new_cache.get(cg, [])
         socketio.emit('state_update', current_state)
         
+        # LOGICA AUTO-LOAD (MODIFICATA)
         if not current_state.get('manual_selection') and not current_state['running'] and current_state['timer'] == float(current_state['settings']['time_match']):
              matches = new_cache.get(cg, [])
              next_match = next((m for m in matches if (int(m['p_sx']) == 0 and int(m['p_dx']) == 0)), None)
@@ -731,6 +733,7 @@ def update_all_gironi_data():
                  current_state['fencer_left']['score'] = 0
                  current_state['fencer_right']['score'] = 0
                  current_state['swapped'] = False
+                 current_state['active_girone'] = cg # MODIFICA: Allinea active_girone al default
                  socketio.emit('state_update', current_state)
                  save_state()
              
@@ -743,6 +746,7 @@ def update_all_gironi_data():
                  current_state['fencer_left']['score'] = 0
                  current_state['fencer_right']['score'] = 0
                  current_state['swapped'] = False
+                 current_state['active_girone'] = cg # MODIFICA: Imposta il girone attivo corretto
                  socketio.emit('state_update', current_state)
                  save_state()
 
