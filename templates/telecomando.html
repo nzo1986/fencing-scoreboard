@@ -172,13 +172,20 @@
 
         socket.on('upload_status', (data) => {
             const el = document.getElementById('stat-upload');
+            // Reset classi
             el.classList.remove('status-green', 'status-red', 'status-yellow', 'status-blue');
-            el.style.backgroundColor = 'transparent';
+            
+            // IMPORTANTE: Rimuovi lo stile inline che forza il trasparente
+            el.style.backgroundColor = ''; 
             
             if (data.color === 'blue') el.classList.add('status-blue');
             else if (data.color === 'yellow') el.classList.add('status-yellow');
             else if (data.color === 'red') el.classList.add('status-red');
             else if (data.color === 'green') el.classList.add('status-green');
+            else {
+                // Se 'none' o altro, torna trasparente
+                el.style.backgroundColor = 'transparent';
+            }
         });
 
         setInterval(()=>socket.emit('admin_heartbeat',{active:true}),2000);
