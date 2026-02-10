@@ -116,6 +116,7 @@ default_settings = {
     "col_center_width": 1.2, "list_padding": 0.5, "text_border": 0.0, "photo_size": 150,
     "time_match": 180, "time_break": 60, "time_medical": 300,
     "refresh_rate": 30, 
+    "buzzer_volume": 1.0, # VOLUME DEFAULT (1.0 = Max)
     "default_name_left": "ATLETA SX", "default_name_right": "ATLETA DX", 
     "google_script_url": "", "google_sheet_id": DEFAULT_SHEET_ID,
     "columns": default_columns
@@ -127,8 +128,8 @@ default_state = {
     "fencer_right": new_fencer(default_settings["default_name_right"]),
     "period": 1, "admin_connected": False, "server_ip": get_local_ip(), "ssid": get_current_ssid(),
     "match_list": [], 
-    "current_girone": "rosso", # Girone visualizzato nella lista
-    "active_girone": "rosso",  # Girone dell'assalto caricato (PER SICUREZZA)
+    "current_girone": "rosso", 
+    "active_girone": "rosso",
     "current_row_idx": None,
     "manual_selection": False, "swapped": False,
     "settings": default_settings.copy(), "wifi_connected": False
@@ -161,6 +162,7 @@ def load_state():
                 
                 if 'columns' not in data['settings']: data['settings']['columns'] = default_columns.copy()
                 if 'google_sheet_id' not in data['settings']: data['settings']['google_sheet_id'] = DEFAULT_SHEET_ID
+                if 'buzzer_volume' not in data['settings']: data['settings']['buzzer_volume'] = 1.0
 
                 if 'fencer_left' in data: 
                     data['fencer_left']['photo'] = get_photo_url(data['fencer_left']['name'])
@@ -170,7 +172,6 @@ def load_state():
                     if 'R_count' not in data['fencer_right']['cards']: data['fencer_right']['cards']['R_count'] = 0
                 
                 current_state = data
-                # Retrocompatibilità: se manca active_girone, usa current_girone
                 if 'active_girone' not in current_state:
                     current_state['active_girone'] = current_state.get('current_girone', 'rosso')
         except: pass
@@ -493,7 +494,6 @@ def r_timer():
 def f_sheet(d=None):
     if d and 'girone' in d:
         current_state['current_girone'] = d['girone']
-        # MODIFICA: Reset manual selection to trigger auto-load of first 0-0 match
         current_state['manual_selection'] = False 
         save_state()
     current_state['match_list'] = []
@@ -568,14 +568,11 @@ def handle_send_result():
         "col_dx": c_pdx, "val_dx": val_dx_sheet
     }
     
-    # 1. Notifica e Spia Blu
     socketio.emit('upload_status', {'color': 'blue'})
     socketio.emit('action_feedback', {'status': 'info', 'msg': 'Invio in background...'})
     
-    # 2. Avvia processo background
     eventlet.spawn(process_background_upload, payload, g)
 
-    # 3. Avanzamento Immediato
     matches = gironi_cache.get(g, [])
     current_row = int(payload['row'])
     next_match = None
@@ -598,7 +595,6 @@ def handle_send_result():
         socketio.emit('action_feedback', {'status': 'info', 'msg': 'Nessun prossimo assalto trovato.'})
 
 def process_background_upload(payload, girone):
-    # INVIO
     try:
         url = current_state['settings']['google_script_url']
         r = requests.post(url, json=payload, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
@@ -609,12 +605,10 @@ def process_background_upload(payload, girone):
         socketio.emit('upload_status', {'color': 'red'})
         return
 
-    # VERIFICA DISCRETA
     delays = [10, 30, 60]
     verified = False
     
     for wait_time in delays:
-        # Se è un secondo tentativo (wait > 10), metti giallo
         if wait_time > 10:
             socketio.emit('upload_status', {'color': 'yellow'})
             
@@ -634,8 +628,7 @@ def process_background_upload(payload, girone):
                 
                 if cache_sx == sent_sx and cache_dx == sent_dx:
                     verified = True
-                    socketio.emit('upload_status', {'color': 'green'}) # Verde = Successo
-                    # Dopo 5 secondi spegni la luce verde
+                    socketio.emit('upload_status', {'color': 'green'}) 
                     eventlet.sleep(5)
                     socketio.emit('upload_status', {'color': 'none'})
                     break
@@ -740,7 +733,7 @@ def update_all_gironi_data():
                  current_state['fencer_left']['score'] = 0
                  current_state['fencer_right']['score'] = 0
                  current_state['swapped'] = False
-                 current_state['active_girone'] = cg # MODIFICA: Allinea active_girone al default
+                 current_state['active_girone'] = cg 
                  socketio.emit('state_update', current_state)
                  save_state()
              
@@ -753,7 +746,7 @@ def update_all_gironi_data():
                  current_state['fencer_left']['score'] = 0
                  current_state['fencer_right']['score'] = 0
                  current_state['swapped'] = False
-                 current_state['active_girone'] = cg # MODIFICA: Imposta il girone attivo corretto
+                 current_state['active_girone'] = cg 
                  socketio.emit('state_update', current_state)
                  save_state()
 

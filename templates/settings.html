@@ -47,6 +47,8 @@
         <div class="row-ctrl"><span class="lbl">Pausa</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('time_break',-10)">-</button><span id="val_time_break" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('time_break',10)">+</button></div></div>
         <div class="row-ctrl"><span class="lbl">Medico</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('time_medical',-10)">-</button><span id="val_time_medical" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('time_medical',10)">+</button></div></div>
         <div class="row-ctrl"><span class="lbl">Refresh Dati (s)</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('refresh_rate',-5)">-</button><span id="val_refresh_rate" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('refresh_rate',5)">+</button></div></div>
+        <!-- VOLUME SLIDER -->
+        <div class="row-ctrl"><span class="lbl">Volume Suono</span><div class="flex items-center gap-4 w-1/2"><input type="range" id="val_buzzer_volume" min="0" max="1" step="0.1" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" onchange="updateText('buzzer_volume',this.value)"></div></div>
     </div>
     
     <div class="mb-6">
@@ -88,7 +90,7 @@
         const socket=io();
         let settings={};
         const numKeys=['font_timer','font_score','font_name','col_center_width','font_list','list_padding','text_border','time_match','time_break','time_medical','photo_size','refresh_rate'];
-        const textKeys=['default_name_left','default_name_right','google_script_url', 'google_sheet_id'];
+        const textKeys=['default_name_left','default_name_right','google_script_url', 'google_sheet_id', 'buzzer_volume'];
         
         fetch('/api/get_fonts').then(r=>r.json()).then(f=>{
             const l=document.getElementById('font-list');

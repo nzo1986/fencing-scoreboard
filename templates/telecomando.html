@@ -130,7 +130,47 @@
         let matches=[];
         let pMode={left:false,right:false};
         let currentGirone='rosso';
+        let globalSettings = {}; // Impostazioni globali per volume
+        let audioUnlocked = false; // Stato audio
         
+        // --- AUDIO ENGINE ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Funzione per sbloccare l'audio (su cellulare serve interazione)
+        function unlockAudio() {
+            if (!audioUnlocked && audioCtx.state !== 'running') {
+                audioCtx.resume().then(() => {
+                    audioUnlocked = true;
+                });
+            }
+        }
+        
+        // Collega l'unlock a qualsiasi tocco
+        document.body.addEventListener('touchstart', unlockAudio, {once:true});
+        document.body.addEventListener('click', unlockAudio, {once:true});
+
+        function playBeep() {
+            // Controlla il volume dai settings ricevuti
+            const volume = parseFloat(globalSettings.buzzer_volume || 1.0);
+            if (volume <= 0) return;
+
+            // Se l'audio non è ancora partito, proviamo a riattivarlo
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            const osc = audioCtx.createOscillator(); 
+            const gain = audioCtx.createGain();
+            
+            osc.type = 'square'; // Suono buzzer forte
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime); 
+            gain.gain.value = volume;
+            
+            osc.connect(gain); 
+            gain.connect(audioCtx.destination);
+            
+            osc.start(); 
+            osc.stop(audioCtx.currentTime + 2.0); // Dura 2 secondi
+        }
+
         const accords = document.querySelectorAll('.accord');
         accords.forEach(acc => {
             acc.addEventListener('toggle', (e) => {
@@ -172,10 +212,7 @@
 
         socket.on('upload_status', (data) => {
             const el = document.getElementById('stat-upload');
-            // Reset classi
             el.classList.remove('status-green', 'status-red', 'status-yellow', 'status-blue');
-            
-            // IMPORTANTE: Rimuovi lo stile inline che forza il trasparente
             el.style.backgroundColor = ''; 
             
             if (data.color === 'blue') el.classList.add('status-blue');
@@ -183,9 +220,16 @@
             else if (data.color === 'red') el.classList.add('status-red');
             else if (data.color === 'green') el.classList.add('status-green');
             else {
-                // Se 'none' o altro, torna trasparente
                 el.style.backgroundColor = 'transparent';
             }
+        });
+
+        // ASCOLTA EVENTO TIME EXPIRED PER IL SUONO
+        socket.on('time_expired', () => { 
+            playBeep();
+            // Feedback visivo anche sul telecomando
+            document.body.style.backgroundColor='#500'; 
+            setTimeout(()=>document.body.style.backgroundColor='#050515',500); 
         });
 
         setInterval(()=>socket.emit('admin_heartbeat',{active:true}),2000);
@@ -254,6 +298,9 @@
         socket.on('timer_update',d=>updateTimeUI(d.time,d.phase));
         
         socket.on('state_update',s=>{
+            if(s.settings) {
+                globalSettings = s.settings; // Aggiorna volume
+            }
             document.getElementById('s-l').innerText=s.fencer_left.score;
             document.getElementById('s-r').innerText=s.fencer_right.score;
             updateTimeUI(s.timer,s.phase);
@@ -275,7 +322,6 @@
             upC('left',s.fencer_left);
             upC('right',s.fencer_right);
 
-            // AGGIUNTA: SINCRONIZZA LA TENDINA CON IL MATCH ATTIVO
             if (s.current_row_idx && matches.length > 0) {
                 const idx = matches.findIndex(m => m.row === s.current_row_idx);
                 const sel = document.getElementById('sel');
@@ -288,8 +334,7 @@
         socket.on('gironi_cache_update', (cache) => {
             matches = cache[currentGirone] || [];
             const sel = document.getElementById('sel');
-            const currentVal = sel.value; // Salva la selezione corrente (se manuale)
-            
+            const currentVal = sel.value; 
             sel.innerHTML='<option value="">Seleziona Assalto...</option>';
             matches.forEach((m,i)=>{
                 let o=document.createElement('option');
@@ -297,8 +342,6 @@
                 o.text=`${m.sx} (${m.p_sx}) - (${m.p_dx}) ${m.dx}`;
                 sel.appendChild(o)
             });
-            
-            // Ripristina solo se è ancora valido, altrimenti aspetta state_update
             if(currentVal && currentVal < matches.length) sel.value = currentVal;
         });
     </script>
