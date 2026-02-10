@@ -101,8 +101,10 @@
                     </div>
                 </details>
                 <div class="flex mt-2 gap-1 h-12">
-                    <select id="sel" class="flex-grow bg-gray-800 text-white border border-gray-600 rounded text-xs px-1"></select>
-                    <button onclick="loadSelectedMatch()" class="bg-green-700 text-white px-2 rounded text-xs border border-green-600 font-bold w-16">AGGIORNA</button>
+                    <!-- Aggiunto onchange per caricamento immediato -->
+                    <select id="sel" class="flex-grow bg-gray-800 text-white border border-gray-600 rounded text-xs px-1" onchange="triggerMatchLoad()"></select>
+                    <!-- Cambiato funzione e testo del pulsante -->
+                    <button onclick="forceUpdate()" class="bg-green-700 text-white px-2 rounded text-xs border border-green-600 font-bold w-16">AGG.</button>
                 </div>
             </div>
         </div>
@@ -126,7 +128,6 @@
         let pMode={left:false,right:false};
         let currentGirone='rosso';
         
-        // Accordion Logic
         const accords = document.querySelectorAll('.accord');
         accords.forEach(acc => {
             acc.addEventListener('toggle', (e) => {
@@ -157,14 +158,10 @@
             else go.className = 'status-icon status-red';
         });
 
-        // NUOVO LISTENER PER IL FEEDBACK MIGLIORATO
         socket.on('action_feedback', (data) => {
             if (data.status === 'error') {
-                // Gli errori gravi usano l'alert per essere sicuri che vengano letti
                 alert("ERRORE: " + data.msg);
             } else {
-                // Info e successi usano il toast non invasivo
-                // Se è un messaggio di attesa verifica, lo teniamo un po' di più
                 const dur = data.status === 'info' ? 5000 : 3000;
                 showToast(data.msg, dur);
             }
@@ -182,26 +179,27 @@
             document.getElementById('girone-details').removeAttribute('open');
         }
         
-        function loadSelectedMatch(){
+        // NUOVA FUNZIONE: Caricamento al cambio selezione
+        function triggerMatchLoad(){
             const sel = document.getElementById('sel');
-            if(sel.value === "") {
-                socket.emit('fetch_sheet', {girone: currentGirone});
-                showToast("Aggiornamento dati...");
-            } else {
-                if(confirm("Caricare l'assalto selezionato sul Display?")){
-                    // MODIFICA IMPORTANTE: Inviamo anche il nome del girone corrente
-                    // così il backend sa esattamente a quale foglio appartiene questo match
-                    let matchData = matches[sel.value];
-                    matchData.girone = currentGirone; 
-                    socket.emit('load_match', matchData);
-                }
+            if(sel.value === "") return;
+
+            if(confirm("Caricare l'assalto selezionato sul Display?")){
+                let matchData = matches[sel.value];
+                matchData.girone = currentGirone; 
+                socket.emit('load_match', matchData);
             }
+        }
+
+        // NUOVA FUNZIONE: Solo aggiornamento dati (fetch)
+        function forceUpdate(){
+            socket.emit('fetch_sheet', {girone: currentGirone});
+            showToast("Aggiornamento dati da Google...");
         }
         
         function sendResult(){
             if(confirm("Inviare il punteggio corrente al foglio Google?")){
                 socket.emit('send_result');
-                // showToast("Invio in corso..."); // Gestito dal server ora
             }
         }
         
@@ -214,7 +212,6 @@
         
         function handleCardClick(s,c){
             let cc=c;
-            // Gestione cartellino Nero (conferma)
             if (c === 'B' && !pMode[s]) {
                 if (!confirm("SEI SICURO DI ASSEGNARE IL CARTELLINO NERO?")) return;
             }
