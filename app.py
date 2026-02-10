@@ -296,8 +296,10 @@ def get_athletes():
         result = []
         for a in atleti:
             if not a: continue
-            has_photo = get_photo_url(a) != "/static/photos/default.png"
-            result.append({"name": a, "has_photo": has_photo})
+            url = get_photo_url(a) # Ottieni URL completo (con timestamp anti-cache)
+            has_photo = "/static/photos/default.png" not in url
+            # Invio sia l'indicatore che l'URL per l'anteprima
+            result.append({"name": a, "has_photo": has_photo, "photo_url": url})
         return jsonify(result)
     except: return jsonify([])
 
@@ -491,7 +493,7 @@ def r_timer():
 @socketio.on('fetch_sheet')
 def f_sheet(d=None):
     if d and 'girone' in d:
-        current_state['current_girone'] = d['girone'] # Questo aggiorna solo la LISTA
+        current_state['current_girone'] = d['girone']
         save_state()
     current_state['match_list'] = []
     emit('state_update', current_state, broadcast=True)
@@ -500,11 +502,9 @@ def f_sheet(d=None):
 @socketio.on('load_match')
 def l_match(d):
     push_history()
-    # Se il frontend invia il girone specifico, lo salviamo come ACTIVE
     if 'girone' in d:
         current_state['active_girone'] = d['girone']
     else:
-        # Fallback: usiamo current_girone se non specificato
         current_state['active_girone'] = current_state.get('current_girone', 'rosso')
         
     load_match_data(d) 
@@ -546,7 +546,6 @@ def handle_send_result():
         socketio.emit('action_feedback', {'status': 'error', 'msg': 'Nessun assalto caricato dalla lista.'})
         return
 
-    # USA ACTIVE_GIRONE INVECE DI CURRENT_GIRONE
     g = current_state.get('active_girone', current_state.get('current_girone', 'rosso'))
     
     cols_map = current_state['settings'].get('columns', default_columns)
@@ -568,14 +567,10 @@ def handle_send_result():
         "col_dx": c_pdx, "val_dx": val_dx_sheet
     }
     
-    # Notifica immediata
     socketio.emit('action_feedback', {'status': 'info', 'msg': f'Invio {g.upper()}... Verifica (max 2 min)'})
-    
-    # Avvia processo background
     eventlet.spawn(process_send_verify_advance, payload, g)
 
 def process_send_verify_advance(payload, girone):
-    # 1. INVIO
     try:
         url = current_state['settings']['google_script_url']
         r = requests.post(url, json=payload, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
@@ -586,18 +581,14 @@ def process_send_verify_advance(payload, girone):
         socketio.emit('action_feedback', {'status': 'error', 'msg': f'Errore Connessione: {e}'})
         return
 
-    # 2. CICLO VERIFICA (10s, 30s, 60s)
     delays = [10, 30, 60]
     verified = False
     
     for wait_time in delays:
         socketio.emit('action_feedback', {'status': 'info', 'msg': f'Verifica aggiornamento tra {wait_time}s...'})
         eventlet.sleep(wait_time)
-        
-        # Forza aggiornamento dati
         update_all_gironi_data()
         
-        # Cerca la riga nella cache aggiornata
         matches = gironi_cache.get(girone, [])
         target_row = int(payload['row'])
         match_data = next((m for m in matches if m['row'] == target_row), None)
@@ -620,7 +611,6 @@ def process_send_verify_advance(payload, girone):
         socketio.emit('action_feedback', {'status': 'warning', 'msg': 'Timeout: I dati non sembrano aggiornati sul foglio.'})
         return
 
-    # 3. AVANZAMENTO AUTOMATICO
     matches = gironi_cache.get(girone, [])
     current_row = int(payload['row'])
     next_match = None
@@ -638,10 +628,7 @@ def process_send_verify_advance(payload, girone):
     if next_match:
         eventlet.sleep(2) 
         socketio.emit('action_feedback', {'status': 'success', 'msg': f'Carico: {next_match["sx"]} vs {next_match["dx"]}'})
-        
-        # Aggiorna anche lo stato active_girone per il nuovo match
         current_state['active_girone'] = girone 
-        
         load_match_data(next_match)
         emit('state_update', current_state, broadcast=True)
         save_state()

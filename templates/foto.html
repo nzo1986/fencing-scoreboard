@@ -35,13 +35,28 @@
         function loadAthletes(){
             fetch('/api/get_athletes').then(r=>r.json()).then(d=>{
                 const g=document.getElementById('athletes-grid'); g.innerHTML='';
+                
+                // Card Default
                 const dd=document.createElement('div'); dd.className='photo-card border-blue-500';
                 dd.innerHTML='<img src="/static/photos/default.png?v='+Date.now()+'" class="w-24 h-24 rounded-full mx-auto object-cover mb-2"><p class="font-bold">DEFAULT</p>';
                 dd.onclick=()=>triggerUpload('DEFAULT',true);
                 g.appendChild(dd);
+                
+                // Lista Atleti
                 d.forEach(a=>{
-                    const b=document.createElement('div'); b.className='photo-card '+(a.has_photo?'has-photo':'');
-                    b.innerHTML='<div class="w-24 h-24 rounded-full mx-auto bg-gray-700 flex items-center justify-center overflow-hidden mb-2">'+(a.has_photo?'<span class="text-green-500 text-4xl">✓</span>':'<span class="text-gray-500 text-4xl">?</span>')+'</div><p class="text-sm">'+a.name+'</p>';
+                    const b=document.createElement('div'); 
+                    b.className='photo-card group';
+                    
+                    let content = '';
+                    if(a.has_photo) {
+                        // Anteprima Foto (Bordo Verde)
+                        content = `<img src="${a.photo_url}" class="w-24 h-24 rounded-full mx-auto object-cover mb-2 border-4 border-green-500">`;
+                    } else {
+                        // Placeholder Grigio con ?
+                        content = `<div class="w-24 h-24 rounded-full mx-auto bg-gray-700 flex items-center justify-center overflow-hidden mb-2 border-4 border-gray-600"><span class="text-gray-500 text-4xl font-bold">?</span></div>`;
+                    }
+                    
+                    b.innerHTML = content + `<p class="text-sm font-bold truncate">${a.name}</p>`;
                     b.onclick=()=>triggerUpload(a.name,false);
                     g.appendChild(b)
                 })
