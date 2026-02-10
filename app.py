@@ -28,14 +28,11 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PHOTOS_DIR = os.path.join(BASE_DIR, 'static', 'photos')
 STATE_FILE = "match_state.json"
 
-# URL DEL FOGLIO GOOGLE
-SHEET_DISPLAY_URL = "https://docs.google.com/spreadsheets/d/179tfN2PDrSTYtiAdVeFQKXF9OtwZj4k4EbQ1dWXH5Yg/gviz/tq?tqx=out:csv&sheet=display3gir"
-# MODIFICATO: Punta al foglio "Rank" per la lista atleti
-SHEET_ATLETI_URL = "https://docs.google.com/spreadsheets/d/179tfN2PDrSTYtiAdVeFQKXF9OtwZj4k4EbQ1dWXH5Yg/gviz/tq?tqx=out:csv&sheet=Rank"
+# ID DI DEFAULT
+DEFAULT_SHEET_ID = "179tfN2PDrSTYtiAdVeFQKXF9OtwZj4k4EbQ1dWXH5Yg"
 
 # Mappa Scrittura (1-based per Google Script)
 GIRONI_MAP_WRITE = { 'rosso': [2, 3], 'giallo': [7, 8], 'blu': [12, 13], 'verde': [17, 18], '32': [22, 23] }
-
 # Mappa Lettura (0-based da CSV gviz)
 GIRONI_MAP_READ = { 'rosso': [0, 1, 2, 3], 'giallo': [5, 6, 7, 8], 'blu': [10, 11, 12, 13], 'verde': [15, 16, 17, 18], '32': [20, 21, 22, 23] }
 
@@ -119,7 +116,8 @@ default_settings = {
     "col_center_width": 1.2, "list_padding": 0.5, "text_border": 0.0, "photo_size": 150,
     "time_match": 180, "time_break": 60, "time_medical": 300,
     "refresh_rate": 30, 
-    "default_name_left": "ATLETA SX", "default_name_right": "ATLETA DX", "google_script_url": "",
+    "default_name_left": "ATLETA SX", "default_name_right": "ATLETA DX", 
+    "google_script_url": "", "google_sheet_id": DEFAULT_SHEET_ID,
     "columns": default_columns
 }
 
@@ -128,7 +126,10 @@ default_state = {
     "fencer_left": new_fencer(default_settings["default_name_left"]), 
     "fencer_right": new_fencer(default_settings["default_name_right"]),
     "period": 1, "admin_connected": False, "server_ip": get_local_ip(), "ssid": get_current_ssid(),
-    "match_list": [], "current_girone": "rosso", "current_row_idx": None,
+    "match_list": [], 
+    "current_girone": "rosso", # Girone visualizzato nella lista
+    "active_girone": "rosso",  # Girone dell'assalto caricato (PER SICUREZZA)
+    "current_row_idx": None,
     "manual_selection": False, "swapped": False,
     "settings": default_settings.copy(), "wifi_connected": False
 }
@@ -159,8 +160,8 @@ def load_state():
                 data['settings'].update(saved_s)
                 
                 if 'columns' not in data['settings']: data['settings']['columns'] = default_columns.copy()
-                
-                # Ripristina R_count se manca
+                if 'google_sheet_id' not in data['settings']: data['settings']['google_sheet_id'] = DEFAULT_SHEET_ID
+
                 if 'fencer_left' in data: 
                     data['fencer_left']['photo'] = get_photo_url(data['fencer_left']['name'])
                     if 'R_count' not in data['fencer_left']['cards']: data['fencer_left']['cards']['R_count'] = 0
@@ -169,6 +170,9 @@ def load_state():
                     if 'R_count' not in data['fencer_right']['cards']: data['fencer_right']['cards']['R_count'] = 0
                 
                 current_state = data
+                # Retrocompatibilità: se manca active_girone, usa current_girone
+                if 'active_girone' not in current_state:
+                    current_state['active_girone'] = current_state.get('current_girone', 'rosso')
         except: pass
 
 def push_history():
@@ -276,22 +280,19 @@ def upload_photo():
 def get_athletes():
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        r = requests.get(SHEET_ATLETI_URL, headers=headers)
+        sid = current_state['settings'].get('google_sheet_id', DEFAULT_SHEET_ID)
+        url = f"https://docs.google.com/spreadsheets/d/{sid}/gviz/tq?tqx=out:csv&sheet=Rank"
+        r = requests.get(url, headers=headers)
         r.encoding = 'utf-8'
         lines = r.text.strip().split('\n')
         atleti = []
         reader = csv.reader(lines)
         rows = list(reader)
-        
-        # NUOVA LOGICA: Foglio "Rank", colonna E3:E
         for i, row in enumerate(rows):
-            # i >= 2 significa dalla riga 3 in poi (0,1,2...)
             if i >= 2:
-                # La colonna E è l'indice 4 (A=0, B=1, C=2, D=3, E=4)
                 if len(row) > 4:
                     val = row[4].strip()
                     if val: atleti.append(clean_fencer_name(val))
-        
         result = []
         for a in atleti:
             if not a: continue
@@ -395,59 +396,34 @@ def handle_card(d):
     push_history()
     side = d['side']
     card_type = d['card']
-    
-    # Riferimenti Atleti
     fencer = current_state[f'fencer_{side}']
-    # Per dare il punto all'avversario
     opp_side = 'right' if side == 'left' else 'left'
     opponent = current_state[f'fencer_{opp_side}']
 
-    # LOGICA P-CARDS (Invariata: Toggle ON/OFF)
     if card_type.startswith('P_'):
         k = card_type.split('_')[1]
         fencer['p_cards'][k] = not fencer['p_cards'][k]
-    
-    # LOGICA CARTELLINI NORMALI (AGGIORNATA)
     else:
         has_yellow = fencer['cards']['Y']
-        # Recupera il conteggio dei rossi (se non esiste, 0)
         red_count = fencer['cards'].get('R_count', 0)
         has_black = fencer['cards']['B']
 
         if card_type == 'B':
-            # Cartellino Nero: attivo e basta (popup gestito in frontend)
             fencer['cards']['B'] = True
             current_state['running'] = False
-        
         elif card_type in ['Y', 'R']:
-            # Se ha gia il nero, stop
-            if has_black:
-                pass
-            
+            if has_black: pass
             else:
-                # Caso 1: Pulito (Nessun Giallo, Nessun Rosso)
                 if not has_yellow and red_count == 0:
-                    if card_type == 'Y':
-                        # Primo Giallo: Solo visuale
-                        fencer['cards']['Y'] = True
+                    if card_type == 'Y': fencer['cards']['Y'] = True
                     elif card_type == 'R':
-                        # Primo Rosso (diretto): Rosso Attivo + Punto Avv
                         red_count = 1
                         opponent['score'] += 1
                         current_state['running'] = False
-                
-                # Caso 2: Ha gia Giallo O ha gia Rosso
                 else:
-                    # Qualsiasi cartellino (Y o R) ora provoca penalita
-                    # Incrementiamo rossi (max 2 visuali, ma logica accumula)
-                    if red_count < 2:
-                        red_count += 1
-                    
-                    # Assegna punto e ferma tempo
+                    if red_count < 2: red_count += 1
                     opponent['score'] += 1
                     current_state['running'] = False
-            
-            # Applica stato
             fencer['cards']['R_count'] = red_count
             fencer['cards']['R'] = (red_count > 0)
 
@@ -480,13 +456,11 @@ def r_all():
     current_state['running'] = False
     current_state['priority'] = None
     current_state['manual_selection'] = False 
-    current_state['swapped'] = False # Reset swap
-    
+    current_state['swapped'] = False 
     for s in ['left','right']:
         current_state[f'fencer_{s}']['score'] = 0
         current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
         current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
-    
     current_state['fencer_left']['name'] = current_state['settings']['default_name_left']
     current_state['fencer_right']['name'] = current_state['settings']['default_name_right']
     current_state['fencer_left']['photo'] = get_photo_url(None)
@@ -517,9 +491,8 @@ def r_timer():
 @socketio.on('fetch_sheet')
 def f_sheet(d=None):
     if d and 'girone' in d:
-        current_state['current_girone'] = d['girone']
+        current_state['current_girone'] = d['girone'] # Questo aggiorna solo la LISTA
         save_state()
-    
     current_state['match_list'] = []
     emit('state_update', current_state, broadcast=True)
     update_all_gironi_data()
@@ -527,8 +500,20 @@ def f_sheet(d=None):
 @socketio.on('load_match')
 def l_match(d):
     push_history()
+    # Se il frontend invia il girone specifico, lo salviamo come ACTIVE
+    if 'girone' in d:
+        current_state['active_girone'] = d['girone']
+    else:
+        # Fallback: usiamo current_girone se non specificato
+        current_state['active_girone'] = current_state.get('current_girone', 'rosso')
+        
+    load_match_data(d) 
+    emit('state_update', current_state, broadcast=True)
+    save_state()
+
+def load_match_data(d):
     current_state['manual_selection'] = True
-    current_state['swapped'] = False # Reset swap on new load
+    current_state['swapped'] = False 
     current_state['current_row_idx'] = d['row']
     current_state['fencer_left']['name'] = clean_fencer_name(d['sx'])
     current_state['fencer_right']['name'] = clean_fencer_name(d['dx'])
@@ -538,41 +523,41 @@ def l_match(d):
     except: current_state['fencer_left']['score'] = 0
     try: current_state['fencer_right']['score'] = int(d['p_dx'])
     except: current_state['fencer_right']['score'] = 0
-    
     current_state['timer'] = float(current_state['settings']['time_match'])
     current_state['running'] = False
     current_state['priority'] = None
     for s in ['left','right']:
         current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
         current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
-    emit('state_update', current_state, broadcast=True)
-    save_state()
 
-# --- SWIPE LOGIC ---
 @socketio.on('swap_fencers')
 def handle_swap():
     current_state['swapped'] = not current_state['swapped']
-    # Swap entire objects
     current_state['fencer_left'], current_state['fencer_right'] = current_state['fencer_right'], current_state['fencer_left']
     emit('state_update', current_state, broadcast=True)
     save_state()
 
 @socketio.on('send_result')
 def handle_send_result():
-    if not current_state['settings'].get('google_script_url') or not current_state['current_row_idx']: return
-    g = current_state['current_girone']
+    if not current_state['settings'].get('google_script_url'):
+        socketio.emit('action_feedback', {'status': 'error', 'msg': 'Manca URL Script nelle Impostazioni!'})
+        return
+    if not current_state['current_row_idx']:
+        socketio.emit('action_feedback', {'status': 'error', 'msg': 'Nessun assalto caricato dalla lista.'})
+        return
+
+    # USA ACTIVE_GIRONE INVECE DI CURRENT_GIRONE
+    g = current_state.get('active_girone', current_state.get('current_girone', 'rosso'))
     
     cols_map = current_state['settings'].get('columns', default_columns)
     cols = cols_map.get(g, default_columns['rosso']) 
     c_psx = letter_to_sheet_col(cols['psx'])
     c_pdx = letter_to_sheet_col(cols['pdx'])
     
-    # Logic for correct assignment based on SWAP
     val_sx_sheet = current_state['fencer_left']['score']
     val_dx_sheet = current_state['fencer_right']['score']
     
     if current_state.get('swapped', False):
-        # If swapped, screen Left is actually Sheet Right data
         val_sx_sheet = current_state['fencer_right']['score']
         val_dx_sheet = current_state['fencer_left']['score']
     
@@ -582,22 +567,86 @@ def handle_send_result():
         "col_sx": c_psx, "val_sx": val_sx_sheet,
         "col_dx": c_pdx, "val_dx": val_dx_sheet
     }
-    eventlet.spawn(send_to_google, payload)
+    
+    # Notifica immediata
+    socketio.emit('action_feedback', {'status': 'info', 'msg': f'Invio {g.upper()}... Verifica (max 2 min)'})
+    
+    # Avvia processo background
+    eventlet.spawn(process_send_verify_advance, payload, g)
 
-def send_to_google(payload):
-    global last_google_status
+def process_send_verify_advance(payload, girone):
+    # 1. INVIO
     try:
         url = current_state['settings']['google_script_url']
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        r = requests.post(url, json=payload, headers=headers, timeout=5)
-        if r.status_code == 200 and "success" in r.text:
-            last_google_status = "ok"
-        else:
-            last_google_status = "error"
-    except Exception as e: 
-        print(f"Err send: {e}")
-        last_google_status = "error"
-    check_status_thread_logic()
+        r = requests.post(url, json=payload, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+        if r.status_code != 200 or "success" not in r.text:
+            socketio.emit('action_feedback', {'status': 'error', 'msg': f'Errore Script Google: {r.text}'})
+            return
+    except Exception as e:
+        socketio.emit('action_feedback', {'status': 'error', 'msg': f'Errore Connessione: {e}'})
+        return
+
+    # 2. CICLO VERIFICA (10s, 30s, 60s)
+    delays = [10, 30, 60]
+    verified = False
+    
+    for wait_time in delays:
+        socketio.emit('action_feedback', {'status': 'info', 'msg': f'Verifica aggiornamento tra {wait_time}s...'})
+        eventlet.sleep(wait_time)
+        
+        # Forza aggiornamento dati
+        update_all_gironi_data()
+        
+        # Cerca la riga nella cache aggiornata
+        matches = gironi_cache.get(girone, [])
+        target_row = int(payload['row'])
+        match_data = next((m for m in matches if m['row'] == target_row), None)
+        
+        if match_data:
+            try:
+                cache_sx = int(float(match_data['p_sx']))
+                cache_dx = int(float(match_data['p_dx']))
+                sent_sx = int(payload['val_sx'])
+                sent_dx = int(payload['val_dx'])
+                
+                if cache_sx == sent_sx and cache_dx == sent_dx:
+                    verified = True
+                    socketio.emit('action_feedback', {'status': 'success', 'msg': 'Punteggio CONFERMATO su Google!'})
+                    break
+            except Exception as e:
+                print(f"Errore confronto dati: {e}")
+    
+    if not verified:
+        socketio.emit('action_feedback', {'status': 'warning', 'msg': 'Timeout: I dati non sembrano aggiornati sul foglio.'})
+        return
+
+    # 3. AVANZAMENTO AUTOMATICO
+    matches = gironi_cache.get(girone, [])
+    current_row = int(payload['row'])
+    next_match = None
+    
+    for m in matches:
+        if m['row'] > current_row:
+            try:
+                s1 = int(float(m['p_sx']))
+                s2 = int(float(m['p_dx']))
+                if s1 == 0 and s2 == 0:
+                    next_match = m
+                    break
+            except: pass
+            
+    if next_match:
+        eventlet.sleep(2) 
+        socketio.emit('action_feedback', {'status': 'success', 'msg': f'Carico: {next_match["sx"]} vs {next_match["dx"]}'})
+        
+        # Aggiorna anche lo stato active_girone per il nuovo match
+        current_state['active_girone'] = girone 
+        
+        load_match_data(next_match)
+        emit('state_update', current_state, broadcast=True)
+        save_state()
+    else:
+        socketio.emit('action_feedback', {'status': 'info', 'msg': 'Nessun prossimo assalto 0-0 trovato nel girone.'})
 
 # --- STATUS CHECKS ---
 def check_internet():
@@ -622,7 +671,7 @@ def up_set(d):
         if k == 'columns':
             current_state['settings']['columns'] = v
         elif k in current_state['settings']: 
-            if k in ['font_family','google_script_url'] or k.startswith('default_name'):
+            if k in ['font_family','google_script_url', 'google_sheet_id'] or k.startswith('default_name'):
                  current_state['settings'][k] = str(v)
             elif isinstance(current_state['settings'][k], (int, float)):
                 try: current_state['settings'][k] = float(v)
@@ -630,7 +679,7 @@ def up_set(d):
             else: current_state['settings'][k] = str(v)
     emit('state_update', current_state, broadcast=True)
     save_state()
-    if 'columns' in d: eventlet.spawn(update_all_gironi_data)
+    if 'columns' in d or 'google_sheet_id' in d: eventlet.spawn(update_all_gironi_data)
 
 @socketio.on('admin_heartbeat')
 def hb(d):
@@ -641,8 +690,9 @@ def hb(d):
 def update_all_gironi_data():
     global gironi_cache
     try:
-        nocache_url = f"{SHEET_DISPLAY_URL}&t={int(time.time())}"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        sid = current_state['settings'].get('google_sheet_id', DEFAULT_SHEET_ID)
+        nocache_url = f"https://docs.google.com/spreadsheets/d/{sid}/gviz/tq?tqx=out:csv&sheet=display3gir&t={int(time.time())}"
+        headers = {'User-Agent': 'Mozilla/5.0'}
         r = requests.get(nocache_url, headers=headers)
         
         r.encoding = 'utf-8'

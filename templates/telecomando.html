@@ -29,7 +29,7 @@
         .sys-btn{background:#222;border:1px solid #444;width:100%;padding:10px;margin-bottom:2px;font-weight:bold;border-radius:4px;color:#ccc}
         .timer-text-break{color:#facc15}
         .gear-btn{position:static;transform:none;width:50px;height:50px;background:#333;color:#888;border:2px solid #555;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;box-shadow:0 4px 10px rgba(0,0,0,0.5)}
-        #toast-container{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.8);color:white;padding:20px 40px;border-radius:12px;font-size:1.5rem;text-align:center;z-index:9999;display:none;box-shadow:0 0 20px rgba(0,0,0,0.5);border:2px solid #555}
+        #toast-container{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:white;padding:20px 40px;border-radius:12px;font-size:1.5rem;text-align:center;z-index:9999;display:none;box-shadow:0 0 20px rgba(0,0,0,0.5);border:2px solid #555}
         /* STATUS INDICATORS */
         .bottom-controls{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:20px;z-index:100;background:rgba(0,0,0,0.8);padding:10px 20px;border-radius:30px;border:1px solid #444}
         .status-icon{width:20px;height:20px;border-radius:50%;display:inline-block;border:2px solid #555}
@@ -140,11 +140,12 @@
             });
         });
 
-        function showToast(msg) {
+        function showToast(msg, duration = 3000) {
             const t = document.getElementById('toast-container');
             t.innerText = msg;
             t.style.display = 'block';
-            setTimeout(() => { t.style.display = 'none'; }, 3000);
+            if(window.toastTimeout) clearTimeout(window.toastTimeout);
+            window.toastTimeout = setTimeout(() => { t.style.display = 'none'; }, duration);
         }
         
         socket.on('status_check', (s) => {
@@ -154,6 +155,19 @@
             if (s.google === 'ok') go.className = 'status-icon status-green';
             else if (s.google === 'missing') go.className = 'status-icon status-yellow';
             else go.className = 'status-icon status-red';
+        });
+
+        // NUOVO LISTENER PER IL FEEDBACK MIGLIORATO
+        socket.on('action_feedback', (data) => {
+            if (data.status === 'error') {
+                // Gli errori gravi usano l'alert per essere sicuri che vengano letti
+                alert("ERRORE: " + data.msg);
+            } else {
+                // Info e successi usano il toast non invasivo
+                // Se è un messaggio di attesa verifica, lo teniamo un po' di più
+                const dur = data.status === 'info' ? 5000 : 3000;
+                showToast(data.msg, dur);
+            }
         });
 
         setInterval(()=>socket.emit('admin_heartbeat',{active:true}),2000);
@@ -175,7 +189,11 @@
                 showToast("Aggiornamento dati...");
             } else {
                 if(confirm("Caricare l'assalto selezionato sul Display?")){
-                    socket.emit('load_match', matches[sel.value]);
+                    // MODIFICA IMPORTANTE: Inviamo anche il nome del girone corrente
+                    // così il backend sa esattamente a quale foglio appartiene questo match
+                    let matchData = matches[sel.value];
+                    matchData.girone = currentGirone; 
+                    socket.emit('load_match', matchData);
                 }
             }
         }
@@ -183,7 +201,7 @@
         function sendResult(){
             if(confirm("Inviare il punteggio corrente al foglio Google?")){
                 socket.emit('send_result');
-                showToast("Invio in corso...");
+                // showToast("Invio in corso..."); // Gestito dal server ora
             }
         }
         

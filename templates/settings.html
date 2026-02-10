@@ -64,7 +64,17 @@
     
     <div class="mb-6">
         <h2 class="text-xl text-purple-400 mb-2 font-bold">Integrazione Cloud</h2>
-        <div><label class="block text-sm text-gray-400">URL Google Apps Script</label><input type="text" id="val_google_script_url" class="w-full p-3 rounded bg-gray-800 text-white border border-gray-600" placeholder="https://script.google.com/..." onchange="updateText('google_script_url',this.value)"></div>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm text-gray-400">ID Foglio Google (Sheet ID)</label>
+                <input type="text" id="val_google_sheet_id" class="w-full p-3 rounded bg-gray-800 text-white border border-gray-600 font-mono" placeholder="Es: 179tfN2PDrSTY..." onchange="updateText('google_sheet_id',this.value)">
+                <p class="text-xs text-gray-500 mt-1">L'ID è la parte lunga dell'URL del tuo foglio tra /d/ e /edit.</p>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-400">URL Google Apps Script</label>
+                <input type="text" id="val_google_script_url" class="w-full p-3 rounded bg-gray-800 text-white border border-gray-600 font-mono" placeholder="https://script.google.com/..." onchange="updateText('google_script_url',this.value)">
+            </div>
+        </div>
         <div class="mt-4"><button onclick="window.location.href='/wifi'" class="w-full bg-orange-700 p-4 rounded font-bold text-xl mb-2">CONFIGURA WIFI</button></div>
     </div>
     
@@ -78,7 +88,7 @@
         const socket=io();
         let settings={};
         const numKeys=['font_timer','font_score','font_name','col_center_width','font_list','list_padding','text_border','time_match','time_break','time_medical','photo_size','refresh_rate'];
-        const textKeys=['default_name_left','default_name_right','google_script_url'];
+        const textKeys=['default_name_left','default_name_right','google_script_url', 'google_sheet_id'];
         
         fetch('/api/get_fonts').then(r=>r.json()).then(f=>{
             const l=document.getElementById('font-list');
