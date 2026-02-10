@@ -568,25 +568,56 @@ def handle_send_result():
         "col_dx": c_pdx, "val_dx": val_dx_sheet
     }
     
-    socketio.emit('action_feedback', {'status': 'info', 'msg': f'Invio {g.upper()}... Verifica (max 2 min)'})
-    eventlet.spawn(process_send_verify_advance, payload, g)
+    # 1. Notifica e Spia Blu
+    socketio.emit('upload_status', {'color': 'blue'})
+    socketio.emit('action_feedback', {'status': 'info', 'msg': 'Invio in background...'})
+    
+    # 2. Avvia processo background
+    eventlet.spawn(process_background_upload, payload, g)
 
-def process_send_verify_advance(payload, girone):
+    # 3. Avanzamento Immediato
+    matches = gironi_cache.get(g, [])
+    current_row = int(payload['row'])
+    next_match = None
+    for m in matches:
+        if m['row'] > current_row:
+            try:
+                s1 = int(float(m['p_sx']))
+                s2 = int(float(m['p_dx']))
+                if s1 == 0 and s2 == 0:
+                    next_match = m
+                    break
+            except: pass
+            
+    if next_match:
+        current_state['active_girone'] = g
+        load_match_data(next_match)
+        emit('state_update', current_state, broadcast=True)
+        socketio.emit('action_feedback', {'status': 'success', 'msg': f'Caricato prossimo: {next_match["sx"]} vs {next_match["dx"]}'})
+    else:
+        socketio.emit('action_feedback', {'status': 'info', 'msg': 'Nessun prossimo assalto trovato.'})
+
+def process_background_upload(payload, girone):
+    # INVIO
     try:
         url = current_state['settings']['google_script_url']
         r = requests.post(url, json=payload, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
         if r.status_code != 200 or "success" not in r.text:
-            socketio.emit('action_feedback', {'status': 'error', 'msg': f'Errore Script Google: {r.text}'})
+            socketio.emit('upload_status', {'color': 'red'})
             return
     except Exception as e:
-        socketio.emit('action_feedback', {'status': 'error', 'msg': f'Errore Connessione: {e}'})
+        socketio.emit('upload_status', {'color': 'red'})
         return
 
+    # VERIFICA DISCRETA
     delays = [10, 30, 60]
     verified = False
     
     for wait_time in delays:
-        socketio.emit('action_feedback', {'status': 'info', 'msg': f'Verifica aggiornamento tra {wait_time}s...'})
+        # Se è un secondo tentativo (wait > 10), metti giallo
+        if wait_time > 10:
+            socketio.emit('upload_status', {'color': 'yellow'})
+            
         eventlet.sleep(wait_time)
         update_all_gironi_data()
         
@@ -603,38 +634,15 @@ def process_send_verify_advance(payload, girone):
                 
                 if cache_sx == sent_sx and cache_dx == sent_dx:
                     verified = True
-                    socketio.emit('action_feedback', {'status': 'success', 'msg': 'Punteggio CONFERMATO su Google!'})
-                    break
-            except Exception as e:
-                print(f"Errore confronto dati: {e}")
-    
-    if not verified:
-        socketio.emit('action_feedback', {'status': 'warning', 'msg': 'Timeout: I dati non sembrano aggiornati sul foglio.'})
-        return
-
-    matches = gironi_cache.get(girone, [])
-    current_row = int(payload['row'])
-    next_match = None
-    
-    for m in matches:
-        if m['row'] > current_row:
-            try:
-                s1 = int(float(m['p_sx']))
-                s2 = int(float(m['p_dx']))
-                if s1 == 0 and s2 == 0:
-                    next_match = m
+                    socketio.emit('upload_status', {'color': 'green'}) # Verde = Successo
+                    # Dopo 5 secondi spegni la luce verde
+                    eventlet.sleep(5)
+                    socketio.emit('upload_status', {'color': 'none'})
                     break
             except: pass
-            
-    if next_match:
-        eventlet.sleep(2) 
-        socketio.emit('action_feedback', {'status': 'success', 'msg': f'Carico: {next_match["sx"]} vs {next_match["dx"]}'})
-        current_state['active_girone'] = girone 
-        load_match_data(next_match)
-        emit('state_update', current_state, broadcast=True)
-        save_state()
-    else:
-        socketio.emit('action_feedback', {'status': 'info', 'msg': 'Nessun prossimo assalto 0-0 trovato nel girone.'})
+    
+    if not verified:
+        socketio.emit('upload_status', {'color': 'red'})
 
 # --- STATUS CHECKS ---
 def check_internet():
@@ -719,7 +727,6 @@ def update_all_gironi_data():
         current_state['match_list'] = new_cache.get(cg, [])
         socketio.emit('state_update', current_state)
         
-        # LOGICA AUTO-LOAD (MODIFICATA)
         if not current_state.get('manual_selection') and not current_state['running'] and current_state['timer'] == float(current_state['settings']['time_match']):
              matches = new_cache.get(cg, [])
              next_match = next((m for m in matches if (int(m['p_sx']) == 0 and int(m['p_dx']) == 0)), None)
