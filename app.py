@@ -116,7 +116,7 @@ default_settings = {
     "col_center_width": 1.2, "list_padding": 0.5, "text_border": 0.0, "photo_size": 150,
     "time_match": 180, "time_break": 60, "time_medical": 300,
     "refresh_rate": 30, 
-    "buzzer_volume": 1.0, # VOLUME DEFAULT (1.0 = Max)
+    "buzzer_volume": 1.0,
     "default_name_left": "ATLETA SX", "default_name_right": "ATLETA DX", 
     "google_script_url": "", "google_sheet_id": DEFAULT_SHEET_ID,
     "columns": default_columns
@@ -525,6 +525,7 @@ def load_match_data(d):
     try: current_state['fencer_right']['score'] = int(d['p_dx'])
     except: current_state['fencer_right']['score'] = 0
     current_state['timer'] = float(current_state['settings']['time_match'])
+    current_state['phase'] = 'MATCH' # MODIFICA: Reset della fase a MATCH
     current_state['running'] = False
     current_state['priority'] = None
     for s in ['left','right']:
