@@ -455,6 +455,7 @@ def toggle_prio():
 def r_all():
     push_history()
     current_state['timer'] = float(current_state['settings']['time_match'])
+    current_state['phase'] = 'MATCH' # FIX: Assicura l'uscita dalla pausa
     current_state['running'] = False
     current_state['priority'] = None
     current_state['manual_selection'] = False 
@@ -486,6 +487,7 @@ def r_scores():
 def r_timer():
     push_history()
     current_state['timer'] = float(current_state['settings']['time_match'])
+    current_state['phase'] = 'MATCH' # FIX: Assicura l'uscita dalla pausa
     current_state['running'] = False
     emit('state_update', current_state, broadcast=True)
     save_state()
@@ -525,7 +527,7 @@ def load_match_data(d):
     try: current_state['fencer_right']['score'] = int(d['p_dx'])
     except: current_state['fencer_right']['score'] = 0
     current_state['timer'] = float(current_state['settings']['time_match'])
-    current_state['phase'] = 'MATCH' # MODIFICA: Reset della fase a MATCH
+    current_state['phase'] = 'MATCH' 
     current_state['running'] = False
     current_state['priority'] = None
     for s in ['left','right']:
@@ -717,10 +719,42 @@ def update_all_gironi_data():
         gironi_cache = new_cache
         socketio.emit('gironi_cache_update', gironi_cache)
         
+        # --- FIX: AGGIORNAMENTO DINAMICO NOMI/FOTO SE CAMBIANO SU EXCEL ---
+        curr_row = current_state.get('current_row_idx')
+        curr_gir = current_state.get('active_girone')
+        updated_current = False
+        
+        if curr_row and curr_gir in gironi_cache:
+            for m in gironi_cache[curr_gir]:
+                if m['row'] == curr_row:
+                    new_sx = m['sx']
+                    new_dx = m['dx']
+                    
+                    if current_state.get('swapped', False):
+                        target_left_name = new_dx
+                        target_right_name = new_sx
+                    else:
+                        target_left_name = new_sx
+                        target_right_name = new_dx
+                        
+                    # Se i nomi sono cambiati sul foglio, aggiorniamo il tabellone live
+                    if current_state['fencer_left']['name'] != target_left_name or current_state['fencer_right']['name'] != target_right_name:
+                        current_state['fencer_left']['name'] = target_left_name
+                        current_state['fencer_left']['photo'] = get_photo_url(target_left_name)
+                        current_state['fencer_right']['name'] = target_right_name
+                        current_state['fencer_right']['photo'] = get_photo_url(target_right_name)
+                        updated_current = True
+                    break
+
         cg = current_state.get('current_girone', 'rosso')
         current_state['match_list'] = new_cache.get(cg, [])
-        socketio.emit('state_update', current_state)
         
+        if updated_current:
+            socketio.emit('state_update', current_state)
+            save_state()
+        else:
+            socketio.emit('state_update', current_state)
+            
         if not current_state.get('manual_selection') and not current_state['running'] and current_state['timer'] == float(current_state['settings']['time_match']):
              matches = new_cache.get(cg, [])
              next_match = next((m for m in matches if (int(m['p_sx']) == 0 and int(m['p_dx']) == 0)), None)
