@@ -26,7 +26,10 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PHOTOS_DIR = os.path.join(BASE_DIR, 'static', 'photos')
-STATE_FILE = "match_state.json"
+
+# FIX AGGIORNAMENTI: Usiamo un file locale non tracciato da Git per salvare le impostazioni
+STATE_FILE = "local_match_state.json"
+OLD_STATE_FILE = "match_state.json"
 
 # ID DI DEFAULT
 DEFAULT_SHEET_ID = "179tfN2PDrSTYtiAdVeFQKXF9OtwZj4k4EbQ1dWXH5Yg"
@@ -144,9 +147,16 @@ def save_state():
 
 def load_state():
     global current_state
+    
+    file_to_load = None
     if os.path.exists(STATE_FILE):
+        file_to_load = STATE_FILE
+    elif os.path.exists(OLD_STATE_FILE):
+        file_to_load = OLD_STATE_FILE
+        
+    if file_to_load:
         try:
-            with open(STATE_FILE, 'r') as f:
+            with open(file_to_load, 'r') as f:
                 data = json.load(f)
                 data['running'] = False
                 data['server_ip'] = get_local_ip()
