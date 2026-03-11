@@ -7,7 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        /* MODIFICA: min-height invece di height fissa, overflow-y auto per permettere lo scroll */
         body{user-select:none;-webkit-user-select:none;background:#050515;color:#eee;touch-action:manipulation;font-family:sans-serif;min-height:100vh;overflow-y:auto;overflow-x:hidden;padding-bottom:20px}
         button:active{transform:scale(0.97);filter:brightness(0.9)}
         .ctrl-btn{width:18%;height:50px;background:#222;border:1px solid #444;border-radius:4px;font-weight:bold;font-size:1.5rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 0 #111;color:white}
@@ -17,11 +16,9 @@
         .prio-dot{width:15px;height:15px;border-radius:50%;background:#222;position:absolute;top:15px;border:1px solid #444;opacity:0.3}
         .prio-l{left:10px}.prio-r{right:10px}
         .prio-active{background:white;box-shadow:0 0 10px white;opacity:1}
-        /* MODIFICA: Altezza flessibile per il pulsante start */
         .start-btn{width:100%;min-height:20vh;padding:20px 0;font-size:4rem;font-weight:bold;color:white;border:none;display:flex;align-items:center;justify-content:center;margin:5px 0;border-radius:4px}
         .bg-start{background:#008800}.bg-stop{background:#cc0000}.bg-pause{background:#eab308;color:black}
         
-        /* MODIFICA: Tolta l'altezza fissa alla griglia */
         .bottom-grid{display:grid;grid-template-columns:1fr 2fr 1fr;gap:4px;margin-bottom:20px}
         
         .side-col{display:flex;flex-direction:column;gap:4px}.center-col{display:flex;flex-direction:column;gap:4px}
@@ -36,7 +33,6 @@
         .gear-btn{position:static;transform:none;width:50px;height:50px;background:#333;color:#888;border:2px solid #555;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;box-shadow:0 4px 10px rgba(0,0,0,0.5)}
         #toast-container{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:white;padding:20px 40px;border-radius:12px;font-size:1.5rem;text-align:center;z-index:9999;display:none;box-shadow:0 0 20px rgba(0,0,0,0.5);border:2px solid #555}
         
-        /* MODIFICA: Controlli inferiori non più fissi, ma centrati in basso nel flusso della pagina */
         .bottom-controls{
             display:flex;
             justify-content:center;
@@ -47,7 +43,7 @@
             border-radius:30px;
             border:1px solid #444;
             width:fit-content;
-            margin:auto auto 0 auto; /* Spinge verso il basso e centra orizzontalmente */
+            margin:auto auto 0 auto; 
         }
         
         .status-icon{width:20px;height:20px;border-radius:50%;display:inline-block;border:2px solid #555; transition: background-color 0.3s;}
@@ -60,7 +56,6 @@
         .swipe-btn { color: #ff4444; font-weight: bold; background: #220000; border: 2px solid #550000; }
     </style>
 </head>
-<!-- MODIFICA: Classi Tailwind aggiornate per supportare il layout fluido -->
 <body class="flex flex-col min-h-screen p-2 overflow-y-auto overflow-x-hidden">
     
     <div id="toast-container"></div>
@@ -102,7 +97,8 @@
                 <button class="sys-btn swipe-btn w-full py-4" onclick="socket.emit('swap_fencers')">Swipe Atleti &lt;--&gt;</button>
             </div>
 
-            <div class="flex-grow flex flex-col justify-end">
+            <!-- MODIFICA: Rimosso flex-grow e justify-end. Ora i blocchi salgono naturalmente verso l'alto -->
+            <div class="flex flex-col mt-1">
                 <details id="reset-menu" class="accord">
                     <summary>Menu Reset</summary>
                     <div class="flex flex-col bg-gray-800 p-2 rounded">
@@ -112,7 +108,7 @@
                         <button class="sys-btn text-red-300 bg-red-900" onclick="if(confirm('Reset TOTALE?'))resetAction('reset_all')">Reset TUTTO</button>
                     </div>
                 </details>
-                <details class="mt-2 accord" id="girone-details">
+                <details class="mt-1 accord" id="girone-details">
                     <summary id="girone-label">Girone: Rosso</summary>
                     <div class="flex flex-col bg-gray-800 p-2 rounded">
                         <button class="sys-btn text-red-400" onclick="changeGirone('rosso')">Rosso</button>
@@ -122,7 +118,7 @@
                         <button class="sys-btn text-white" onclick="changeGirone('32')">Elim. 32</button>
                     </div>
                 </details>
-                <div class="flex mt-2 gap-1 h-14">
+                <div class="flex mt-1 gap-1 h-14">
                     <select id="sel" class="flex-grow bg-gray-800 text-white border border-gray-600 rounded text-sm px-2" onchange="triggerMatchLoad()"></select>
                     <button onclick="forceUpdate()" class="bg-green-700 text-white px-3 rounded text-sm border border-green-600 font-bold">AGG.</button>
                 </div>
