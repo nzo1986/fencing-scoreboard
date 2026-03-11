@@ -149,10 +149,13 @@ def load_state():
     global current_state
     
     file_to_load = None
+    loaded_from_old = False
+    
     if os.path.exists(STATE_FILE):
         file_to_load = STATE_FILE
     elif os.path.exists(OLD_STATE_FILE):
         file_to_load = OLD_STATE_FILE
+        loaded_from_old = True
         
     if file_to_load:
         try:
@@ -184,6 +187,11 @@ def load_state():
                 current_state = data
                 if 'active_girone' not in current_state:
                     current_state['active_girone'] = current_state.get('current_girone', 'rosso')
+                    
+            # Se abbiamo appena letto dal vecchio file, salviamo subito nel nuovo formato locale
+            if loaded_from_old:
+                save_state()
+                
         except: pass
 
 def push_history():
