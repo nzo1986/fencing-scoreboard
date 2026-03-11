@@ -363,13 +363,8 @@ def undo():
     global current_state
     if history_stack:
         prev = history_stack.pop()
-        
-        # FIX APPLICATO QUI: 'settings' è stato rimosso dalla lista.
-        # In questo modo, l'undo ripristina SOLO l'assalto (punti, tempo, cartellini, ecc.)
-        # e le tue impostazioni personalizzate non vengono mai sovrascritte.
-        for k in ['timer','fencer_left','fencer_right','priority','phase','match_list','current_row_idx','current_girone','manual_selection','swapped']:
+        for k in ['timer','fencer_left','fencer_right','priority','phase','match_list','settings','current_row_idx','current_girone','manual_selection','swapped']:
             current_state[k] = prev.get(k, current_state[k])
-            
         current_state['running'] = False
         emit('state_update', current_state, broadcast=True)
         emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')}, broadcast=True)
