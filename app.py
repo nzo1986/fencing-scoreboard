@@ -245,58 +245,61 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-# --- API HW PICO E LOGICA ARBITRALE ---
+# --- API HW PICO E LOGICA ARBITRALE VELOCIZZATA ---
+def async_save():
+    push_history()
+    save_state()
+
 @app.route('/api/update_score_hw', methods=['POST'])
 def update_score_hw():
     global last_hit_time, hit_sides_in_window
-    data = request.json
     
+    # Try per forzare la lettura JSON evitando Errore 500
+    try:
+        data = request.get_json(force=True)
+    except:
+        return jsonify({"status": "error", "message": "JSON errato"}), 400
+        
     if not data:
         return jsonify({"status": "error", "message": "Nessun dato JSON ricevuto"}), 400
         
     side = data.get('side') 
     delta = data.get('delta', 1)
-    weapon_used = current_state['settings'].get('weapon', 'spada').lower()
     
     now = time.time()
     
-    # 1. Se non siamo nel Match o il tempo è scaduto, ignora
+    # 1. Ignora se il match non è in corso o il tempo è finito
     if current_state.get('phase') != 'MATCH' or current_state['timer'] <= 0:
-        return jsonify({"status": "ignored", "reason": "not_in_match"})
+        return jsonify({"status": "ignored", "reason": "not_in_match"}), 200
         
-    # 2. Se il tempo è FERMO da più di 0.2 secondi (lockout software di sicurezza), ignora
-    if not current_state['running'] and (now - last_hit_time > 0.2):
-        return jsonify({"status": "ignored", "reason": "timer_stopped"})
-
-    push_history()
-
-    # 3. PRIMO COLPO
+    # 2. PRIMA STOCCATA - STOP ISTANTANEO
     if current_state['running']:
-        # SIMULA LA PRESSIONE DEL TASTO STOP SUL TELECOMANDO
-        current_state['running'] = False 
+        current_state['running'] = False # FERMA IL TEMPO IMMEDIATAMENTE
         last_hit_time = now
         hit_sides_in_window = {side}
         current_state[f'fencer_{side}']['score'] += delta
         
-        nome = "ROSSO" if side == "left" else "VERDE"
-        socketio.emit('action_feedback', {'status': 'info', 'msg': f'STOCCATA {nome}'})
+        # Emette evento speciale per accendere la cornice e suonare il beep istantaneamente
+        socketio.emit('hw_hit', {'side': side, 'is_double': False}, broadcast=True)
+        # Aggiorna tabellone e telecomando (che passa subito a "AVVIO")
+        socketio.emit('state_update', current_state, broadcast=True)
         
-    # 4. SECONDO COLPO (Colpo doppio, arrivato mentre il timer si era appena fermato < 0.2s fa)
-    elif side not in hit_sides_in_window:
+        # Salva in background per non bloccare la risposta
+        eventlet.spawn(async_save)
+        return jsonify({"status": "ok"}), 200
+        
+    # 3. COLPO DOPPIO - Entro 0.2s dallo stop del timer
+    elif side not in hit_sides_in_window and (now - last_hit_time < 0.2):
         hit_sides_in_window.add(side)
         current_state[f'fencer_{side}']['score'] += delta
         
-        if weapon_used == 'spada':
-            socketio.emit('action_feedback', {'status': 'info', 'msg': 'COLPO DOPPIO'})
-        else:
-            nome = "ROSSO" if side == "left" else "VERDE"
-            socketio.emit('action_feedback', {'status': 'info', 'msg': f'BERSAGLIO {nome}'})
-
-    # Aggiorna tutti i dispositivi connessi (il telecomando mostrerà il bottone AVVIO)
-    socketio.emit('state_update', current_state, broadcast=True)
-    save_state()
+        socketio.emit('hw_hit', {'side': side, 'is_double': True}, broadcast=True)
+        socketio.emit('state_update', current_state, broadcast=True)
         
-    return jsonify({"status": "ok"})
+        eventlet.spawn(async_save)
+        return jsonify({"status": "double_ok"}), 200
+        
+    return jsonify({"status": "ignored", "reason": "timer_stopped_lockout"}), 200
 
 @app.route('/api/pico_status')
 def get_pico_status():
