@@ -38,9 +38,9 @@ GIRONI_MAP_READ = { 'rosso': [0, 1, 2, 3], 'giallo': [5, 6, 7, 8], 'blu': [10, 1
 gironi_cache = {'rosso': [], 'giallo': [], 'blu': [], 'verde': [], '32': []}
 history_stack = []
 last_google_status = "ok"
-pico_last_seen = {'rosso': 0, 'verde': 0}
 
-# Variabili per la logica hardware del server
+# Variabili per gestire i Pico e la logica temporale dei colpi doppi
+pico_last_seen = {'rosso': 0, 'verde': 0}
 last_hit_time = 0
 hit_sides_in_window = set()
 
@@ -250,26 +250,30 @@ def download_page(): return render_template('download.html')
 def update_score_hw():
     global last_hit_time, hit_sides_in_window
     data = request.json
+    
+    if not data:
+        return jsonify({"status": "error", "message": "Nessun dato JSON ricevuto"}), 400
+        
     side = data.get('side') 
     delta = data.get('delta', 1)
     weapon_used = current_state['settings'].get('weapon', 'spada').lower()
     
     now = time.time()
     
-    # 1. Se il match non è in corso o il tempo è finito, rifiutiamo il colpo
+    # 1. Se non siamo nel Match o il tempo è scaduto, ignora
     if current_state.get('phase') != 'MATCH' or current_state['timer'] <= 0:
         return jsonify({"status": "ignored", "reason": "not_in_match"})
         
-    # 2. Se il timer è FERMO da più di 0.2 secondi, significa che il colpo è avvenuto fuori tempo massimo
-    # (L'hardware ha già garantito i 45ms fisici FIE, questo server assicura la sincronizzazione)
+    # 2. Se il tempo è FERMO da più di 0.2 secondi (lockout software di sicurezza), ignora
     if not current_state['running'] and (now - last_hit_time > 0.2):
         return jsonify({"status": "ignored", "reason": "timer_stopped"})
 
     push_history()
 
-    # 3. È IL PRIMO COLPO
+    # 3. PRIMO COLPO
     if current_state['running']:
-        current_state['running'] = False # FERMIAMO IMMEDIATAMENTE IL TEMPO
+        # SIMULA LA PRESSIONE DEL TASTO STOP SUL TELECOMANDO
+        current_state['running'] = False 
         last_hit_time = now
         hit_sides_in_window = {side}
         current_state[f'fencer_{side}']['score'] += delta
@@ -277,7 +281,7 @@ def update_score_hw():
         nome = "ROSSO" if side == "left" else "VERDE"
         socketio.emit('action_feedback', {'status': 'info', 'msg': f'STOCCATA {nome}'})
         
-    # 4. È IL SECONDO COLPO (Il tempo è appena stato fermato dall'altro Pico < 0.2s fa)
+    # 4. SECONDO COLPO (Colpo doppio, arrivato mentre il timer si era appena fermato < 0.2s fa)
     elif side not in hit_sides_in_window:
         hit_sides_in_window.add(side)
         current_state[f'fencer_{side}']['score'] += delta
@@ -285,10 +289,10 @@ def update_score_hw():
         if weapon_used == 'spada':
             socketio.emit('action_feedback', {'status': 'info', 'msg': 'COLPO DOPPIO'})
         else:
-            # Nel Fioretto/Sciabola, segniamo entrambi, l'arbitro deciderà la convenzione
             nome = "ROSSO" if side == "left" else "VERDE"
             socketio.emit('action_feedback', {'status': 'info', 'msg': f'BERSAGLIO {nome}'})
 
+    # Aggiorna tutti i dispositivi connessi (il telecomando mostrerà il bottone AVVIO)
     socketio.emit('state_update', current_state, broadcast=True)
     save_state()
         
