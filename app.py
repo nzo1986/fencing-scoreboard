@@ -27,23 +27,18 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PHOTOS_DIR = os.path.join(BASE_DIR, 'static', 'photos')
 
-# FIX AGGIORNAMENTI: Usiamo un file locale non tracciato da Git per salvare le impostazioni
 STATE_FILE = "local_match_state.json"
 OLD_STATE_FILE = "match_state.json"
 
-# ID DI DEFAULT
 DEFAULT_SHEET_ID = "179tfN2PDrSTYtiAdVeFQKXF9OtwZj4k4EbQ1dWXH5Yg"
 
-# Mappa Scrittura (1-based per Google Script)
 GIRONI_MAP_WRITE = { 'rosso': [2, 3], 'giallo': [7, 8], 'blu': [12, 13], 'verde': [17, 18], '32': [22, 23] }
-# Mappa Lettura (0-based da CSV gviz)
 GIRONI_MAP_READ = { 'rosso': [0, 1, 2, 3], 'giallo': [5, 6, 7, 8], 'blu': [10, 11, 12, 13], 'verde': [15, 16, 17, 18], '32': [20, 21, 22, 23] }
 
 gironi_cache = {'rosso': [], 'giallo': [], 'blu': [], 'verde': [], '32': []}
 history_stack = []
 last_google_status = "ok"
 
-# --- HELPERS ---
 def letter_to_index(letter):
     if not letter: return 0
     return ord(letter.upper()) - 65
@@ -115,6 +110,7 @@ default_columns = {
 }
 
 default_settings = {
+    "weapon": "spada", # NUOVA IMPOSTAZIONE ARMA
     "font_family": "Roboto Mono", "font_timer": 8.0, "font_score": 15.0, "font_name": 3.0, "font_list": 1.5,
     "col_center_width": 1.2, "list_padding": 0.5, "text_border": 0.0, "photo_size": 150,
     "time_match": 180, "time_break": 60, "time_medical": 300,
@@ -176,6 +172,7 @@ def load_state():
                 if 'columns' not in data['settings']: data['settings']['columns'] = default_columns.copy()
                 if 'google_sheet_id' not in data['settings']: data['settings']['google_sheet_id'] = DEFAULT_SHEET_ID
                 if 'buzzer_volume' not in data['settings']: data['settings']['buzzer_volume'] = 1.0
+                if 'weapon' not in data['settings']: data['settings']['weapon'] = 'spada'
 
                 if 'fencer_left' in data: 
                     data['fencer_left']['photo'] = get_photo_url(data['fencer_left']['name'])
@@ -188,7 +185,6 @@ def load_state():
                 if 'active_girone' not in current_state:
                     current_state['active_girone'] = current_state.get('current_girone', 'rosso')
                     
-            # Se abbiamo appena letto dal vecchio file, salviamo subito nel nuovo formato locale
             if loaded_from_old:
                 save_state()
                 
@@ -245,7 +241,30 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-# --- API ---
+# --- API HW PICO ---
+@app.route('/api/update_score_hw', methods=['POST'])
+def update_score_hw():
+    data = request.json
+    side = data.get('side') # 'left' (rosso) o 'right' (verde)
+    delta = data.get('delta', 1)
+    
+    weapon_used = current_state['settings'].get('weapon', 'spada').upper()
+    
+    # Se il tempo non è scaduto e non siamo in pausa, assegnamo il punto
+    if current_state.get('phase') == 'MATCH':
+        push_history()
+        current_state[f'fencer_{side}']['score'] += delta
+        current_state['running'] = False # Ferma il tempo automaticamente
+        
+        nome = "ROSSO" if side == "left" else "VERDE"
+        socketio.emit('action_feedback', {'status': 'info', 'msg': f'STOCCATA {nome} ({weapon_used})'})
+        
+        socketio.emit('state_update', current_state, broadcast=True)
+        save_state()
+        
+    return jsonify({"status": "ok"})
+
+# --- API REST STANDARD ---
 @app.route('/api/scan_wifi')
 def api_scan(): return jsonify(scan_wifi_networks())
 @app.route('/api/saved_wifi')
@@ -266,6 +285,7 @@ def api_delete_wifi():
     data = request.json
     success = delete_wifi(data['ssid'])
     return jsonify({"status": "success" if success else "error"})
+
 @app.route('/api/upload_photo', methods=['POST'])
 def upload_photo():
     if 'file' not in request.files: return jsonify({"error": "No file"}), 400
@@ -347,6 +367,7 @@ def maxi_upload():
                 file.save(os.path.join(PHOTOS_DIR, f"{match}.{ext}"))
                 count += 1
     return jsonify({"processed": count})
+
 @app.route('/api/download_photos')
 def download_photos():
     try:
@@ -361,6 +382,7 @@ def download_photos():
         return send_file(memory_file, mimetype='application/zip', as_attachment=True, download_name='foto_atleti.zip')
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 @app.route('/api/get_fonts')
 def api_get_fonts(): return jsonify(get_system_fonts())
 
@@ -375,16 +397,11 @@ def handle_connect():
     emit('state_update', current_state)
     emit('gironi_cache_update', gironi_cache)
 
-# Handlers standard
 @socketio.on('undo')
 def undo():
     global current_state
     if history_stack:
         prev = history_stack.pop()
-        
-        # FIX APPLICATO QUI: 'settings' è stato rimosso dalla lista.
-        # In questo modo, l'undo ripristina SOLO l'assalto (punti, tempo, cartellini, ecc.)
-        # e le tue impostazioni personalizzate non vengono mai sovrascritte.
         for k in ['timer','fencer_left','fencer_right','priority','phase','match_list','current_row_idx','current_girone','manual_selection','swapped']:
             current_state[k] = prev.get(k, current_state[k])
             
@@ -478,7 +495,7 @@ def toggle_prio():
 def r_all():
     push_history()
     current_state['timer'] = float(current_state['settings']['time_match'])
-    current_state['phase'] = 'MATCH' # FIX: Assicura l'uscita dalla pausa
+    current_state['phase'] = 'MATCH' 
     current_state['running'] = False
     current_state['priority'] = None
     current_state['manual_selection'] = False 
@@ -510,7 +527,7 @@ def r_scores():
 def r_timer():
     push_history()
     current_state['timer'] = float(current_state['settings']['time_match'])
-    current_state['phase'] = 'MATCH' # FIX: Assicura l'uscita dalla pausa
+    current_state['phase'] = 'MATCH' 
     current_state['running'] = False
     emit('state_update', current_state, broadcast=True)
     save_state()
@@ -663,7 +680,6 @@ def process_background_upload(payload, girone):
     if not verified:
         socketio.emit('upload_status', {'color': 'red'})
 
-# --- STATUS CHECKS ---
 def check_internet():
     try:
         requests.get('https://www.google.com', timeout=2)
@@ -686,7 +702,7 @@ def up_set(d):
         if k == 'columns':
             current_state['settings']['columns'] = v
         elif k in current_state['settings']: 
-            if k in ['font_family','google_script_url', 'google_sheet_id'] or k.startswith('default_name'):
+            if k in ['font_family','google_script_url', 'google_sheet_id', 'weapon'] or k.startswith('default_name'):
                  current_state['settings'][k] = str(v)
             elif isinstance(current_state['settings'][k], (int, float)):
                 try: current_state['settings'][k] = float(v)
@@ -701,7 +717,6 @@ def hb(d):
     current_state['admin_connected'] = d.get('active', False)
     emit('admin_status', {'connected': current_state['admin_connected']})
 
-# --- DATA FETCHING & AUTO-LOAD LOGIC ---
 def update_all_gironi_data():
     global gironi_cache
     try:
@@ -742,7 +757,6 @@ def update_all_gironi_data():
         gironi_cache = new_cache
         socketio.emit('gironi_cache_update', gironi_cache)
         
-        # --- FIX: AGGIORNAMENTO DINAMICO NOMI/FOTO SE CAMBIANO SU EXCEL ---
         curr_row = current_state.get('current_row_idx')
         curr_gir = current_state.get('active_girone')
         updated_current = False
@@ -760,7 +774,6 @@ def update_all_gironi_data():
                         target_left_name = new_sx
                         target_right_name = new_dx
                         
-                    # Se i nomi sono cambiati sul foglio, aggiorniamo il tabellone live
                     if current_state['fencer_left']['name'] != target_left_name or current_state['fencer_right']['name'] != target_right_name:
                         current_state['fencer_left']['name'] = target_left_name
                         current_state['fencer_left']['photo'] = get_photo_url(target_left_name)
@@ -850,6 +863,24 @@ def timer_thread():
 eventlet.spawn(timer_thread)
 eventlet.spawn(data_refresh_thread)
 eventlet.spawn(status_check_thread)
+
+def udp_listener_thread():
+    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    udp_sock.bind(('', 7777))
+    while True:
+        try:
+            data, addr = udp_sock.recvfrom(1024)
+            msg = data.decode('utf-8')
+            if "PING_ROSSO" in msg:
+                pico_last_seen['rosso'] = time.time()
+            if "PING_VERDE" in msg:
+                pico_last_seen['verde'] = time.time()
+        except Exception:
+            pass
+        eventlet.sleep(0.1)
+
+eventlet.spawn(udp_listener_thread)
 
 def resolve_priority_animation():
     eventlet.sleep(2.5)

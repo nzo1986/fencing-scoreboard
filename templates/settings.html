@@ -16,12 +16,39 @@
         .font-btn{padding:10px 15px;margin:5px;background:#333;border:1px solid #555;border-radius:5px;cursor:pointer;text-align:left;display:block;width:100%;color:white}
         .font-btn:hover{background:#444}.font-btn.active{border-color:#00aa00;background:#224422}
         #font-list{max-height:250px;overflow-y:auto}
+        /* Nuovi Stili per la selezione Arma */
+        .weapon-btn { transition: all 0.2s; border: 2px solid transparent; }
+        .weapon-btn.active { background-color: #3b82f6; border-color: #93c5fd; box-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
     </style>
 </head>
 <body class="p-4">
     <div class="flex justify-between items-center mb-4 border-b border-gray-600 pb-2">
         <h1 class="text-2xl font-bold">Impostazioni Live</h1>
         <button onclick="window.location.href='/telecomando'" class="bg-gray-600 px-4 py-2 rounded font-bold">Indietro</button>
+    </div>
+
+    <!-- NUOVA SEZIONE: STATO HARDWARE E ARMA -->
+    <div class="mb-6">
+        <h2 class="text-xl text-yellow-400 mb-2 font-bold">Stato Hardware & Arma</h2>
+        <div class="bg-gray-800 p-4 rounded shadow-lg border border-gray-700">
+            <!-- Stato Luci Pico W -->
+            <div class="flex justify-center gap-12 mb-6">
+                <div class="flex flex-col items-center">
+                    <div id="light-rosso" class="w-10 h-10 rounded-full bg-gray-600 mb-2 transition-all duration-300"></div>
+                    <span class="font-bold text-red-500">ROSSO</span>
+                </div>
+                <div class="flex flex-col items-center">
+                    <div id="light-verde" class="w-10 h-10 rounded-full bg-gray-600 mb-2 transition-all duration-300"></div>
+                    <span class="font-bold text-green-500">VERDE</span>
+                </div>
+            </div>
+            <!-- Selezione Arma -->
+            <div class="flex flex-col sm:flex-row justify-center gap-4">
+                <button id="wpn-spada" class="weapon-btn bg-gray-600 px-4 py-3 rounded text-lg font-bold flex-1" onclick="setWeapon('spada')">SPADA</button>
+                <button id="wpn-fioretto" class="weapon-btn bg-gray-600 px-4 py-3 rounded text-lg font-bold flex-1" onclick="setWeapon('fioretto')">FIORETTO</button>
+                <button id="wpn-sciabola" class="weapon-btn bg-gray-600 px-4 py-3 rounded text-lg font-bold flex-1" onclick="setWeapon('sciabola')">SCIABOLA</button>
+            </div>
+        </div>
     </div>
     
     <div class="mb-6">
@@ -106,9 +133,24 @@
             })
         });
         
+        // Nuova funzione Arma
+        function setWeapon(w) {
+            socket.emit('update_settings', {weapon: w});
+        }
+        
         socket.on('state_update',s=>{
             if(s.settings){
                 settings=s.settings;
+                
+                // Aggiorna Pulsanti Arma
+                ['spada', 'fioretto', 'sciabola'].forEach(w => {
+                    const btn = document.getElementById('wpn-' + w);
+                    if (btn) {
+                        if (settings.weapon === w) btn.classList.add('active');
+                        else btn.classList.remove('active');
+                    }
+                });
+
                 numKeys.forEach(k=>{const el=document.getElementById('val_'+k);if(el)el.innerText=settings[k]});
                 textKeys.forEach(k=>{const el=document.getElementById('val_'+k);if(el&&document.activeElement!==el)el.value=settings[k]});
                 const btns=document.querySelectorAll('.font-btn');
@@ -128,6 +170,33 @@
         }
         function updateText(k,v){socket.emit('update_settings',{[k]:v})}
         function selectFont(f){socket.emit('update_settings',{font_family:f})}
+
+        // Polling per lo stato dei Pico W ogni secondo
+        setInterval(() => {
+            fetch('/api/pico_status')
+                .then(r => r.json())
+                .then(status => {
+                    const lr = document.getElementById('light-rosso');
+                    const lv = document.getElementById('light-verde');
+                    
+                    if(status.rosso) {
+                        lr.style.backgroundColor = '#ef4444';
+                        lr.style.boxShadow = '0 0 20px #ef4444';
+                    } else {
+                        lr.style.backgroundColor = '#4b5563';
+                        lr.style.boxShadow = 'none';
+                    }
+                    
+                    if(status.verde) {
+                        lv.style.backgroundColor = '#22c55e';
+                        lv.style.boxShadow = '0 0 20px #22c55e';
+                    } else {
+                        lv.style.backgroundColor = '#4b5563';
+                        lv.style.boxShadow = 'none';
+                    }
+                })
+                .catch(e => console.error("Errore fetch status Pico:", e));
+        }, 1000);
     </script>
 </body>
 </html>
