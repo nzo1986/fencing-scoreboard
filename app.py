@@ -38,9 +38,11 @@ GIRONI_MAP_READ = { 'rosso': [0, 1, 2, 3], 'giallo': [5, 6, 7, 8], 'blu': [10, 1
 gironi_cache = {'rosso': [], 'giallo': [], 'blu': [], 'verde': [], '32': []}
 history_stack = []
 last_google_status = "ok"
-
-# VARIABILE PER LE LUCI DEI PICO
 pico_last_seen = {'rosso': 0, 'verde': 0}
+
+# Variabili per la logica hardware del server
+last_hit_time = 0
+hit_sides_in_window = set()
 
 # --- HELPERS ---
 def letter_to_index(letter):
@@ -243,22 +245,53 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-# --- API HW PICO ---
+# --- API HW PICO E LOGICA ARBITRALE ---
 @app.route('/api/update_score_hw', methods=['POST'])
 def update_score_hw():
+    global last_hit_time, hit_sides_in_window
     data = request.json
     side = data.get('side') 
     delta = data.get('delta', 1)
-    weapon_used = current_state['settings'].get('weapon', 'spada').upper()
+    weapon_used = current_state['settings'].get('weapon', 'spada').lower()
     
-    if current_state.get('phase') == 'MATCH':
-        push_history()
+    now = time.time()
+    
+    # 1. Se il match non è in corso o il tempo è finito, rifiutiamo il colpo
+    if current_state.get('phase') != 'MATCH' or current_state['timer'] <= 0:
+        return jsonify({"status": "ignored", "reason": "not_in_match"})
+        
+    # 2. Se il timer è FERMO da più di 0.2 secondi, significa che il colpo è avvenuto fuori tempo massimo
+    # (L'hardware ha già garantito i 45ms fisici FIE, questo server assicura la sincronizzazione)
+    if not current_state['running'] and (now - last_hit_time > 0.2):
+        return jsonify({"status": "ignored", "reason": "timer_stopped"})
+
+    push_history()
+
+    # 3. È IL PRIMO COLPO
+    if current_state['running']:
+        current_state['running'] = False # FERMIAMO IMMEDIATAMENTE IL TEMPO
+        last_hit_time = now
+        hit_sides_in_window = {side}
         current_state[f'fencer_{side}']['score'] += delta
-        current_state['running'] = False 
+        
         nome = "ROSSO" if side == "left" else "VERDE"
-        socketio.emit('action_feedback', {'status': 'info', 'msg': f'STOCCATA {nome} ({weapon_used})'})
-        socketio.emit('state_update', current_state, broadcast=True)
-        save_state()
+        socketio.emit('action_feedback', {'status': 'info', 'msg': f'STOCCATA {nome}'})
+        
+    # 4. È IL SECONDO COLPO (Il tempo è appena stato fermato dall'altro Pico < 0.2s fa)
+    elif side not in hit_sides_in_window:
+        hit_sides_in_window.add(side)
+        current_state[f'fencer_{side}']['score'] += delta
+        
+        if weapon_used == 'spada':
+            socketio.emit('action_feedback', {'status': 'info', 'msg': 'COLPO DOPPIO'})
+        else:
+            # Nel Fioretto/Sciabola, segniamo entrambi, l'arbitro deciderà la convenzione
+            nome = "ROSSO" if side == "left" else "VERDE"
+            socketio.emit('action_feedback', {'status': 'info', 'msg': f'BERSAGLIO {nome}'})
+
+    socketio.emit('state_update', current_state, broadcast=True)
+    save_state()
+        
     return jsonify({"status": "ok"})
 
 @app.route('/api/pico_status')
@@ -864,11 +897,9 @@ def timer_thread():
         except Exception as e: print(f"Timer error: {e}")
         eventlet.sleep(0.1)
 
-# --- IL THREAD MANCANTE CHE ASCOLTA I PICO W ---
 def udp_listener_thread():
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    # Ascolta su tutte le interfacce di rete sulla porta 7777
     udp_sock.bind(('0.0.0.0', 7777))
     while True:
         try:
@@ -882,11 +913,10 @@ def udp_listener_thread():
             pass
         eventlet.sleep(0.01)
 
-# AVVIO DEI THREAD IN BACKGROUND
 eventlet.spawn(timer_thread)
 eventlet.spawn(data_refresh_thread)
 eventlet.spawn(status_check_thread)
-eventlet.spawn(udp_listener_thread) # Avviamo l'ascoltatore UDP!
+eventlet.spawn(udp_listener_thread) 
 
 def resolve_priority_animation():
     eventlet.sleep(2.5)
