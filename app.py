@@ -39,6 +39,10 @@ gironi_cache = {'rosso': [], 'giallo': [], 'blu': [], 'verde': [], '32': []}
 history_stack = []
 last_google_status = "ok"
 
+# VARIABILE PER LE LUCI DEI PICO
+pico_last_seen = {'rosso': 0, 'verde': 0}
+
+# --- HELPERS ---
 def letter_to_index(letter):
     if not letter: return 0
     return ord(letter.upper()) - 65
@@ -110,7 +114,7 @@ default_columns = {
 }
 
 default_settings = {
-    "weapon": "spada", # NUOVA IMPOSTAZIONE ARMA
+    "weapon": "spada",
     "font_family": "Roboto Mono", "font_timer": 8.0, "font_score": 15.0, "font_name": 3.0, "font_list": 1.5,
     "col_center_width": 1.2, "list_padding": 0.5, "text_border": 0.0, "photo_size": 150,
     "time_match": 180, "time_break": 60, "time_medical": 300,
@@ -143,7 +147,6 @@ def save_state():
 
 def load_state():
     global current_state
-    
     file_to_load = None
     loaded_from_old = False
     
@@ -187,7 +190,6 @@ def load_state():
                     
             if loaded_from_old:
                 save_state()
-                
         except: pass
 
 def push_history():
@@ -245,24 +247,27 @@ def download_page(): return render_template('download.html')
 @app.route('/api/update_score_hw', methods=['POST'])
 def update_score_hw():
     data = request.json
-    side = data.get('side') # 'left' (rosso) o 'right' (verde)
+    side = data.get('side') 
     delta = data.get('delta', 1)
-    
     weapon_used = current_state['settings'].get('weapon', 'spada').upper()
     
-    # Se il tempo non è scaduto e non siamo in pausa, assegnamo il punto
     if current_state.get('phase') == 'MATCH':
         push_history()
         current_state[f'fencer_{side}']['score'] += delta
-        current_state['running'] = False # Ferma il tempo automaticamente
-        
+        current_state['running'] = False 
         nome = "ROSSO" if side == "left" else "VERDE"
         socketio.emit('action_feedback', {'status': 'info', 'msg': f'STOCCATA {nome} ({weapon_used})'})
-        
         socketio.emit('state_update', current_state, broadcast=True)
         save_state()
-        
     return jsonify({"status": "ok"})
+
+@app.route('/api/pico_status')
+def get_pico_status():
+    now = time.time()
+    return jsonify({
+        'rosso': (now - pico_last_seen['rosso']) < 5,
+        'verde': (now - pico_last_seen['verde']) < 5
+    })
 
 # --- API REST STANDARD ---
 @app.route('/api/scan_wifi')
@@ -404,7 +409,6 @@ def undo():
         prev = history_stack.pop()
         for k in ['timer','fencer_left','fencer_right','priority','phase','match_list','current_row_idx','current_girone','manual_selection','swapped']:
             current_state[k] = prev.get(k, current_state[k])
-            
         current_state['running'] = False
         emit('state_update', current_state, broadcast=True)
         emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')}, broadcast=True)
@@ -860,14 +864,12 @@ def timer_thread():
         except Exception as e: print(f"Timer error: {e}")
         eventlet.sleep(0.1)
 
-eventlet.spawn(timer_thread)
-eventlet.spawn(data_refresh_thread)
-eventlet.spawn(status_check_thread)
-
+# --- IL THREAD MANCANTE CHE ASCOLTA I PICO W ---
 def udp_listener_thread():
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    udp_sock.bind(('', 7777))
+    # Ascolta su tutte le interfacce di rete sulla porta 7777
+    udp_sock.bind(('0.0.0.0', 7777))
     while True:
         try:
             data, addr = udp_sock.recvfrom(1024)
@@ -876,11 +878,15 @@ def udp_listener_thread():
                 pico_last_seen['rosso'] = time.time()
             if "PING_VERDE" in msg:
                 pico_last_seen['verde'] = time.time()
-        except Exception:
+        except Exception as e:
             pass
-        eventlet.sleep(0.1)
+        eventlet.sleep(0.01)
 
-eventlet.spawn(udp_listener_thread)
+# AVVIO DEI THREAD IN BACKGROUND
+eventlet.spawn(timer_thread)
+eventlet.spawn(data_refresh_thread)
+eventlet.spawn(status_check_thread)
+eventlet.spawn(udp_listener_thread) # Avviamo l'ascoltatore UDP!
 
 def resolve_priority_animation():
     eventlet.sleep(2.5)
