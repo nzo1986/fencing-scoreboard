@@ -254,7 +254,6 @@ def async_save():
 def update_score_hw():
     global last_hit_time, hit_sides_in_window
     
-    # Try per forzare la lettura JSON evitando Errore 500
     try:
         data = request.get_json(force=True)
     except:
@@ -279,12 +278,14 @@ def update_score_hw():
         hit_sides_in_window = {side}
         current_state[f'fencer_{side}']['score'] += delta
         
-        # Emette evento speciale per accendere la cornice e suonare il beep istantaneamente
+        # Invia l'evento audio/luci istantaneo al frontend
         socketio.emit('hw_hit', {'side': side, 'is_double': False}, broadcast=True)
-        # Aggiorna tabellone e telecomando (che passa subito a "AVVIO")
-        socketio.emit('state_update', current_state, broadcast=True)
         
-        # Salva in background per non bloccare la risposta
+        # Aggiorna tabellone e forza l'aggiornamento del timer sul telecomando istantaneamente
+        socketio.emit('state_update', current_state, broadcast=True)
+        socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')}, broadcast=True)
+        
+        # Salva in background per non ritardare la risposta di rete
         eventlet.spawn(async_save)
         return jsonify({"status": "ok"}), 200
         
@@ -295,6 +296,7 @@ def update_score_hw():
         
         socketio.emit('hw_hit', {'side': side, 'is_double': True}, broadcast=True)
         socketio.emit('state_update', current_state, broadcast=True)
+        socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')}, broadcast=True)
         
         eventlet.spawn(async_save)
         return jsonify({"status": "double_ok"}), 200
@@ -459,8 +461,12 @@ def handle_score(d):
     push_history()
     side = d['side']
     current_state[f'fencer_{side}']['score'] = max(0, current_state[f'fencer_{side}']['score'] + d['delta'])
-    if d['delta'] > 0: current_state['running'] = False
+    if d['delta'] > 0: 
+        current_state['running'] = False
+        socketio.emit('hw_hit', {'side': side, 'is_double': False}, broadcast=True) # Feedback sonoro anche se premi da telecomando
+    
     emit('state_update', current_state, broadcast=True)
+    emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')}, broadcast=True)
     save_state()
     
 @socketio.on('toggle_timer')
@@ -514,6 +520,7 @@ def handle_card(d):
             fencer['cards']['R'] = (red_count > 0)
 
     emit('state_update', current_state, broadcast=True)
+    emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')}, broadcast=True)
     save_state()
 
 @socketio.on('double_hit')
@@ -522,7 +529,9 @@ def db_hit():
     current_state['fencer_left']['score'] += 1
     current_state['fencer_right']['score'] += 1
     current_state['running'] = False
+    socketio.emit('hw_hit', {'side': 'double', 'is_double': True}, broadcast=True)
     emit('state_update', current_state, broadcast=True)
+    emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')}, broadcast=True)
     save_state()
 
 @socketio.on('toggle_priority')
@@ -554,6 +563,7 @@ def r_all():
     current_state['fencer_right']['photo'] = get_photo_url(None)
     current_state['current_row_idx'] = None
     emit('state_update', current_state, broadcast=True)
+    emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')}, broadcast=True)
     save_state()
     eventlet.spawn(update_all_gironi_data)
 
@@ -574,6 +584,7 @@ def r_timer():
     current_state['phase'] = 'MATCH' 
     current_state['running'] = False
     emit('state_update', current_state, broadcast=True)
+    emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')}, broadcast=True)
     save_state()
 
 @socketio.on('fetch_sheet')
@@ -596,6 +607,7 @@ def l_match(d):
         
     load_match_data(d) 
     emit('state_update', current_state, broadcast=True)
+    emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')}, broadcast=True)
     save_state()
 
 def load_match_data(d):
@@ -677,6 +689,7 @@ def handle_send_result():
         current_state['active_girone'] = g
         load_match_data(next_match)
         emit('state_update', current_state, broadcast=True)
+        emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')}, broadcast=True)
         socketio.emit('action_feedback', {'status': 'success', 'msg': f'Caricato prossimo: {next_match["sx"]} vs {next_match["dx"]}'})
     else:
         socketio.emit('action_feedback', {'status': 'info', 'msg': 'Nessun prossimo assalto trovato.'})

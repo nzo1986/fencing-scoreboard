@@ -18,7 +18,7 @@
         body { background-color: #000; color: white; overflow: hidden; font-family: var(--font-family), monospace; display: flex; flex-direction: column; height: 100vh; }
         .stroked { -webkit-text-stroke: var(--text-stroke) black; }
         .timer-container { flex: none; display: flex; justify-content: center; align-items: center; background: #000; padding: 1vh 0; position: relative; }
-        .timer-box { font-size: var(--timer-size); line-height: 1; }
+        .timer-box { font-size: var(--timer-size); line-height: 1; transition: color 0.2s; }
         .timer-break { color: #facc15; }
         .prio-light { width: 40px; height: 40px; border-radius: 50%; background: #222; border: 2px solid #444; opacity: 0; transition: opacity 0.3s; margin: 0 40px; }
         .prio-active { opacity: 1; background: white; border-color: #fff; box-shadow: 0 0 25px white; }
@@ -27,7 +27,13 @@
         .fencer-name { font-size: var(--name-size); font-weight: bold; text-align: center; margin-bottom: 20px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .score-container { display: flex; align-items: center; justify-content: center; gap: 20px; width: 100%; margin: 20px 0; }
         .score-box { font-size: var(--score-size); line-height: 1; }
-        .fencer-photo { width: var(--photo-size); height: auto; aspect-ratio: 3/4; border-radius: 10px; object-fit: cover; border: 3px solid #333; transition: box-shadow 0.3s, border-color 0.3s; display: none; }
+        
+        .fencer-photo { width: var(--photo-size); height: auto; aspect-ratio: 3/4; border-radius: 10px; object-fit: cover; border: 4px solid #333; transition: box-shadow 0.1s, border-color 0.1s; display: none; }
+        
+        /* Nuove classi per illuminazione colpo valido */
+        .hit-glow-left { border-color: #ff0000 !important; box-shadow: 0 0 60px #ff0000, inset 0 0 20px #ff0000; }
+        .hit-glow-right { border-color: #00ff00 !important; box-shadow: 0 0 60px #00ff00, inset 0 0 20px #00ff00; }
+
         .photo-prio { border-color: white !important; box-shadow: 0 0 30px white; }
         .card-box { display: flex; gap: 10px; justify-content: center; width: 100%; margin-top: auto; padding-bottom: 20px; }
         .card-indicator { width: 50px; height: 75px; border-radius: 6px; opacity: 0; transition: opacity 0.2s; display: flex; align-items: center; justify-content: center; font-size: 3rem; font-weight: bold; color: black; }
@@ -100,15 +106,18 @@
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         let audioUnlocked = false; let animInterval = null;
         let currentGirone = 'rosso'; 
+        let globalSettings = {};
         
         // --- LOGICA QR CODE A TEMPO (30s) ---
         let qrExpired = false;
         setTimeout(() => {
             qrExpired = true;
             document.getElementById('qr-overlay').style.display = 'none';
-        }, 30000); // 30 secondi
+        }, 30000);
 
         document.body.addEventListener('click', () => { if(audioCtx.state==='suspended') audioCtx.resume(); audioUnlocked=true; }, {once:true});
+        
+        // Suono di scadenza tempo
         function playBeep() {
             if (!audioUnlocked) return;
             const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
@@ -116,6 +125,41 @@
             o.connect(g); g.connect(audioCtx.destination);
             o.start(); o.stop(audioCtx.currentTime+1.5);
         }
+
+        // Suono di stoccata acuto (tipico scherma)
+        function playHitBeep() {
+            if (!audioUnlocked) return;
+            const volume = parseFloat(globalSettings.buzzer_volume || 1.0);
+            if (volume <= 0) return;
+            
+            const o = audioCtx.createOscillator(); 
+            const g = audioCtx.createGain();
+            o.type = 'square'; 
+            o.frequency.setValueAtTime(850, audioCtx.currentTime); // Suono più acuto
+            g.gain.setValueAtTime(volume, audioCtx.currentTime);
+            o.connect(g); 
+            g.connect(audioCtx.destination);
+            o.start(); 
+            o.stop(audioCtx.currentTime + 1.2); // Durata del beep di stoccata
+        }
+
+        // Listener per colpi Hardware
+        socket.on('hw_hit', data => {
+            playHitBeep();
+            
+            // Logica animazione cornici
+            if (data.side === 'left' || data.is_double) {
+                const imgL = document.getElementById('ph-l');
+                imgL.classList.add('hit-glow-left');
+                setTimeout(() => imgL.classList.remove('hit-glow-left'), 3000);
+            }
+            if (data.side === 'right' || data.is_double) {
+                const imgR = document.getElementById('ph-r');
+                imgR.classList.add('hit-glow-right');
+                setTimeout(() => imgR.classList.remove('hit-glow-right'), 3000);
+            }
+        });
+
         const updateTimer = (t, phase) => {
             const el = document.getElementById('timer');
             el.innerText = t>10 ? `${Math.floor(t/60)}:${(Math.floor(t%60)<10?'0':'')+Math.floor(t%60)}` : t.toFixed(1);
@@ -148,6 +192,7 @@
 
         socket.on('state_update', s => {
             if(s.settings) {
+                globalSettings = s.settings;
                 const r = document.documentElement;
                 r.style.setProperty('--timer-size', s.settings.font_timer + 'rem');
                 r.style.setProperty('--score-size', s.settings.font_score + 'rem');
@@ -196,7 +241,6 @@
             
             // --- GESTIONE QR CODE ---
             const qr = document.getElementById('qr-overlay');
-            // Se l'admin è connesso OPPURE sono passati i 30 secondi, nascondilo
             if(s.admin_connected || qrExpired) qr.style.display='none';
             else {
                 qr.style.display='block';

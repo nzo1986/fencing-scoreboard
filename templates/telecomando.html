@@ -16,7 +16,7 @@
         .prio-dot{width:15px;height:15px;border-radius:50%;background:#222;position:absolute;top:15px;border:1px solid #444;opacity:0.3}
         .prio-l{left:10px}.prio-r{right:10px}
         .prio-active{background:white;box-shadow:0 0 10px white;opacity:1}
-        .start-btn{width:100%;min-height:20vh;padding:20px 0;font-size:4rem;font-weight:bold;color:white;border:none;display:flex;align-items:center;justify-content:center;margin:5px 0;border-radius:4px}
+        .start-btn{width:100%;min-height:20vh;padding:20px 0;font-size:4rem;font-weight:bold;color:white;border:none;display:flex;align-items:center;justify-content:center;margin:5px 0;border-radius:4px; transition: background-color 0.1s;}
         .bg-start{background:#008800}.bg-stop{background:#cc0000}.bg-pause{background:#eab308;color:black}
         
         .bottom-grid{display:grid;grid-template-columns:1fr 2fr 1fr;gap:4px;margin-bottom:20px}
@@ -159,6 +159,11 @@
         
         document.body.addEventListener('touchstart', unlockAudio, {once:true});
         document.body.addEventListener('click', unlockAudio, {once:true});
+
+        // Feedback aptico/visivo leggero locale se si desidera sul telecomando (opzionale)
+        socket.on('hw_hit', data => {
+            if (navigator.vibrate) navigator.vibrate(50); // vibrazione breve se supportata dallo smartphone
+        });
 
         function playBeep() {
             const volume = parseFloat(globalSettings.buzzer_volume || 1.0);
