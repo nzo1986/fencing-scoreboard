@@ -16,10 +16,11 @@
         .prio-dot{width:15px;height:15px;border-radius:50%;background:#222;position:absolute;top:15px;border:1px solid #444;opacity:0.3}
         .prio-l{left:10px}.prio-r{right:10px}
         .prio-active{background:white;box-shadow:0 0 10px white;opacity:1}
-        .start-btn{width:100%;min-height:20vh;padding:20px 0;font-size:4rem;font-weight:bold;color:white;border:none;display:flex;align-items:center;justify-content:center;margin:5px 0;border-radius:4px; transition: background-color 0.1s;}
+        .start-btn{width:100%;min-height:20vh;padding:20px 0;font-size:4rem;font-weight:bold;color:white;border:none;display:flex;align-items:center;justify-content:center;margin:5px 0;border-radius:4px}
         .bg-start{background:#008800}.bg-stop{background:#cc0000}.bg-pause{background:#eab308;color:black}
         
         .bottom-grid{display:grid;grid-template-columns:1fr 2fr 1fr;gap:4px;margin-bottom:20px}
+        
         .side-col{display:flex;flex-direction:column;gap:4px}.center-col{display:flex;flex-direction:column;gap:4px}
         .card-btn{min-height:60px;border-radius:4px;border:1px solid #444;font-weight:bold;font-size:0.9rem;display:flex;align-items:center;justify-content:center;background:#222;box-shadow:0 1px 0 #111;color:#ccc}
         .card-btn.active{border:2px solid white;color:white}
@@ -29,24 +30,45 @@
         details>summary::-webkit-details-marker{display:none}
         .sys-btn{background:#222;border:1px solid #444;width:100%;padding:10px;margin-bottom:2px;font-weight:bold;border-radius:4px;color:#ccc}
         .timer-text-break{color:#facc15}
+        .gear-btn{position:static;transform:none;width:50px;height:50px;background:#333;color:#888;border:2px solid #555;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;box-shadow:0 4px 10px rgba(0,0,0,0.5)}
+        #toast-container{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:white;padding:20px 40px;border-radius:12px;font-size:1.5rem;text-align:center;z-index:9999;display:none;box-shadow:0 0 20px rgba(0,0,0,0.5);border:2px solid #555}
+        
+        .bottom-controls{
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            gap:20px;
+            background:rgba(30,30,30,0.8);
+            padding:10px 20px;
+            border-radius:30px;
+            border:1px solid #444;
+            width:fit-content;
+            margin:auto auto 0 auto; 
+        }
+        
+        .status-icon{width:20px;height:20px;border-radius:50%;display:inline-block;border:2px solid #555; transition: background-color 0.3s;}
+        .status-green{background:#00cc00;box-shadow:0 0 8px #00cc00;border-color:#fff}
+        .status-red{background:#cc0000}
+        .status-yellow{background:#eab308}
+        .status-blue{background:#3b82f6; box-shadow: 0 0 8px #3b82f6; border-color:#fff}
         
         #timer-display{font-size:1.5rem;padding:15px}
+        .swipe-btn { color: #ff4444; font-weight: bold; background: #220000; border: 2px solid #550000; }
     </style>
 </head>
 <body class="flex flex-col min-h-screen p-2 overflow-y-auto overflow-x-hidden">
     
+    <div id="toast-container"></div>
+    
+    <!-- STATUS BAR -->
     <div class="flex justify-between items-center mb-1 flex-shrink-0">
         <details class="flex-grow accord">
             <summary id="timer-display">Modifica Tempo (3:00)</summary>
-            <div class="grid grid-cols-4 gap-1 p-2 bg-gray-800 rounded">
-                <button class="sys-btn" onclick="adjustTime(60)">+1m</button>
-                <button class="sys-btn" onclick="adjustTime(-60)">-1m</button>
-                <button class="sys-btn" onclick="adjustTime(1)">+1s</button>
-                <button class="sys-btn" onclick="adjustTime(-1)">-1s</button>
-            </div>
+            <div class="grid grid-cols-4 gap-1 p-2 bg-gray-800 rounded"><button class="sys-btn" onclick="adjustTime(60)">+1m</button><button class="sys-btn" onclick="adjustTime(-60)">-1m</button><button class="sys-btn" onclick="adjustTime(1)">+1s</button><button class="sys-btn" onclick="adjustTime(-1)">-1s</button></div>
         </details>
     </div>
 
+    <!-- LOGICA ZERO LAG APPLICATA AI PULSANTI -->
     <div class="flex justify-between gap-1 flex-shrink-0">
         <button class="ctrl-btn text-red" onclick="scoreOptimistic('left',-1)">-</button>
         <button class="ctrl-btn text-green" onclick="scoreOptimistic('left',1)">+</button>
@@ -66,27 +88,127 @@
     
     <div class="bottom-grid flex-grow">
         <div class="side-col">
+            <button class="card-btn" id="btn-l-P" onclick="toggleP('left')">P</button>
             <button class="card-btn bg-y" id="btn-l-Y" onclick="handleCardClick('left','Y')">G</button>
             <button class="card-btn bg-r" id="btn-l-R" onclick="handleCardClick('left','R')">R</button>
+            <button class="card-btn bg-b" id="btn-l-B" onclick="handleCardClick('left','B')">N</button>
         </div>
         <div class="center-col pb-1">
+            <div class="flex gap-1">
+                <button class="sys-btn bg-gray-800 border-2 border-gray-600 text-white flex-1 py-4" onclick="socket.emit('toggle_priority')">Priorità</button>
+                <button class="sys-btn bg-blue-900 border-2 border-blue-600 text-white flex-1 py-4" onclick="sendResult()">INVIA</button>
+            </div>
+    
+            <div class="mt-1 mb-1">
+                <button class="sys-btn swipe-btn w-full py-4" onclick="socket.emit('swap_fencers')">Swipe Atleti &lt;--&gt;</button>
+            </div>
+
             <div class="flex flex-col mt-1">
-                <button class="sys-btn text-red-300 bg-red-900" onclick="if(confirm('Reset TOTALE?'))resetAction('reset_all')">Reset TUTTO</button>
-                <button class="sys-btn text-yellow-300" onclick="resetAction('reset_timer')">Reset Tempo</button>
+                <details id="reset-menu" class="accord">
+                    <summary>Menu Reset</summary>
+                    <div class="flex flex-col bg-gray-800 p-2 rounded">
+                        <button class="sys-btn text-gray-200 bg-gray-700 mb-4" onclick="undoAction()">&#x21BA; UNDO (Annulla)</button>
+                        <button class="sys-btn text-blue-300" onclick="resetAction('reset_scores')">Reset Punti</button>
+                        <button class="sys-btn text-yellow-300" onclick="resetAction('reset_timer')">Reset Tempo</button>
+                        <button class="sys-btn text-red-300 bg-red-900" onclick="if(confirm('Reset TOTALE?'))resetAction('reset_all')">Reset TUTTO</button>
+                    </div>
+                </details>
+                <details class="mt-1 accord" id="girone-details">
+                    <summary id="girone-label">Girone: Rosso</summary>
+                    <div class="flex flex-col bg-gray-800 p-2 rounded">
+                        <button class="sys-btn text-red-400" onclick="changeGirone('rosso')">Rosso</button>
+                        <button class="sys-btn text-yellow-400" onclick="changeGirone('giallo')">Giallo</button>
+                        <button class="sys-btn text-blue-400" onclick="changeGirone('blu')">Blu</button>
+                        <button class="sys-btn text-green-400" onclick="changeGirone('verde')">Verde</button>
+                        <button class="sys-btn text-white" onclick="changeGirone('32')">Elim. 32</button>
+                    </div>
+                </details>
+                <div class="flex mt-1 gap-1 h-14">
+                    <select id="sel" class="flex-grow bg-gray-800 text-white border border-gray-600 rounded text-sm px-2" onchange="triggerMatchLoad()"></select>
+                    <button onclick="forceUpdate()" class="bg-green-700 text-white px-3 rounded text-sm border border-green-600 font-bold">AGG.</button>
+                </div>
             </div>
         </div>
         <div class="side-col">
+            <button class="card-btn" id="btn-r-P" onclick="toggleP('right')">P</button>
             <button class="card-btn bg-y" id="btn-r-Y" onclick="handleCardClick('right','Y')">G</button>
             <button class="card-btn bg-r" id="btn-r-R" onclick="handleCardClick('right','R')">R</button>
+            <button class="card-btn bg-b" id="btn-r-B" onclick="handleCardClick('right','B')">N</button>
         </div>
+    </div>
+    
+    <div class="bottom-controls flex-shrink-0">
+        <div id="stat-wifi" class="status-icon status-red" title="Internet"></div>
+        <button onclick="window.location.href='/settings'" class="gear-btn">&#9881;</button>
+        <div id="stat-upload" class="status-icon" style="border: 2px solid #555; background-color: transparent;" title="Stato Invio"></div>
+        <div id="stat-google" class="status-icon status-red" title="Google Sheet"></div>
     </div>
 
     <script>
         const socket=io();
+        let matches=[];
+        let pMode={left:false,right:false};
+        let currentGirone='rosso';
+        let globalSettings = {}; 
+        let audioUnlocked = false; 
         
-        // --- LOGICA OTTIMISTICA ZERO-LAG ---
-        // Aggiorna lo schermo del telefono PRIMA ancora di ricevere la risposta dal server
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function unlockAudio() {
+            if (!audioUnlocked && audioCtx.state !== 'running') {
+                audioCtx.resume().then(() => {
+                    audioUnlocked = true;
+                });
+            }
+        }
         
+        document.body.addEventListener('touchstart', unlockAudio, {once:true});
+        document.body.addEventListener('click', unlockAudio, {once:true});
+
+        // Feedback aptico al telefono
+        socket.on('hw_hit', data => {
+            if (navigator.vibrate) navigator.vibrate(50);
+        });
+
+        function playBeep() {
+            const volume = parseFloat(globalSettings.buzzer_volume || 1.0);
+            if (volume <= 0) return;
+
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator(); 
+            const gain = audioCtx.createGain();
+            osc.type = 'square'; 
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime); 
+            gain.gain.value = volume;
+            osc.connect(gain); 
+            gain.connect(audioCtx.destination);
+            osc.start(); 
+            osc.stop(audioCtx.currentTime + 2.0); 
+        }
+
+        const accords = document.querySelectorAll('.accord');
+        accords.forEach(acc => {
+            acc.addEventListener('toggle', (e) => {
+                if (acc.open) {
+                    accords.forEach(other => {
+                        if (other !== acc && other.open) {
+                            other.removeAttribute('open');
+                        }
+                    });
+                    setTimeout(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, 50);
+                }
+            });
+        });
+
+        function showToast(msg, duration = 3000) {
+            const t = document.getElementById('toast-container');
+            t.innerText = msg;
+            t.style.display = 'block';
+            if(window.toastTimeout) clearTimeout(window.toastTimeout);
+            window.toastTimeout = setTimeout(() => { t.style.display = 'none'; }, duration);
+        }
+        
+        // --- FUNZIONI OTTIMISTICHE (ZERO LAG TELECOMANDO) ---
         function forceTimerStopLocally() {
             const b = document.getElementById('btn-toggle');
             b.innerText = "AVVIO";
@@ -94,20 +216,18 @@
         }
 
         function scoreOptimistic(side, delta) {
-            // Aggiorna visivamente il numero subito
+            // Aggiorna numero localmente all'istante
             const el = document.getElementById(side === 'left' ? 's-l' : 's-r');
-            let val = parseInt(el.innerText);
-            val = Math.max(0, val + delta);
-            el.innerText = val;
+            el.innerText = Math.max(0, parseInt(el.innerText) + delta);
             
-            // Qualsiasi cambio punteggio ferma il tempo!
+            // Blocca il tempo visivamente all'istante
             forceTimerStopLocally();
             
-            // Invia al server in background
-            socket.emit('update_score', {side: side, delta: delta});
+            // Manda segnale
+            socket.emit('update_score',{side:side,delta:delta});
             if(navigator.vibrate) navigator.vibrate(50);
         }
-        
+
         function doubleHitOptimistic() {
             document.getElementById('s-l').innerText = parseInt(document.getElementById('s-l').innerText) + 1;
             document.getElementById('s-r').innerText = parseInt(document.getElementById('s-r').innerText) + 1;
@@ -118,7 +238,7 @@
 
         function toggleTimerOptimistic() {
             const b = document.getElementById('btn-toggle');
-            if (b.innerText === "AVVIO") {
+            if (b.innerText === "AVVIO" || b.innerText === "RIPRENDI PAUSA") {
                 b.innerText = "STOP";
                 b.className = "start-btn bg-stop";
             } else {
@@ -126,42 +246,183 @@
                 b.className = "start-btn bg-start";
             }
             socket.emit('toggle_timer');
+            if(navigator.vibrate) navigator.vibrate(50);
         }
 
+        function adjustTime(d) {
+            socket.emit('adjust_time',{delta:d});
+            forceTimerStopLocally();
+        }
+
+        function resetAction(a) {
+            socket.emit(a);
+            document.getElementById('reset-menu').removeAttribute('open');
+            forceTimerStopLocally();
+        }
+
+        function undoAction() {
+            socket.emit('undo');
+            document.getElementById('reset-menu').removeAttribute('open');
+            forceTimerStopLocally();
+        }
+
+        function handleCardClick(s,c){
+            let cc=c;
+            if(pMode[s]){
+                cc=`P_${c}`;
+                pMode[s]=false;
+                updatePButton(s);
+                socket.emit('card_action',{side:s,card:cc});
+                forceTimerStopLocally();
+                return;
+            }
+
+            let cardName = "";
+            if (c === 'Y') cardName = "GIALLO";
+            if (c === 'R') cardName = "ROSSO";
+            if (c === 'B') cardName = "NERO";
+
+            if (confirm("Assegnare cartellino " + cardName + " a " + (s==='left'?'SX':'DX') + "?")) {
+                socket.emit('card_action',{side:s,card:cc});
+                forceTimerStopLocally(); // Ferma il tempo anche sui cartellini
+            }
+        }
+        // --------------------------------------------------
+
+        socket.on('status_check', (s) => {
+            const wf = document.getElementById('stat-wifi');
+            const go = document.getElementById('stat-google');
+            wf.className = 'status-icon ' + (s.internet ? 'status-green' : 'status-red');
+            if (s.google === 'ok') go.className = 'status-icon status-green';
+            else if (s.google === 'missing') go.className = 'status-icon status-yellow';
+            else go.className = 'status-icon status-red';
+        });
+
+        socket.on('action_feedback', (data) => {
+            if (data.status === 'error') {
+                alert("ERRORE: " + data.msg);
+            } else {
+                const dur = data.status === 'info' ? 5000 : 3000;
+                showToast(data.msg, dur);
+            }
+        });
+
+        socket.on('upload_status', (data) => {
+            const el = document.getElementById('stat-upload');
+            el.classList.remove('status-green', 'status-red', 'status-yellow', 'status-blue');
+            el.style.backgroundColor = ''; 
+            if (data.color === 'blue') el.classList.add('status-blue');
+            else if (data.color === 'yellow') el.classList.add('status-yellow');
+            else if (data.color === 'red') el.classList.add('status-red');
+            else if (data.color === 'green') el.classList.add('status-green');
+            else el.style.backgroundColor = 'transparent';
+        });
+
+        socket.on('time_expired', () => { 
+            playBeep();
+            document.body.style.backgroundColor='#500'; 
+            setTimeout(()=>document.body.style.backgroundColor='#050515',500); 
+        });
+
+        setInterval(()=>socket.emit('admin_heartbeat',{active:true}),2000);
+        
+        function changeGirone(g){
+            currentGirone = g;
+            document.getElementById('girone-label').innerText="Girone: "+g.charAt(0).toUpperCase()+g.slice(1);
+            socket.emit('fetch_sheet', {girone: g});
+            document.getElementById('girone-details').removeAttribute('open');
+        }
+        
+        function triggerMatchLoad(){
+            const sel = document.getElementById('sel');
+            if(sel.value === "") return;
+            if(confirm("Caricare l'assalto selezionato sul Display?")){
+                let matchData = matches[sel.value];
+                matchData.girone = currentGirone; 
+                socket.emit('load_match', matchData);
+                forceTimerStopLocally();
+            }
+        }
+
+        function forceUpdate(){
+            socket.emit('fetch_sheet', {girone: currentGirone});
+            showToast("Aggiornamento dati da Google...");
+        }
+        
+        function sendResult(){
+            if(confirm("Inviare il punteggio corrente al foglio Google?")){
+                socket.emit('send_result');
+            }
+        }
+        
+        function toggleP(s){pMode[s]=!pMode[s];updatePButton(s)}
+        function updatePButton(s){
+            const b=document.getElementById(`btn-${s[0]}-P`);
+            if(pMode[s]){b.classList.add('bg-p-active');b.innerText="P (ON)"}
+            else{b.classList.remove('bg-p-active');b.innerText="P"}
+        }
+        
+        const updateTimeUI=(t,p)=>{
+            const ts=`${Math.floor(t/60)}:${(Math.floor(t%60)<10?'0':'')+Math.floor(t%60)}`;
+            const d=document.getElementById('timer-display');
+            if(p==='BREAK'){d.innerText=`PAUSA (${ts})`;d.classList.add('timer-text-break')}
+            else{d.innerText=`Modifica Tempo (${ts})`;d.classList.remove('timer-text-break')}
+        };
+
+        socket.on('timer_update',d=>updateTimeUI(d.time,d.phase));
+        
         socket.on('state_update',s=>{
-            // Conferma dati dal server
+            if(s.settings) {
+                globalSettings = s.settings; 
+            }
             document.getElementById('s-l').innerText=s.fencer_left.score;
             document.getElementById('s-r').innerText=s.fencer_right.score;
-            
+            updateTimeUI(s.timer,s.phase);
             const b=document.getElementById('btn-toggle');
-            if(s.running){b.innerText="STOP";b.className="start-btn bg-stop"}
-            else{b.innerText="AVVIO";b.className="start-btn bg-start"}
-            
+            if(s.phase==='BREAK'){
+                if(s.running){b.innerText="IN PAUSA";b.className="start-btn bg-pause"}
+                else{b.innerText="RIPRENDI PAUSA";b.className="start-btn bg-start"}
+            } else {
+                if(s.running){b.innerText="STOP";b.className="start-btn bg-stop"}
+                else{b.innerText="AVVIO";b.className="start-btn bg-start"}
+            }
             const upC=(side,d)=>{
                 const sc=side[0];
                 ['Y','R','B'].forEach(c=>{
-                    let el = document.getElementById(`btn-${sc}-${c}`);
-                    if(el) el.classList.remove('active');
+                    let e = document.getElementById(`btn-${sc}-${c}`);
+                    if(e) e.classList.remove('active');
                 });
-                if(d.cards.Y) { let el = document.getElementById(`btn-${sc}-Y`); if(el) el.classList.add('active'); }
-                if(d.cards.R) { let el = document.getElementById(`btn-${sc}-R`); if(el) el.classList.add('active'); }
+                if(d.cards.Y) { let e = document.getElementById(`btn-${sc}-Y`); if(e) e.classList.add('active'); }
+                if(d.cards.R) { let e = document.getElementById(`btn-${sc}-R`); if(e) e.classList.add('active'); }
+                if(d.cards.B) { let e = document.getElementById(`btn-${sc}-B`); if(e) e.classList.add('active'); }
             };
-            upC('left',s.fencer_left); upC('right',s.fencer_right);
-        });
+            upC('left',s.fencer_left);
+            upC('right',s.fencer_right);
 
-        socket.on('timer_update',d=>{
-            const ts=`${Math.floor(d.time/60)}:${(Math.floor(d.time%60)<10?'0':'')+Math.floor(d.time%60)}`;
-            document.getElementById('timer-display').innerText=`Modifica Tempo (${ts})`;
+            if (s.current_row_idx && matches.length > 0) {
+                const idx = matches.findIndex(m => m.row === s.current_row_idx);
+                const sel = document.getElementById('sel');
+                if (idx !== -1 && sel.value != idx) {
+                    sel.value = idx;
+                }
+            }
         });
-
-        function adjustTime(d){ socket.emit('adjust_time',{delta:d}); forceTimerStopLocally(); }
-        function resetAction(a){ socket.emit(a); }
-        function handleCardClick(s,c){ 
-            socket.emit('card_action',{side:s,card:c}); 
-            forceTimerStopLocally(); // Assegnare un cartellino ferma il tempo
-        }
         
-        setInterval(()=>socket.emit('admin_heartbeat',{active:True}), 2000);
+        socket.on('gironi_cache_update', (cache) => {
+            matches = cache[currentGirone] || [];
+            const sel = document.getElementById('sel');
+            const currentVal = sel.value; 
+            
+            sel.innerHTML='<option value="">Seleziona Assalto...</option>';
+            matches.forEach((m,i)=>{
+                let o=document.createElement('option');
+                o.value=i;
+                o.text=`${m.sx} (${m.p_sx}) - (${m.p_dx}) ${m.dx}`;
+                sel.appendChild(o)
+            });
+            
+            if(currentVal && currentVal < matches.length) sel.value = currentVal;
+        });
     </script>
 </body>
 </html>
