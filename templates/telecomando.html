@@ -7,20 +7,16 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        body{user-select:none;-webkit-user-select:none;background:#050515;color:#eee;touch-action:manipulation;font-family:sans-serif;min-height:100vh;overflow-y:auto;overflow-x:hidden;padding-bottom:20px}
+        body{user-select:none;-webkit-user-select:none;background:#050515;color:#eee;touch-action:manipulation;font-family:sans-serif;min-height:100vh;overflow-y:auto;overflow-x:hidden;padding-bottom:10px}
         button:active{transform:scale(0.97);filter:brightness(0.9)}
         .ctrl-btn{width:18%;height:50px;background:#222;border:1px solid #444;border-radius:4px;font-weight:bold;font-size:1.5rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 0 #111;color:white}
         .text-red{color:#f55}.text-green{color:#5f5}
         .score-bar{background:black;color:white;display:flex;justify-content:space-between;padding:0 20px;font-size:3rem;font-weight:bold;line-height:1.2;margin:5px 0;border-radius:2px;position:relative;border:1px solid #333}
         .score-val{width:45%;text-align:center}
-        .prio-dot{width:15px;height:15px;border-radius:50%;background:#222;position:absolute;top:15px;border:1px solid #444;opacity:0.3}
-        .prio-l{left:10px}.prio-r{right:10px}
-        .prio-active{background:white;box-shadow:0 0 10px white;opacity:1}
         .start-btn{width:100%;min-height:20vh;padding:20px 0;font-size:4rem;font-weight:bold;color:white;border:none;display:flex;align-items:center;justify-content:center;margin:5px 0;border-radius:4px}
         .bg-start{background:#008800}.bg-stop{background:#cc0000}.bg-pause{background:#eab308;color:black}
         
-        .bottom-grid{display:grid;grid-template-columns:1fr 2fr 1fr;gap:4px;margin-bottom:20px}
-        
+        .bottom-grid{display:grid;grid-template-columns:1fr 2fr 1fr;gap:4px;margin-bottom:15px}
         .side-col{display:flex;flex-direction:column;gap:4px}.center-col{display:flex;flex-direction:column;gap:4px}
         .card-btn{min-height:60px;border-radius:4px;border:1px solid #444;font-weight:bold;font-size:0.9rem;display:flex;align-items:center;justify-content:center;background:#222;box-shadow:0 1px 0 #111;color:#ccc}
         .card-btn.active{border:2px solid white;color:white}
@@ -30,28 +26,22 @@
         details>summary::-webkit-details-marker{display:none}
         .sys-btn{background:#222;border:1px solid #444;width:100%;padding:10px;margin-bottom:2px;font-weight:bold;border-radius:4px;color:#ccc}
         .timer-text-break{color:#facc15}
-        .gear-btn{position:static;transform:none;width:50px;height:50px;background:#333;color:#888;border:2px solid #555;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;box-shadow:0 4px 10px rgba(0,0,0,0.5)}
+        
+        .prio-dot{width:15px;height:15px;border-radius:50%;background:#222;position:absolute;bottom:10px;border:1px solid #444;opacity:0.3}
+        .prio-l{left:25px}.prio-r{right:25px}
+        .prio-active{background:white;box-shadow:0 0 10px white;opacity:1}
+
+        .bottom-controls{ display:flex; justify-content:space-between; align-items:center; gap:8px; background:rgba(30,30,30,0.8); padding:8px 15px; border-radius:30px; border:1px solid #444; width:100%; max-width:400px; margin:auto auto 0 auto; }
+        .icon-btn { font-size: 1.4rem; text-decoration: none; filter: grayscale(100%) opacity(0.5); transition: 0.3s; display:flex; align-items:center; justify-content:center;}
+        .icon-ok { filter: grayscale(0%) opacity(1); }
+        .icon-error { filter: grayscale(0%) opacity(1) hue-rotate(150deg); }
+        .gear-btn{ background:transparent; border:none; font-size:1.6rem; color:#ccc; padding:0; display:flex; align-items:center; justify-content:center;}
+        
+        .sensor-status { width: 38px; height: 38px; border-radius: 50%; background: #333; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; color: white; border: 2px solid #555; transition: all 0.3s; }
+        .sensor-active-red { background: #ef4444; box-shadow: 0 0 10px #ef4444; border-color: #fff; }
+        .sensor-active-green { background: #22c55e; box-shadow: 0 0 10px #22c55e; border-color: #fff; }
+        
         #toast-container{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:white;padding:20px 40px;border-radius:12px;font-size:1.5rem;text-align:center;z-index:9999;display:none;box-shadow:0 0 20px rgba(0,0,0,0.5);border:2px solid #555}
-        
-        .bottom-controls{
-            display:flex;
-            justify-content:center;
-            align-items:center;
-            gap:20px;
-            background:rgba(30,30,30,0.8);
-            padding:10px 20px;
-            border-radius:30px;
-            border:1px solid #444;
-            width:fit-content;
-            margin:auto auto 0 auto; 
-        }
-        
-        .status-icon{width:20px;height:20px;border-radius:50%;display:inline-block;border:2px solid #555; transition: background-color 0.3s;}
-        .status-green{background:#00cc00;box-shadow:0 0 8px #00cc00;border-color:#fff}
-        .status-red{background:#cc0000}
-        .status-yellow{background:#eab308}
-        .status-blue{background:#3b82f6; box-shadow: 0 0 8px #3b82f6; border-color:#fff}
-        
         #timer-display{font-size:1.5rem;padding:15px}
         .swipe-btn { color: #ff4444; font-weight: bold; background: #220000; border: 2px solid #550000; }
     </style>
@@ -60,7 +50,6 @@
     
     <div id="toast-container"></div>
     
-    <!-- STATUS BAR -->
     <div class="flex justify-between items-center mb-1 flex-shrink-0">
         <details class="flex-grow accord">
             <summary id="timer-display">Modifica Tempo (3:00)</summary>
@@ -68,14 +57,7 @@
         </details>
     </div>
 
-    <!-- LOGICA ZERO LAG APPLICATA AI PULSANTI -->
-    <div class="flex justify-between gap-1 flex-shrink-0">
-        <button class="ctrl-btn text-red" onclick="scoreOptimistic('left',-1)">-</button>
-        <button class="ctrl-btn text-green" onclick="scoreOptimistic('left',1)">+</button>
-        <button class="ctrl-btn text-sm" style="width:22%" onclick="doubleHitOptimistic()">DOPPIO</button>
-        <button class="ctrl-btn text-green" onclick="scoreOptimistic('right',1)">+</button>
-        <button class="ctrl-btn text-red" onclick="scoreOptimistic('right',-1)">-</button>
-    </div>
+    <div class="flex justify-between gap-1 flex-shrink-0"><button class="ctrl-btn text-red" onclick="scoreOptimistic('left',-1)">-</button><button class="ctrl-btn text-green" onclick="scoreOptimistic('left',1)">+</button><button class="ctrl-btn text-sm" style="width:22%" onclick="doubleHitOptimistic()">DOPPIO</button><button class="ctrl-btn text-green" onclick="scoreOptimistic('right',1)">+</button><button class="ctrl-btn text-red" onclick="scoreOptimistic('right',-1)">-</button></div>
     
     <div class="score-bar flex-shrink-0">
         <div id="prio-l" class="prio-dot prio-l"></div>
@@ -98,11 +80,9 @@
                 <button class="sys-btn bg-gray-800 border-2 border-gray-600 text-white flex-1 py-4" onclick="socket.emit('toggle_priority')">Priorità</button>
                 <button class="sys-btn bg-blue-900 border-2 border-blue-600 text-white flex-1 py-4" onclick="sendResult()">INVIA</button>
             </div>
-    
             <div class="mt-1 mb-1">
                 <button class="sys-btn swipe-btn w-full py-4" onclick="socket.emit('swap_fencers')">Swipe Atleti &lt;--&gt;</button>
             </div>
-
             <div class="flex flex-col mt-1">
                 <details id="reset-menu" class="accord">
                     <summary>Menu Reset</summary>
@@ -138,10 +118,11 @@
     </div>
     
     <div class="bottom-controls flex-shrink-0">
-        <div id="stat-wifi" class="status-icon status-red" title="Internet"></div>
-        <button onclick="window.location.href='/settings'" class="gear-btn">&#9881;</button>
-        <div id="stat-upload" class="status-icon" style="border: 2px solid #555; background-color: transparent;" title="Stato Invio"></div>
-        <div id="stat-google" class="status-icon status-red" title="Google Sheet"></div>
+        <span id="stat-wifi" class="icon-btn" title="Internet">📡</span>
+        <div id="stat-pico-r" class="sensor-status" title="Pico Rosso">--</div>
+        <button onclick="window.location.href='/settings'" class="gear-btn" title="Impostazioni">⚙️</button>
+        <div id="stat-pico-v" class="sensor-status" title="Pico Verde">--</div>
+        <span id="stat-google" class="icon-btn" title="Google Sheets">☁️</span>
     </div>
 
     <script>
@@ -152,28 +133,34 @@
         let globalSettings = {}; 
         let audioUnlocked = false; 
         
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-        function unlockAudio() {
-            if (!audioUnlocked && audioCtx.state !== 'running') {
-                audioCtx.resume().then(() => {
-                    audioUnlocked = true;
+        setInterval(() => {
+            fetch('/api/pico_status')
+                .then(r => r.json())
+                .then(s => {
+                    const pr = document.getElementById('stat-pico-r');
+                    const pv = document.getElementById('stat-pico-v');
+                    if(s.rosso.active) {
+                        pr.className = 'sensor-status sensor-active-red';
+                        pr.innerText = s.rosso.bat + '%';
+                    } else { pr.className = 'sensor-status'; pr.innerText = '--'; }
+                    
+                    if(s.verde.active) {
+                        pv.className = 'sensor-status sensor-active-green';
+                        pv.innerText = s.verde.bat + '%';
+                    } else { pv.className = 'sensor-status'; pv.innerText = '--'; }
                 });
-            }
-        }
-        
+        }, 1500);
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function unlockAudio() { if (!audioUnlocked && audioCtx.state !== 'running') audioCtx.resume().then(() => audioUnlocked = true); }
         document.body.addEventListener('touchstart', unlockAudio, {once:true});
         document.body.addEventListener('click', unlockAudio, {once:true});
-
-        // Feedback aptico al telefono
-        socket.on('hw_hit', data => {
-            if (navigator.vibrate) navigator.vibrate(50);
-        });
+        
+        socket.on('hw_hit', data => { if (navigator.vibrate) navigator.vibrate(50); });
 
         function playBeep() {
             const volume = parseFloat(globalSettings.buzzer_volume || 1.0);
             if (volume <= 0) return;
-
             if (audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator(); 
             const gain = audioCtx.createGain();
@@ -190,11 +177,7 @@
         accords.forEach(acc => {
             acc.addEventListener('toggle', (e) => {
                 if (acc.open) {
-                    accords.forEach(other => {
-                        if (other !== acc && other.open) {
-                            other.removeAttribute('open');
-                        }
-                    });
+                    accords.forEach(other => { if (other !== acc && other.open) other.removeAttribute('open'); });
                     setTimeout(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, 50);
                 }
             });
@@ -202,32 +185,22 @@
 
         function showToast(msg, duration = 3000) {
             const t = document.getElementById('toast-container');
-            t.innerText = msg;
-            t.style.display = 'block';
+            t.innerText = msg; t.style.display = 'block';
             if(window.toastTimeout) clearTimeout(window.toastTimeout);
             window.toastTimeout = setTimeout(() => { t.style.display = 'none'; }, duration);
         }
         
-        // --- FUNZIONI OTTIMISTICHE (ZERO LAG TELECOMANDO) ---
         function forceTimerStopLocally() {
             const b = document.getElementById('btn-toggle');
-            b.innerText = "AVVIO";
-            b.className = "start-btn bg-start";
+            b.innerText = "AVVIO"; b.className = "start-btn bg-start";
         }
-
         function scoreOptimistic(side, delta) {
-            // Aggiorna numero localmente all'istante
             const el = document.getElementById(side === 'left' ? 's-l' : 's-r');
             el.innerText = Math.max(0, parseInt(el.innerText) + delta);
-            
-            // Blocca il tempo visivamente all'istante
             forceTimerStopLocally();
-            
-            // Manda segnale
             socket.emit('update_score',{side:side,delta:delta});
             if(navigator.vibrate) navigator.vibrate(50);
         }
-
         function doubleHitOptimistic() {
             document.getElementById('s-l').innerText = parseInt(document.getElementById('s-l').innerText) + 1;
             document.getElementById('s-r').innerText = parseInt(document.getElementById('s-r').innerText) + 1;
@@ -235,87 +208,41 @@
             socket.emit('double_hit');
             if(navigator.vibrate) navigator.vibrate(50);
         }
-
         function toggleTimerOptimistic() {
             const b = document.getElementById('btn-toggle');
-            if (b.innerText === "AVVIO" || b.innerText === "RIPRENDI PAUSA") {
-                b.innerText = "STOP";
-                b.className = "start-btn bg-stop";
-            } else {
-                b.innerText = "AVVIO";
-                b.className = "start-btn bg-start";
-            }
+            if (b.innerText === "AVVIO" || b.innerText === "RIPRENDI PAUSA") { b.innerText = "STOP"; b.className = "start-btn bg-stop"; } 
+            else { b.innerText = "AVVIO"; b.className = "start-btn bg-start"; }
             socket.emit('toggle_timer');
             if(navigator.vibrate) navigator.vibrate(50);
         }
-
-        function adjustTime(d) {
-            socket.emit('adjust_time',{delta:d});
-            forceTimerStopLocally();
-        }
-
-        function resetAction(a) {
-            socket.emit(a);
-            document.getElementById('reset-menu').removeAttribute('open');
-            forceTimerStopLocally();
-        }
-
-        function undoAction() {
-            socket.emit('undo');
-            document.getElementById('reset-menu').removeAttribute('open');
-            forceTimerStopLocally();
-        }
+        function adjustTime(d) { socket.emit('adjust_time',{delta:d}); forceTimerStopLocally(); }
+        function resetAction(a) { socket.emit(a); document.getElementById('reset-menu').removeAttribute('open'); forceTimerStopLocally(); }
+        function undoAction() { socket.emit('undo'); document.getElementById('reset-menu').removeAttribute('open'); forceTimerStopLocally(); }
 
         function handleCardClick(s,c){
             let cc=c;
             if(pMode[s]){
-                cc=`P_${c}`;
-                pMode[s]=false;
-                updatePButton(s);
-                socket.emit('card_action',{side:s,card:cc});
-                forceTimerStopLocally();
+                cc=`P_${c}`; pMode[s]=false; updatePButton(s);
+                socket.emit('card_action',{side:s,card:cc}); forceTimerStopLocally();
                 return;
             }
-
-            let cardName = "";
-            if (c === 'Y') cardName = "GIALLO";
-            if (c === 'R') cardName = "ROSSO";
-            if (c === 'B') cardName = "NERO";
-
+            let cardName = c === 'Y' ? "GIALLO" : c === 'R' ? "ROSSO" : "NERO";
             if (confirm("Assegnare cartellino " + cardName + " a " + (s==='left'?'SX':'DX') + "?")) {
                 socket.emit('card_action',{side:s,card:cc});
-                forceTimerStopLocally(); // Ferma il tempo anche sui cartellini
+                forceTimerStopLocally(); 
             }
         }
-        // --------------------------------------------------
 
         socket.on('status_check', (s) => {
             const wf = document.getElementById('stat-wifi');
             const go = document.getElementById('stat-google');
-            wf.className = 'status-icon ' + (s.internet ? 'status-green' : 'status-red');
-            if (s.google === 'ok') go.className = 'status-icon status-green';
-            else if (s.google === 'missing') go.className = 'status-icon status-yellow';
-            else go.className = 'status-icon status-red';
+            wf.className = 'icon-btn ' + (s.internet ? 'icon-ok' : 'icon-error');
+            go.className = 'icon-btn ' + (s.google === 'ok' ? 'icon-ok' : 'icon-error');
         });
 
         socket.on('action_feedback', (data) => {
-            if (data.status === 'error') {
-                alert("ERRORE: " + data.msg);
-            } else {
-                const dur = data.status === 'info' ? 5000 : 3000;
-                showToast(data.msg, dur);
-            }
-        });
-
-        socket.on('upload_status', (data) => {
-            const el = document.getElementById('stat-upload');
-            el.classList.remove('status-green', 'status-red', 'status-yellow', 'status-blue');
-            el.style.backgroundColor = ''; 
-            if (data.color === 'blue') el.classList.add('status-blue');
-            else if (data.color === 'yellow') el.classList.add('status-yellow');
-            else if (data.color === 'red') el.classList.add('status-red');
-            else if (data.color === 'green') el.classList.add('status-green');
-            else el.style.backgroundColor = 'transparent';
+            if (data.status === 'error') alert("ERRORE: " + data.msg);
+            else showToast(data.msg, data.status === 'info' ? 5000 : 3000);
         });
 
         socket.on('time_expired', () => { 
@@ -332,7 +259,6 @@
             socket.emit('fetch_sheet', {girone: g});
             document.getElementById('girone-details').removeAttribute('open');
         }
-        
         function triggerMatchLoad(){
             const sel = document.getElementById('sel');
             if(sel.value === "") return;
@@ -343,68 +269,43 @@
                 forceTimerStopLocally();
             }
         }
-
-        function forceUpdate(){
-            socket.emit('fetch_sheet', {girone: currentGirone});
-            showToast("Aggiornamento dati da Google...");
-        }
-        
-        function sendResult(){
-            if(confirm("Inviare il punteggio corrente al foglio Google?")){
-                socket.emit('send_result');
-            }
-        }
+        function forceUpdate(){ socket.emit('fetch_sheet', {girone: currentGirone}); showToast("Aggiornamento Google..."); }
+        function sendResult(){ if(confirm("Inviare punteggio a Google?")) socket.emit('send_result'); }
         
         function toggleP(s){pMode[s]=!pMode[s];updatePButton(s)}
         function updatePButton(s){
             const b=document.getElementById(`btn-${s[0]}-P`);
-            if(pMode[s]){b.classList.add('bg-p-active');b.innerText="P (ON)"}
-            else{b.classList.remove('bg-p-active');b.innerText="P"}
+            if(pMode[s]){b.classList.add('bg-p-active');b.innerText="P (ON)"} else{b.classList.remove('bg-p-active');b.innerText="P"}
         }
         
         const updateTimeUI=(t,p)=>{
             const ts=`${Math.floor(t/60)}:${(Math.floor(t%60)<10?'0':'')+Math.floor(t%60)}`;
             const d=document.getElementById('timer-display');
-            if(p==='BREAK'){d.innerText=`PAUSA (${ts})`;d.classList.add('timer-text-break')}
-            else{d.innerText=`Modifica Tempo (${ts})`;d.classList.remove('timer-text-break')}
+            if(p==='BREAK'){d.innerText=`PAUSA (${ts})`;d.classList.add('timer-text-break')} else{d.innerText=`Modifica Tempo (${ts})`;d.classList.remove('timer-text-break')}
         };
 
         socket.on('timer_update',d=>updateTimeUI(d.time,d.phase));
         
         socket.on('state_update',s=>{
-            if(s.settings) {
-                globalSettings = s.settings; 
-            }
+            if(s.settings) { globalSettings = s.settings; }
             document.getElementById('s-l').innerText=s.fencer_left.score;
             document.getElementById('s-r').innerText=s.fencer_right.score;
             updateTimeUI(s.timer,s.phase);
             const b=document.getElementById('btn-toggle');
-            if(s.phase==='BREAK'){
-                if(s.running){b.innerText="IN PAUSA";b.className="start-btn bg-pause"}
-                else{b.innerText="RIPRENDI PAUSA";b.className="start-btn bg-start"}
-            } else {
-                if(s.running){b.innerText="STOP";b.className="start-btn bg-stop"}
-                else{b.innerText="AVVIO";b.className="start-btn bg-start"}
-            }
+            if(s.phase==='BREAK'){ b.innerText=s.running?"IN PAUSA":"RIPRENDI PAUSA"; b.className=s.running?"start-btn bg-pause":"start-btn bg-start"; } 
+            else { b.innerText=s.running?"STOP":"AVVIO"; b.className=s.running?"start-btn bg-stop":"start-btn bg-start"; }
             const upC=(side,d)=>{
                 const sc=side[0];
-                ['Y','R','B'].forEach(c=>{
-                    let e = document.getElementById(`btn-${sc}-${c}`);
-                    if(e) e.classList.remove('active');
-                });
-                if(d.cards.Y) { let e = document.getElementById(`btn-${sc}-Y`); if(e) e.classList.add('active'); }
-                if(d.cards.R) { let e = document.getElementById(`btn-${sc}-R`); if(e) e.classList.add('active'); }
-                if(d.cards.B) { let e = document.getElementById(`btn-${sc}-B`); if(e) e.classList.add('active'); }
+                ['Y','R','B'].forEach(c=>{let e=document.getElementById(`btn-${sc}-${c}`); if(e) e.classList.remove('active');});
+                if(d.cards.Y){let e=document.getElementById(`btn-${sc}-Y`); if(e) e.classList.add('active');}
+                if(d.cards.R){let e=document.getElementById(`btn-${sc}-R`); if(e) e.classList.add('active');}
+                if(d.cards.B){let e=document.getElementById(`btn-${sc}-B`); if(e) e.classList.add('active');}
             };
-            upC('left',s.fencer_left);
-            upC('right',s.fencer_right);
-
+            upC('left',s.fencer_left); upC('right',s.fencer_right);
             if (s.current_row_idx && matches.length > 0) {
                 const idx = matches.findIndex(m => m.row === s.current_row_idx);
                 const sel = document.getElementById('sel');
-                if (idx !== -1 && sel.value != idx) {
-                    sel.value = idx;
-                }
+                if (idx !== -1 && sel.value != idx) sel.value = idx;
             }
         });
         
@@ -412,15 +313,10 @@
             matches = cache[currentGirone] || [];
             const sel = document.getElementById('sel');
             const currentVal = sel.value; 
-            
             sel.innerHTML='<option value="">Seleziona Assalto...</option>';
             matches.forEach((m,i)=>{
-                let o=document.createElement('option');
-                o.value=i;
-                o.text=`${m.sx} (${m.p_sx}) - (${m.p_dx}) ${m.dx}`;
-                sel.appendChild(o)
+                let o=document.createElement('option'); o.value=i; o.text=`${m.sx} (${m.p_sx}) - (${m.p_dx}) ${m.dx}`; sel.appendChild(o)
             });
-            
             if(currentVal && currentVal < matches.length) sel.value = currentVal;
         });
     </script>
