@@ -26,9 +26,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PHOTOS_DIR = os.path.join(BASE_DIR, 'static', 'photos')
-
-STATE_FILE = "local_match_state.json"
-OLD_STATE_FILE = "match_state.json"
+STATE_FILE = "match_state.json"
 
 DEFAULT_SHEET_ID = "179tfN2PDrSTYtiAdVeFQKXF9OtwZj4k4EbQ1dWXH5Yg"
 
@@ -39,7 +37,7 @@ gironi_cache = {'rosso': [], 'giallo': [], 'blu': [], 'verde': [], '32': []}
 history_stack = []
 last_google_status = "ok"
 
-# Variabili per gestire i Pico e la logica temporale dei colpi doppi
+# Variabili per gestire i Pico
 pico_last_seen = {'rosso': 0, 'verde': 0}
 last_hit_time = 0
 hit_sides_in_window = set()
@@ -147,20 +145,15 @@ def save_state():
         with open(STATE_FILE, 'w') as f: json.dump(current_state, f)
     except: pass
 
+def async_save():
+    """Salvataggio in background per azzerare il lag"""
+    save_state()
+
 def load_state():
     global current_state
-    file_to_load = None
-    loaded_from_old = False
-    
     if os.path.exists(STATE_FILE):
-        file_to_load = STATE_FILE
-    elif os.path.exists(OLD_STATE_FILE):
-        file_to_load = OLD_STATE_FILE
-        loaded_from_old = True
-        
-    if file_to_load:
         try:
-            with open(file_to_load, 'r') as f:
+            with open(STATE_FILE, 'r') as f:
                 data = json.load(f)
                 data['running'] = False
                 data['server_ip'] = get_local_ip()
@@ -189,9 +182,6 @@ def load_state():
                 current_state = data
                 if 'active_girone' not in current_state:
                     current_state['active_girone'] = current_state.get('current_girone', 'rosso')
-                    
-            if loaded_from_old:
-                save_state()
         except: pass
 
 def push_history():
@@ -245,63 +235,47 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-# --- FUNZIONE ASINCRONA PER SALVATAGGIO ---
-def async_save_state():
-    push_history()
-    save_state()
-
-# --- API HW PICO E LOGICA ARBITRALE ISTANTANEA ---
-@app.route('/api/update_score_hw', methods=['POST'])
-def update_score_hw():
+# --- LOGICA PUNTEGGI ISTANTANEA DA PICO ---
+def process_hw_hit(side, delta=1):
     global last_hit_time, hit_sides_in_window
-    
-    try:
-        data = request.get_json(force=True)
-    except:
-        return jsonify({"status": "error", "message": "JSON errato"}), 400
-        
-    if not data:
-        return jsonify({"status": "error", "message": "Nessun dato"}), 400
-        
-    side = data.get('side') 
-    delta = data.get('delta', 1)
     now = time.time()
     
-    # 1. Ignora se il tempo non scorre
     if current_state.get('phase') != 'MATCH' or current_state['timer'] <= 0:
-        return jsonify({"status": "ignored", "reason": "not_in_match"}), 200
-
-    # 2. PRIMO COLPO - STOP IMMEDIATO
+        return
+        
+    # 1. PRIMA STOCCATA - STOP ISTANTANEO
     if current_state['running']:
-        # FERMIAMO IL TEMPO PRIMA DI QUALSIASI ALTRA COSA
-        current_state['running'] = False 
+        current_state['running'] = False # FERMA IL TEMPO
         last_hit_time = now
         hit_sides_in_window = {side}
         current_state[f'fencer_{side}']['score'] += delta
         
-        # Emissione socket dedicata e fulminea per attivare Suoni e Luci sul tabellone
-        socketio.emit('hw_hit', {'side': side, 'is_double': False}, broadcast=True)
+        socketio.emit('hw_hit', {'side': side, 'is_double': False})
+        socketio.emit('state_update', current_state)
+        socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+        eventlet.spawn(async_save)
         
-        # Aggiorna lo stato generale per il telecomando (il pulsante diventerà "AVVIO" subito)
-        socketio.emit('state_update', current_state, broadcast=True)
-        
-        # Salviamo la cronologia nel disco fisso in un thread separato per non bloccare il server
-        eventlet.spawn(async_save_state)
-        
-        return jsonify({"status": "ok"}), 200
-
-    # 3. COLPO DOPPIO - Entro 0.2s dal primo stop
+    # 2. COLPO DOPPIO - Entro 0.2s dallo stop
     elif side not in hit_sides_in_window and (now - last_hit_time < 0.2):
         hit_sides_in_window.add(side)
         current_state[f'fencer_{side}']['score'] += delta
         
-        socketio.emit('hw_hit', {'side': side, 'is_double': True}, broadcast=True)
-        socketio.emit('state_update', current_state, broadcast=True)
-        
-        eventlet.spawn(async_save_state)
-        return jsonify({"status": "double_hit_ok"}), 200
+        socketio.emit('hw_hit', {'side': side, 'is_double': True})
+        socketio.emit('state_update', current_state)
+        socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+        eventlet.spawn(async_save)
 
-    return jsonify({"status": "ignored", "reason": "timer_stopped"}), 200
+@app.route('/api/update_score_hw', methods=['POST'])
+def update_score_hw():
+    # Fallback per richieste HTTP se si usa il vecchio script Pico
+    try: data = request.get_json(force=True, silent=True)
+    except: data = None
+    if not data: return jsonify({"status": "error", "message": "JSON errato"}), 400
+    
+    side = data.get('side') 
+    delta = data.get('delta', 1)
+    process_hw_hit(side, delta)
+    return jsonify({"status": "ok"}), 200
 
 @app.route('/api/pico_status')
 def get_pico_status():
@@ -359,7 +333,7 @@ def upload_photo():
         r = clean_fencer_name(current_state['fencer_right']['name'])
         if l == clean_name_file: current_state['fencer_left']['photo'] = get_photo_url(clean_name_file)
         if r == clean_name_file: current_state['fencer_right']['photo'] = get_photo_url(clean_name_file)
-        emit('state_update', current_state, broadcast=True)
+        socketio.emit('state_update', current_state)
     return jsonify({"success": True})
 
 @app.route('/api/get_athletes')
@@ -452,32 +426,42 @@ def undo():
         for k in ['timer','fencer_left','fencer_right','priority','phase','match_list','current_row_idx','current_girone','manual_selection','swapped']:
             current_state[k] = prev.get(k, current_state[k])
         current_state['running'] = False
-        emit('state_update', current_state, broadcast=True)
-        emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')}, broadcast=True)
-        save_state()
+        socketio.emit('state_update', current_state)
+        socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+        eventlet.spawn(async_save)
 
 @socketio.on('update_score')
 def handle_score(d):
     push_history()
     side = d['side']
     current_state[f'fencer_{side}']['score'] = max(0, current_state[f'fencer_{side}']['score'] + d['delta'])
-    if d['delta'] > 0: current_state['running'] = False
-    emit('state_update', current_state, broadcast=True)
-    save_state()
+    
+    # FERMA SEMPRE IL TEMPO SE CAMBIA IL PUNTEGGIO
+    current_state['running'] = False
+    
+    if d['delta'] > 0: 
+        # Invia il comando luce/suono senza broadcast=True che causa errore
+        socketio.emit('hw_hit', {'side': side, 'is_double': False})
+    
+    # Usa socketio.emit per forzare l'aggiornamento a TUTTI i client (TV inclusa)
+    socketio.emit('state_update', current_state)
+    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+    eventlet.spawn(async_save)
     
 @socketio.on('toggle_timer')
 def handle_toggle():
     current_state['running'] = not current_state['running']
-    emit('state_update', current_state, broadcast=True)
-    save_state()
+    socketio.emit('state_update', current_state)
+    eventlet.spawn(async_save)
 
 @socketio.on('adjust_time')
 def handle_adjust_time(data):
     push_history()
     current_state['timer'] = max(0, current_state['timer'] + float(data.get('delta',0)))
-    emit('state_update', current_state, broadcast=True)
-    emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')}, broadcast=True)
-    save_state()
+    current_state['running'] = False # Ferma il tempo se si regola
+    socketio.emit('state_update', current_state)
+    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+    eventlet.spawn(async_save)
 
 @socketio.on('card_action')
 def handle_card(d):
@@ -487,6 +471,9 @@ def handle_card(d):
     fencer = current_state[f'fencer_{side}']
     opp_side = 'right' if side == 'left' else 'left'
     opponent = current_state[f'fencer_{opp_side}']
+
+    # OGNI AZIONE CARTELLINO FERMA IL TEMPO
+    current_state['running'] = False
 
     if card_type.startswith('P_'):
         k = card_type.split('_')[1]
@@ -498,7 +485,6 @@ def handle_card(d):
 
         if card_type == 'B':
             fencer['cards']['B'] = True
-            current_state['running'] = False
         elif card_type in ['Y', 'R']:
             if has_black: pass
             else:
@@ -507,25 +493,27 @@ def handle_card(d):
                     elif card_type == 'R':
                         red_count = 1
                         opponent['score'] += 1
-                        current_state['running'] = False
                 else:
                     if red_count < 2: red_count += 1
                     opponent['score'] += 1
-                    current_state['running'] = False
             fencer['cards']['R_count'] = red_count
             fencer['cards']['R'] = (red_count > 0)
 
-    emit('state_update', current_state, broadcast=True)
-    save_state()
+    socketio.emit('state_update', current_state)
+    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+    eventlet.spawn(async_save)
 
 @socketio.on('double_hit')
 def db_hit():
     push_history()
     current_state['fencer_left']['score'] += 1
     current_state['fencer_right']['score'] += 1
-    current_state['running'] = False
-    emit('state_update', current_state, broadcast=True)
-    save_state()
+    current_state['running'] = False # FERMA IL TEMPO
+    
+    socketio.emit('hw_hit', {'side': 'double', 'is_double': True})
+    socketio.emit('state_update', current_state)
+    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+    eventlet.spawn(async_save)
 
 @socketio.on('toggle_priority')
 def toggle_prio():
@@ -534,14 +522,14 @@ def toggle_prio():
     else: 
         current_state['priority'] = 'animating'
         eventlet.spawn(resolve_priority_animation)
-    emit('state_update', current_state, broadcast=True)
-    save_state()
+    socketio.emit('state_update', current_state)
+    eventlet.spawn(async_save)
 
 @socketio.on('reset_all')
 def r_all():
     push_history()
     current_state['timer'] = float(current_state['settings']['time_match'])
-    current_state['phase'] = 'MATCH' 
+    current_state['phase'] = 'MATCH'
     current_state['running'] = False
     current_state['priority'] = None
     current_state['manual_selection'] = False 
@@ -555,37 +543,41 @@ def r_all():
     current_state['fencer_left']['photo'] = get_photo_url(None)
     current_state['fencer_right']['photo'] = get_photo_url(None)
     current_state['current_row_idx'] = None
-    emit('state_update', current_state, broadcast=True)
-    save_state()
+    socketio.emit('state_update', current_state)
+    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+    eventlet.spawn(async_save)
     eventlet.spawn(update_all_gironi_data)
 
 @socketio.on('reset_scores')
 def r_scores():
     push_history()
+    current_state['running'] = False
     for s in ['left','right']:
         current_state[f'fencer_{s}']['score'] = 0
         current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
         current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
-    emit('state_update', current_state, broadcast=True)
-    save_state()
+    socketio.emit('state_update', current_state)
+    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+    eventlet.spawn(async_save)
     
 @socketio.on('reset_timer')
 def r_timer():
     push_history()
     current_state['timer'] = float(current_state['settings']['time_match'])
-    current_state['phase'] = 'MATCH' 
+    current_state['phase'] = 'MATCH'
     current_state['running'] = False
-    emit('state_update', current_state, broadcast=True)
-    save_state()
+    socketio.emit('state_update', current_state)
+    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+    eventlet.spawn(async_save)
 
 @socketio.on('fetch_sheet')
 def f_sheet(d=None):
     if d and 'girone' in d:
         current_state['current_girone'] = d['girone']
         current_state['manual_selection'] = False 
-        save_state()
+        eventlet.spawn(async_save)
     current_state['match_list'] = []
-    emit('state_update', current_state, broadcast=True)
+    socketio.emit('state_update', current_state)
     update_all_gironi_data()
 
 @socketio.on('load_match')
@@ -597,8 +589,9 @@ def l_match(d):
         current_state['active_girone'] = current_state.get('current_girone', 'rosso')
         
     load_match_data(d) 
-    emit('state_update', current_state, broadcast=True)
-    save_state()
+    socketio.emit('state_update', current_state)
+    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+    eventlet.spawn(async_save)
 
 def load_match_data(d):
     current_state['manual_selection'] = True
@@ -624,8 +617,8 @@ def load_match_data(d):
 def handle_swap():
     current_state['swapped'] = not current_state['swapped']
     current_state['fencer_left'], current_state['fencer_right'] = current_state['fencer_right'], current_state['fencer_left']
-    emit('state_update', current_state, broadcast=True)
-    save_state()
+    socketio.emit('state_update', current_state)
+    eventlet.spawn(async_save)
 
 @socketio.on('send_result')
 def handle_send_result():
@@ -678,7 +671,8 @@ def handle_send_result():
     if next_match:
         current_state['active_girone'] = g
         load_match_data(next_match)
-        emit('state_update', current_state, broadcast=True)
+        socketio.emit('state_update', current_state)
+        socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
         socketio.emit('action_feedback', {'status': 'success', 'msg': f'Caricato prossimo: {next_match["sx"]} vs {next_match["dx"]}'})
     else:
         socketio.emit('action_feedback', {'status': 'info', 'msg': 'Nessun prossimo assalto trovato.'})
@@ -754,8 +748,8 @@ def up_set(d):
                 try: current_state['settings'][k] = float(v)
                 except: pass
             else: current_state['settings'][k] = str(v)
-    emit('state_update', current_state, broadcast=True)
-    save_state()
+    socketio.emit('state_update', current_state)
+    eventlet.spawn(async_save)
     if 'columns' in d or 'google_sheet_id' in d: eventlet.spawn(update_all_gironi_data)
 
 @socketio.on('admin_heartbeat')
@@ -833,7 +827,7 @@ def update_all_gironi_data():
         
         if updated_current:
             socketio.emit('state_update', current_state)
-            save_state()
+            eventlet.spawn(async_save)
         else:
             socketio.emit('state_update', current_state)
             
@@ -852,7 +846,7 @@ def update_all_gironi_data():
                  current_state['swapped'] = False
                  current_state['active_girone'] = cg 
                  socketio.emit('state_update', current_state)
-                 save_state()
+                 eventlet.spawn(async_save)
              
              elif (current_state['fencer_left']['name'] != next_match['sx'] or current_state['fencer_right']['name'] != next_match['dx']):
                  current_state['fencer_left']['name'] = next_match['sx']
@@ -865,7 +859,7 @@ def update_all_gironi_data():
                  current_state['swapped'] = False
                  current_state['active_girone'] = cg 
                  socketio.emit('state_update', current_state)
-                 save_state()
+                 eventlet.spawn(async_save)
 
     except Exception as e: print(f"Update error: {e}")
 
@@ -899,10 +893,10 @@ def timer_thread():
                             current_state['timer'] = float(current_state['settings']['time_match'])
                             current_state['running'] = False
                         socketio.emit('state_update', current_state)
-                        save_state()
+                        eventlet.spawn(async_save)
                 else:
                     current_state['running'] = False
-                    save_state()
+                    eventlet.spawn(async_save)
         except Exception as e: print(f"Timer error: {e}")
         eventlet.sleep(0.1)
 
@@ -914,13 +908,19 @@ def udp_listener_thread():
         try:
             data, addr = udp_sock.recvfrom(1024)
             msg = data.decode('utf-8')
-            if "PING_ROSSO" in msg:
+            
+            # GESTIONE FULMINEA PUNTEGGI DA UDP
+            if "HIT_ROSSO" in msg:
+                process_hw_hit("left")
+            elif "HIT_VERDE" in msg:
+                process_hw_hit("right")
+            elif "PING_ROSSO" in msg:
                 pico_last_seen['rosso'] = time.time()
-            if "PING_VERDE" in msg:
+            elif "PING_VERDE" in msg:
                 pico_last_seen['verde'] = time.time()
         except Exception as e:
             pass
-        eventlet.sleep(0.01)
+        eventlet.sleep(0.005)
 
 eventlet.spawn(timer_thread)
 eventlet.spawn(data_refresh_thread)
@@ -934,7 +934,7 @@ def resolve_priority_animation():
     current_state['running'] = False
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': 60.0, 'phase': current_state.get('phase')})
-    save_state()
+    eventlet.spawn(async_save)
 
 if __name__ == '__main__':
     load_state()
