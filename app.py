@@ -26,7 +26,10 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PHOTOS_DIR = os.path.join(BASE_DIR, 'static', 'photos')
-STATE_FILE = "match_state.json"
+
+# FIX: Usa percorsi assoluti per forzare la lettura corretta dei file di salvataggio
+STATE_FILE = os.path.join(BASE_DIR, "local_match_state.json")
+OLD_STATE_FILE = os.path.join(BASE_DIR, "match_state.json")
 
 DEFAULT_SHEET_ID = "179tfN2PDrSTYtiAdVeFQKXF9OtwZj4k4EbQ1dWXH5Yg"
 
@@ -38,7 +41,10 @@ history_stack = []
 last_google_status = "ok"
 
 # Variabili per gestire i Pico
-pico_last_seen = {'rosso': 0, 'verde': 0}
+pico_last_seen = {
+    'rosso': {'time': 0, 'bat': 100}, 
+    'verde': {'time': 0, 'bat': 100}
+}
 last_hit_time = 0
 hit_sides_in_window = set()
 
@@ -85,13 +91,7 @@ def get_photo_url(name):
 
 def new_fencer(name):
     c_name = clean_fencer_name(name)
-    return { 
-        "name": c_name, 
-        "score": 0, 
-        "cards": {"Y": False, "R": False, "B": False, "R_count": 0}, 
-        "p_cards": {"Y": False, "R": False, "B": False}, 
-        "photo": get_photo_url(name) 
-    }
+    return { "name": c_name, "score": 0, "cards": {"Y": False, "R": False, "B": False, "R_count": 0}, "p_cards": {"Y": False, "R": False, "B": False}, "photo": get_photo_url(name) }
 
 def get_system_fonts():
     try:
@@ -106,36 +106,24 @@ def get_system_fonts():
         return ['Roboto Mono', 'Arial', 'Verdana', 'Courier New']
 
 default_columns = {
-    'rosso': {'sx': 'A', 'psx': 'B', 'pdx': 'C', 'dx': 'D'}, 
-    'giallo': {'sx': 'F', 'psx': 'G', 'pdx': 'H', 'dx': 'I'}, 
-    'blu': {'sx': 'K', 'psx': 'L', 'pdx': 'M', 'dx': 'N'}, 
-    'verde': {'sx': 'P', 'psx': 'Q', 'pdx': 'R', 'dx': 'S'}, 
+    'rosso': {'sx': 'A', 'psx': 'B', 'pdx': 'C', 'dx': 'D'}, 'giallo': {'sx': 'F', 'psx': 'G', 'pdx': 'H', 'dx': 'I'}, 
+    'blu': {'sx': 'K', 'psx': 'L', 'pdx': 'M', 'dx': 'N'}, 'verde': {'sx': 'P', 'psx': 'Q', 'pdx': 'R', 'dx': 'S'}, 
     '32': {'sx': 'U', 'psx': 'V', 'pdx': 'W', 'dx': 'X'} 
 }
 
 default_settings = {
-    "weapon": "spada",
-    "font_family": "Roboto Mono", "font_timer": 8.0, "font_score": 15.0, "font_name": 3.0, "font_list": 1.5,
-    "col_center_width": 1.2, "list_padding": 0.5, "text_border": 0.0, "photo_size": 150,
-    "time_match": 180, "time_break": 60, "time_medical": 300,
-    "refresh_rate": 30, 
-    "buzzer_volume": 1.0,
-    "default_name_left": "ATLETA SX", "default_name_right": "ATLETA DX", 
-    "google_script_url": "", "google_sheet_id": DEFAULT_SHEET_ID,
-    "columns": default_columns
+    "weapon": "spada", "font_family": "Roboto Mono", "font_timer": 8.0, "font_score": 15.0, "font_name": 3.0, "font_list": 1.5,
+    "col_center_width": 1.2, "list_padding": 0.5, "text_border": 0.0, "photo_size": 150, "time_match": 180, "time_break": 60, "time_medical": 300,
+    "refresh_rate": 30, "buzzer_volume": 1.0, "default_name_left": "ATLETA SX", "default_name_right": "ATLETA DX", 
+    "google_script_url": "", "google_sheet_id": DEFAULT_SHEET_ID, "columns": default_columns
 }
 
 default_state = {
     "timer": 180.0, "running": False, "phase": "MATCH", "priority": None,
-    "fencer_left": new_fencer(default_settings["default_name_left"]), 
-    "fencer_right": new_fencer(default_settings["default_name_right"]),
+    "fencer_left": new_fencer(default_settings["default_name_left"]), "fencer_right": new_fencer(default_settings["default_name_right"]),
     "period": 1, "admin_connected": False, "server_ip": get_local_ip(), "ssid": get_current_ssid(),
-    "match_list": [], 
-    "current_girone": "rosso", 
-    "active_girone": "rosso",
-    "current_row_idx": None,
-    "manual_selection": False, "swapped": False,
-    "settings": default_settings.copy(), "wifi_connected": False
+    "match_list": [], "current_girone": "rosso", "active_girone": "rosso", "current_row_idx": None,
+    "manual_selection": False, "swapped": False, "settings": default_settings.copy(), "wifi_connected": False
 }
 
 current_state = default_state.copy()
@@ -145,15 +133,23 @@ def save_state():
         with open(STATE_FILE, 'w') as f: json.dump(current_state, f)
     except: pass
 
-def async_save():
-    """Salvataggio in background per azzerare il lag"""
+def async_save(): 
     save_state()
 
 def load_state():
     global current_state
+    file_to_load = None
+    loaded_from_old = False
+    
     if os.path.exists(STATE_FILE):
+        file_to_load = STATE_FILE
+    elif os.path.exists(OLD_STATE_FILE):
+        file_to_load = OLD_STATE_FILE
+        loaded_from_old = True
+        
+    if file_to_load:
         try:
-            with open(STATE_FILE, 'r') as f:
+            with open(file_to_load, 'r') as f:
                 data = json.load(f)
                 data['running'] = False
                 data['server_ip'] = get_local_ip()
@@ -165,7 +161,7 @@ def load_state():
                 
                 saved_s = data.get('settings', {})
                 data['settings'] = default_settings.copy()
-                data['settings'].update(saved_s)
+                data['settings'].update(saved_s) 
                 
                 if 'columns' not in data['settings']: data['settings']['columns'] = default_columns.copy()
                 if 'google_sheet_id' not in data['settings']: data['settings']['google_sheet_id'] = DEFAULT_SHEET_ID
@@ -180,9 +176,13 @@ def load_state():
                     if 'R_count' not in data['fencer_right']['cards']: data['fencer_right']['cards']['R_count'] = 0
                 
                 current_state = data
-                if 'active_girone' not in current_state:
+                if 'active_girone' not in current_state: 
                     current_state['active_girone'] = current_state.get('current_girone', 'rosso')
-        except: pass
+                    
+            if loaded_from_old:
+                save_state()
+        except Exception as e: 
+            print("Errore nel caricamento del salvataggio:", e)
 
 def push_history():
     global history_stack
@@ -235,31 +235,24 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-# --- LOGICA PUNTEGGI ISTANTANEA DA PICO ---
 def process_hw_hit(side, delta=1):
     global last_hit_time, hit_sides_in_window
     now = time.time()
-    
-    if current_state.get('phase') != 'MATCH' or current_state['timer'] <= 0:
-        return
+    if current_state.get('phase') != 'MATCH' or current_state['timer'] <= 0: return
         
-    # 1. PRIMA STOCCATA - STOP ISTANTANEO
     if current_state['running']:
-        current_state['running'] = False # FERMA IL TEMPO
+        current_state['running'] = False
         last_hit_time = now
         hit_sides_in_window = {side}
         current_state[f'fencer_{side}']['score'] += delta
-        
         socketio.emit('hw_hit', {'side': side, 'is_double': False})
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
         eventlet.spawn(async_save)
         
-    # 2. COLPO DOPPIO - Entro 0.2s dallo stop
     elif side not in hit_sides_in_window and (now - last_hit_time < 0.2):
         hit_sides_in_window.add(side)
         current_state[f'fencer_{side}']['score'] += delta
-        
         socketio.emit('hw_hit', {'side': side, 'is_double': True})
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
@@ -267,11 +260,9 @@ def process_hw_hit(side, delta=1):
 
 @app.route('/api/update_score_hw', methods=['POST'])
 def update_score_hw():
-    # Fallback per richieste HTTP se si usa il vecchio script Pico
     try: data = request.get_json(force=True, silent=True)
     except: data = None
-    if not data: return jsonify({"status": "error", "message": "JSON errato"}), 400
-    
+    if not data: return jsonify({"status": "error"}), 400
     side = data.get('side') 
     delta = data.get('delta', 1)
     process_hw_hit(side, delta)
@@ -280,12 +271,13 @@ def update_score_hw():
 @app.route('/api/pico_status')
 def get_pico_status():
     now = time.time()
+    r_active = (now - pico_last_seen['rosso']['time']) < 5
+    v_active = (now - pico_last_seen['verde']['time']) < 5
     return jsonify({
-        'rosso': (now - pico_last_seen['rosso']) < 5,
-        'verde': (now - pico_last_seen['verde']) < 5
+        'rosso': {'active': r_active, 'bat': pico_last_seen['rosso']['bat'] if r_active else 0},
+        'verde': {'active': v_active, 'bat': pico_last_seen['verde']['bat'] if v_active else 0}
     })
 
-# --- API REST STANDARD ---
 @app.route('/api/scan_wifi')
 def api_scan(): return jsonify(scan_wifi_networks())
 @app.route('/api/saved_wifi')
@@ -301,6 +293,7 @@ def api_connect():
         current_state['wifi_connected'] = True
         return jsonify({"status": "success", "ip": current_state['server_ip']})
     else: return jsonify({"status": "error"}), 400
+
 @app.route('/api/delete_wifi', methods=['POST'])
 def api_delete_wifi():
     data = request.json
@@ -401,13 +394,11 @@ def download_photos():
                         zf.write(filepath, arcname=file)
         memory_file.seek(0)
         return send_file(memory_file, mimetype='application/zip', as_attachment=True, download_name='foto_atleti.zip')
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception as e: return jsonify({"error": str(e)}), 500
 
 @app.route('/api/get_fonts')
 def api_get_fonts(): return jsonify(get_system_fonts())
 
-# --- SOCKET ---
 @socketio.on('connect')
 def handle_connect(): 
     current_state['server_ip'] = get_local_ip()
@@ -435,15 +426,8 @@ def handle_score(d):
     push_history()
     side = d['side']
     current_state[f'fencer_{side}']['score'] = max(0, current_state[f'fencer_{side}']['score'] + d['delta'])
-    
-    # FERMA SEMPRE IL TEMPO SE CAMBIA IL PUNTEGGIO
     current_state['running'] = False
-    
-    if d['delta'] > 0: 
-        # Invia il comando luce/suono senza broadcast=True che causa errore
-        socketio.emit('hw_hit', {'side': side, 'is_double': False})
-    
-    # Usa socketio.emit per forzare l'aggiornamento a TUTTI i client (TV inclusa)
+    if d['delta'] > 0: socketio.emit('hw_hit', {'side': side, 'is_double': False})
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
     eventlet.spawn(async_save)
@@ -458,7 +442,7 @@ def handle_toggle():
 def handle_adjust_time(data):
     push_history()
     current_state['timer'] = max(0, current_state['timer'] + float(data.get('delta',0)))
-    current_state['running'] = False # Ferma il tempo se si regola
+    current_state['running'] = False 
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
     eventlet.spawn(async_save)
@@ -471,8 +455,6 @@ def handle_card(d):
     fencer = current_state[f'fencer_{side}']
     opp_side = 'right' if side == 'left' else 'left'
     opponent = current_state[f'fencer_{opp_side}']
-
-    # OGNI AZIONE CARTELLINO FERMA IL TEMPO
     current_state['running'] = False
 
     if card_type.startswith('P_'):
@@ -483,8 +465,7 @@ def handle_card(d):
         red_count = fencer['cards'].get('R_count', 0)
         has_black = fencer['cards']['B']
 
-        if card_type == 'B':
-            fencer['cards']['B'] = True
+        if card_type == 'B': fencer['cards']['B'] = True
         elif card_type in ['Y', 'R']:
             if has_black: pass
             else:
@@ -508,8 +489,7 @@ def db_hit():
     push_history()
     current_state['fencer_left']['score'] += 1
     current_state['fencer_right']['score'] += 1
-    current_state['running'] = False # FERMA IL TEMPO
-    
+    current_state['running'] = False 
     socketio.emit('hw_hit', {'side': 'double', 'is_double': True})
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
@@ -583,11 +563,8 @@ def f_sheet(d=None):
 @socketio.on('load_match')
 def l_match(d):
     push_history()
-    if 'girone' in d:
-        current_state['active_girone'] = d['girone']
-    else:
-        current_state['active_girone'] = current_state.get('current_girone', 'rosso')
-        
+    if 'girone' in d: current_state['active_girone'] = d['girone']
+    else: current_state['active_girone'] = current_state.get('current_girone', 'rosso')
     load_match_data(d) 
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
@@ -626,11 +603,10 @@ def handle_send_result():
         socketio.emit('action_feedback', {'status': 'error', 'msg': 'Manca URL Script nelle Impostazioni!'})
         return
     if not current_state['current_row_idx']:
-        socketio.emit('action_feedback', {'status': 'error', 'msg': 'Nessun assalto caricato dalla lista.'})
+        socketio.emit('action_feedback', {'status': 'error', 'msg': 'Nessun assalto caricato.'})
         return
 
     g = current_state.get('active_girone', current_state.get('current_girone', 'rosso'))
-    
     cols_map = current_state['settings'].get('columns', default_columns)
     cols = cols_map.get(g, default_columns['rosso']) 
     c_psx = letter_to_sheet_col(cols['psx'])
@@ -638,44 +614,28 @@ def handle_send_result():
     
     val_sx_sheet = current_state['fencer_left']['score']
     val_dx_sheet = current_state['fencer_right']['score']
-    
     if current_state.get('swapped', False):
         val_sx_sheet = current_state['fencer_right']['score']
         val_dx_sheet = current_state['fencer_left']['score']
     
     payload = {
-        "sheet_name": "display3gir",
-        "row": current_state['current_row_idx'],
-        "col_sx": c_psx, "val_sx": val_sx_sheet,
-        "col_dx": c_pdx, "val_dx": val_dx_sheet
+        "sheet_name": "display3gir", "row": current_state['current_row_idx'],
+        "col_sx": c_psx, "val_sx": val_sx_sheet, "col_dx": c_pdx, "val_dx": val_dx_sheet
     }
-    
     socketio.emit('upload_status', {'color': 'blue'})
     socketio.emit('action_feedback', {'status': 'info', 'msg': 'Invio in background...'})
-    
     eventlet.spawn(process_background_upload, payload, g)
 
     matches = gironi_cache.get(g, [])
     current_row = int(payload['row'])
-    next_match = None
-    for m in matches:
-        if m['row'] > current_row:
-            try:
-                s1 = int(float(m['p_sx']))
-                s2 = int(float(m['p_dx']))
-                if s1 == 0 and s2 == 0:
-                    next_match = m
-                    break
-            except: pass
+    next_match = next((m for m in matches if m['row'] > current_row and int(float(m.get('p_sx',1))) == 0 and int(float(m.get('p_dx',1))) == 0), None)
             
     if next_match:
         current_state['active_girone'] = g
         load_match_data(next_match)
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
-        socketio.emit('action_feedback', {'status': 'success', 'msg': f'Caricato prossimo: {next_match["sx"]} vs {next_match["dx"]}'})
-    else:
-        socketio.emit('action_feedback', {'status': 'info', 'msg': 'Nessun prossimo assalto trovato.'})
+        socketio.emit('action_feedback', {'status': 'success', 'msg': f'Prossimo: {next_match["sx"]} vs {next_match["dx"]}'})
 
 def process_background_upload(payload, girone):
     try:
@@ -684,63 +644,40 @@ def process_background_upload(payload, girone):
         if r.status_code != 200 or "success" not in r.text:
             socketio.emit('upload_status', {'color': 'red'})
             return
-    except Exception as e:
+    except:
         socketio.emit('upload_status', {'color': 'red'})
         return
 
-    delays = [10, 30, 60]
-    verified = False
-    
-    for wait_time in delays:
-        if wait_time > 10:
-            socketio.emit('upload_status', {'color': 'yellow'})
-            
+    for wait_time in [10, 30, 60]:
+        if wait_time > 10: socketio.emit('upload_status', {'color': 'yellow'})
         eventlet.sleep(wait_time)
         update_all_gironi_data()
-        
-        matches = gironi_cache.get(girone, [])
-        target_row = int(payload['row'])
-        match_data = next((m for m in matches if m['row'] == target_row), None)
-        
+        match_data = next((m for m in gironi_cache.get(girone, []) if m['row'] == int(payload['row'])), None)
         if match_data:
             try:
-                cache_sx = int(float(match_data['p_sx']))
-                cache_dx = int(float(match_data['p_dx']))
-                sent_sx = int(payload['val_sx'])
-                sent_dx = int(payload['val_dx'])
-                
-                if cache_sx == sent_sx and cache_dx == sent_dx:
-                    verified = True
+                if int(float(match_data['p_sx'])) == int(payload['val_sx']) and int(float(match_data['p_dx'])) == int(payload['val_dx']):
                     socketio.emit('upload_status', {'color': 'green'}) 
                     eventlet.sleep(5)
                     socketio.emit('upload_status', {'color': 'none'})
-                    break
+                    return
             except: pass
-    
-    if not verified:
-        socketio.emit('upload_status', {'color': 'red'})
+    socketio.emit('upload_status', {'color': 'red'})
 
 def check_internet():
-    try:
-        requests.get('https://www.google.com', timeout=2)
-        return True
+    try: requests.get('https://www.google.com', timeout=2); return True
     except: return False
 
 def check_google():
     if not current_state['settings'].get('google_script_url'): return "missing"
-    if last_google_status == "error": return "error"
     if not check_internet(): return "error"
     return "ok" 
 
-def check_status_thread_logic():
-    s = {'internet': check_internet(), 'google': check_google()}
-    socketio.emit('status_check', s)
+def check_status_thread_logic(): socketio.emit('status_check', {'internet': check_internet(), 'google': check_google()})
 
 @socketio.on('update_settings')
 def up_set(d):
     for k,v in d.items(): 
-        if k == 'columns':
-            current_state['settings']['columns'] = v
+        if k == 'columns': current_state['settings']['columns'] = v
         elif k in current_state['settings']: 
             if k in ['font_family','google_script_url', 'google_sheet_id', 'weapon'] or k.startswith('default_name'):
                  current_state['settings'][k] = str(v)
@@ -761,38 +698,25 @@ def update_all_gironi_data():
     global gironi_cache
     try:
         sid = current_state['settings'].get('google_sheet_id', DEFAULT_SHEET_ID)
-        nocache_url = f"https://docs.google.com/spreadsheets/d/{sid}/gviz/tq?tqx=out:csv&sheet=display3gir&t={int(time.time())}"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        r = requests.get(nocache_url, headers=headers)
-        
+        r = requests.get(f"https://docs.google.com/spreadsheets/d/{sid}/gviz/tq?tqx=out:csv&sheet=display3gir&t={int(time.time())}", headers={'User-Agent': 'Mozilla/5.0'})
         r.encoding = 'utf-8'
         lines = r.text.strip().split('\n')
         new_cache = {k: [] for k in GIRONI_MAP_READ.keys()}
-        
         cols_map = current_state['settings'].get('columns', default_columns)
         
         for i, line in enumerate(lines[1:]): 
             row_idx = i + 2
             p = list(csv.reader([line]))[0]
-            
             for girone in GIRONI_MAP_READ.keys():
                 g_cols = cols_map.get(girone)
                 if not g_cols: continue
-                
-                idx_sx = letter_to_index(g_cols['sx'])
-                idx_psx = letter_to_index(g_cols['psx'])
-                idx_pdx = letter_to_index(g_cols['pdx'])
-                idx_dx = letter_to_index(g_cols['dx'])
-                
+                idx_sx, idx_psx, idx_pdx, idx_dx = letter_to_index(g_cols['sx']), letter_to_index(g_cols['psx']), letter_to_index(g_cols['pdx']), letter_to_index(g_cols['dx'])
                 max_idx = max(idx_sx, idx_psx, idx_pdx, idx_dx)
                 
                 if len(p) > max_idx and p[idx_sx] and p[idx_dx]:
-                    name_sx = clean_fencer_name(p[idx_sx])
-                    name_dx = clean_fencer_name(p[idx_dx])
+                    name_sx, name_dx = clean_fencer_name(p[idx_sx]), clean_fencer_name(p[idx_dx])
                     if not name_sx or not name_dx or name_sx.isdigit() or name_dx.isdigit() or len(name_sx) < 2 or len(name_dx) < 2: continue
-                    p_sx = p[idx_psx] if p[idx_psx] else "0"
-                    p_dx = p[idx_pdx] if p[idx_pdx] else "0"
-                    new_cache[girone].append({"sx": name_sx, "p_sx": p_sx, "p_dx": p_dx, "dx": name_dx, "row": row_idx})
+                    new_cache[girone].append({"sx": name_sx, "p_sx": p[idx_psx] if p[idx_psx] else "0", "p_dx": p[idx_pdx] if p[idx_pdx] else "0", "dx": name_dx, "row": row_idx})
         
         gironi_cache = new_cache
         socketio.emit('gironi_cache_update', gironi_cache)
@@ -804,70 +728,46 @@ def update_all_gironi_data():
         if curr_row and curr_gir in gironi_cache:
             for m in gironi_cache[curr_gir]:
                 if m['row'] == curr_row:
-                    new_sx = m['sx']
-                    new_dx = m['dx']
-                    
-                    if current_state.get('swapped', False):
-                        target_left_name = new_dx
-                        target_right_name = new_sx
-                    else:
-                        target_left_name = new_sx
-                        target_right_name = new_dx
-                        
-                    if current_state['fencer_left']['name'] != target_left_name or current_state['fencer_right']['name'] != target_right_name:
-                        current_state['fencer_left']['name'] = target_left_name
-                        current_state['fencer_left']['photo'] = get_photo_url(target_left_name)
-                        current_state['fencer_right']['name'] = target_right_name
-                        current_state['fencer_right']['photo'] = get_photo_url(target_right_name)
+                    target_l, target_r = (m['dx'], m['sx']) if current_state.get('swapped', False) else (m['sx'], m['dx'])
+                    if current_state['fencer_left']['name'] != target_l or current_state['fencer_right']['name'] != target_r:
+                        current_state['fencer_left']['name'] = target_l
+                        current_state['fencer_left']['photo'] = get_photo_url(target_l)
+                        current_state['fencer_right']['name'] = target_r
+                        current_state['fencer_right']['photo'] = get_photo_url(target_r)
                         updated_current = True
                     break
 
         cg = current_state.get('current_girone', 'rosso')
         current_state['match_list'] = new_cache.get(cg, [])
-        
-        if updated_current:
-            socketio.emit('state_update', current_state)
-            eventlet.spawn(async_save)
-        else:
-            socketio.emit('state_update', current_state)
+        socketio.emit('state_update', current_state)
+        if updated_current: eventlet.spawn(async_save)
             
         if not current_state.get('manual_selection') and not current_state['running'] and current_state['timer'] == float(current_state['settings']['time_match']):
-             matches = new_cache.get(cg, [])
-             next_match = next((m for m in matches if (int(m['p_sx']) == 0 and int(m['p_dx']) == 0)), None)
-             
+             next_match = next((m for m in new_cache.get(cg, []) if (int(m['p_sx']) == 0 and int(m['p_dx']) == 0)), None)
              if not next_match:
                  current_state['fencer_left']['name'] = current_state['settings']['default_name_left']
                  current_state['fencer_right']['name'] = current_state['settings']['default_name_right']
-                 current_state['fencer_left']['photo'] = get_photo_url(None)
-                 current_state['fencer_right']['photo'] = get_photo_url(None)
+                 current_state['fencer_left']['photo'], current_state['fencer_right']['photo'] = get_photo_url(None), get_photo_url(None)
                  current_state['current_row_idx'] = None
-                 current_state['fencer_left']['score'] = 0
-                 current_state['fencer_right']['score'] = 0
+                 current_state['fencer_left']['score'] = current_state['fencer_right']['score'] = 0
                  current_state['swapped'] = False
                  current_state['active_girone'] = cg 
-                 socketio.emit('state_update', current_state)
-                 eventlet.spawn(async_save)
-             
              elif (current_state['fencer_left']['name'] != next_match['sx'] or current_state['fencer_right']['name'] != next_match['dx']):
                  current_state['fencer_left']['name'] = next_match['sx']
                  current_state['fencer_right']['name'] = next_match['dx']
-                 current_state['fencer_left']['photo'] = get_photo_url(next_match['sx'])
-                 current_state['fencer_right']['photo'] = get_photo_url(next_match['dx'])
+                 current_state['fencer_left']['photo'], current_state['fencer_right']['photo'] = get_photo_url(next_match['sx']), get_photo_url(next_match['dx'])
                  current_state['current_row_idx'] = next_match['row']
-                 current_state['fencer_left']['score'] = 0
-                 current_state['fencer_right']['score'] = 0
+                 current_state['fencer_left']['score'] = current_state['fencer_right']['score'] = 0
                  current_state['swapped'] = False
                  current_state['active_girone'] = cg 
-                 socketio.emit('state_update', current_state)
-                 eventlet.spawn(async_save)
-
+             socketio.emit('state_update', current_state)
+             eventlet.spawn(async_save)
     except Exception as e: print(f"Update error: {e}")
 
 def data_refresh_thread():
     while True:
         update_all_gironi_data()
-        rate = max(10, float(current_state['settings'].get('refresh_rate', 30)))
-        eventlet.sleep(rate)
+        eventlet.sleep(max(10, float(current_state['settings'].get('refresh_rate', 30))))
 
 def status_check_thread():
     while True:
@@ -876,28 +776,22 @@ def status_check_thread():
 
 def timer_thread():
     while True:
-        try:
-            if current_state['running']:
-                if current_state['timer'] > 0:
-                    current_state['timer'] -= 0.1
-                    if current_state['timer'] < 0: current_state['timer'] = 0
-                    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase','MATCH')})
-                    if current_state['timer'] <= 0:
-                        socketio.emit('time_expired')
-                        if current_state.get('phase') == 'MATCH':
-                            current_state['phase'] = 'BREAK'
-                            current_state['timer'] = float(current_state['settings']['time_break'])
-                            current_state['running'] = True
-                        else:
-                            current_state['phase'] = 'MATCH'
-                            current_state['timer'] = float(current_state['settings']['time_match'])
-                            current_state['running'] = False
-                        socketio.emit('state_update', current_state)
-                        eventlet.spawn(async_save)
-                else:
-                    current_state['running'] = False
+        if current_state['running']:
+            if current_state['timer'] > 0:
+                current_state['timer'] -= 0.1
+                if current_state['timer'] < 0: current_state['timer'] = 0
+                socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase','MATCH')})
+                if current_state['timer'] <= 0:
+                    socketio.emit('time_expired')
+                    if current_state.get('phase') == 'MATCH':
+                        current_state['phase'], current_state['timer'], current_state['running'] = 'BREAK', float(current_state['settings']['time_break']), True
+                    else:
+                        current_state['phase'], current_state['timer'], current_state['running'] = 'MATCH', float(current_state['settings']['time_match']), False
+                    socketio.emit('state_update', current_state)
                     eventlet.spawn(async_save)
-        except Exception as e: print(f"Timer error: {e}")
+            else:
+                current_state['running'] = False
+                eventlet.spawn(async_save)
         eventlet.sleep(0.1)
 
 def udp_listener_thread():
@@ -909,17 +803,17 @@ def udp_listener_thread():
             data, addr = udp_sock.recvfrom(1024)
             msg = data.decode('utf-8')
             
-            # GESTIONE FULMINEA PUNTEGGI DA UDP
-            if "HIT_ROSSO" in msg:
-                process_hw_hit("left")
-            elif "HIT_VERDE" in msg:
-                process_hw_hit("right")
-            elif "PING_ROSSO" in msg:
-                pico_last_seen['rosso'] = time.time()
-            elif "PING_VERDE" in msg:
-                pico_last_seen['verde'] = time.time()
-        except Exception as e:
-            pass
+            if "HIT_ROSSO" in msg: process_hw_hit("left")
+            elif "HIT_VERDE" in msg: process_hw_hit("right")
+            elif msg.startswith("PING_ROSSO"):
+                parts = msg.split('_')
+                bat = parts[2] if len(parts) > 2 else 100
+                pico_last_seen['rosso'] = {'time': time.time(), 'bat': bat}
+            elif msg.startswith("PING_VERDE"):
+                parts = msg.split('_')
+                bat = parts[2] if len(parts) > 2 else 100
+                pico_last_seen['verde'] = {'time': time.time(), 'bat': bat}
+        except: pass
         eventlet.sleep(0.005)
 
 eventlet.spawn(timer_thread)

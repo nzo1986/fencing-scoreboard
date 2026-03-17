@@ -7,196 +7,241 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        body{background:#111;color:#eee;font-family:sans-serif;touch-action:manipulation}
-        .adjust-btn{width:50px;height:50px;font-size:1.5rem;font-weight:bold;border-radius:50%;border:none;display:flex;align-items:center;justify-content:center}
-        .btn-minus{background:#d32f2f;color:white}.btn-plus{background:#388e3c;color:white}
-        .val-display{font-size:1.5rem;font-weight:bold;min-width:60px;text-align:center}
-        .row-ctrl{display:flex;align-items:center;justify-content:space-between;background:#222;padding:10px;margin-bottom:10px;border-radius:8px}
-        .lbl{font-size:1.1rem}
-        .font-btn{padding:10px 15px;margin:5px;background:#333;border:1px solid #555;border-radius:5px;cursor:pointer;text-align:left;display:block;width:100%;color:white}
-        .font-btn:hover{background:#444}.font-btn.active{border-color:#00aa00;background:#224422}
-        #font-list{max-height:250px;overflow-y:auto}
-        /* Nuovi Stili per la selezione Arma */
-        .weapon-btn { transition: all 0.2s; border: 2px solid transparent; }
-        .weapon-btn.active { background-color: #3b82f6; border-color: #93c5fd; box-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
+        body { background: #111; color: #eee; font-family: sans-serif; touch-action: manipulation; padding-bottom: 30px; }
+        
+        .adjust-btn { width: 45px; height: 45px; font-size: 1.5rem; font-weight: bold; border-radius: 8px; border: none; display: flex; align-items: center; justify-content: center; }
+        .btn-minus { background: #d32f2f; color: white; }
+        .btn-plus { background: #388e3c; color: white; }
+        .val-display { font-size: 1.2rem; font-weight: bold; min-width: 50px; text-align: center; }
+        
+        .row-ctrl { display: flex; align-items: center; justify-content: space-between; padding: 15px; border-bottom: 1px solid #333; }
+        .row-ctrl:last-child { border-bottom: none; }
+        .lbl { font-size: 1.1rem; color: #ccc; }
+        
+        .font-btn { padding: 10px 15px; margin: 5px; background: #333; border: 1px solid #555; border-radius: 4px; color: white; transition: 0.2s; }
+        .font-btn.active { background: #2563eb; border-color: #3b82f6; box-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
+        
+        /* Stili avanzati per Accordion (Menu a tendina) */
+        details { background: #222; border: 1px solid #444; border-radius: 8px; margin-bottom: 15px; overflow: hidden; transition: all 0.3s ease; }
+        summary { padding: 18px 20px; font-size: 1.25rem; font-weight: bold; background: #333; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; user-select: none; }
+        summary::-webkit-details-marker { display: none; }
+        summary::after { content: "▼"; font-size: 1.1rem; color: #888; transition: transform 0.3s; }
+        details[open] summary::after { transform: rotate(180deg); color: white; }
+        details[open] summary { border-bottom: 1px solid #444; background: #3a3a3a; color: #60a5fa; }
+        .details-content { padding: 10px 5px; animation: fadeIn 0.3s ease-in-out; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .sys-btn { width: 100%; padding: 15px; font-size: 1.2rem; font-weight: bold; border-radius: 8px; border: none; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        input[type="text"] { width: 100%; padding: 12px; background: #111; color: white; border: 1px solid #555; border-radius: 6px; margin-top: 8px; font-family: monospace; font-size: 1rem; }
+        input[type="text"]:focus { border-color: #3b82f6; outline: none; }
+        
+        .bat-info { background: #1a1a1a; padding: 15px; border-radius: 8px; font-size: 0.95rem; color: #aaa; border: 1px dashed #555; line-height: 1.5; }
     </style>
 </head>
-<body class="p-4">
-    <div class="flex justify-between items-center mb-4 border-b border-gray-600 pb-2">
-        <h1 class="text-2xl font-bold">Impostazioni Live</h1>
-        <button onclick="window.location.href='/telecomando'" class="bg-gray-600 px-4 py-2 rounded font-bold">Indietro</button>
+<body>
+    <div class="flex justify-between items-center p-4 mb-4 bg-gray-900 border-b border-gray-700 sticky top-0 z-50 shadow-lg">
+        <h1 class="text-2xl font-bold text-white flex items-center gap-2">⚙️ Impostazioni</h1>
+        <button onclick="window.location.href='/telecomando'" class="bg-gray-700 hover:bg-gray-600 px-5 py-2 rounded-lg font-bold text-white transition">Chiudi</button>
     </div>
 
-    <!-- NUOVA SEZIONE: STATO HARDWARE E ARMA -->
-    <div class="mb-6">
-        <h2 class="text-xl text-yellow-400 mb-2 font-bold">Stato Hardware & Arma</h2>
-        <div class="bg-gray-800 p-4 rounded shadow-lg border border-gray-700">
-            <!-- Stato Luci Pico W -->
-            <div class="flex justify-center gap-12 mb-6">
-                <div class="flex flex-col items-center">
-                    <div id="light-rosso" class="w-10 h-10 rounded-full bg-gray-600 mb-2 transition-all duration-300"></div>
-                    <span class="font-bold text-red-500">ROSSO</span>
+    <div class="px-3 max-w-2xl mx-auto">
+        
+        <!-- 1. GRAFICA DISPLAY E FONT -->
+        <details>
+            <summary>Grafica Display & Font</summary>
+            <div class="details-content">
+                <div class="row-ctrl">
+                    <span class="lbl">Dimensione Timer</span>
+                    <div class="flex items-center gap-2">
+                        <button class="adjust-btn btn-minus" onclick="adj('font_timer',-0.5)">-</button>
+                        <span class="val-display" id="val_font_timer">8.0</span>
+                        <button class="adjust-btn btn-plus" onclick="adj('font_timer',0.5)">+</button>
+                    </div>
                 </div>
-                <div class="flex flex-col items-center">
-                    <div id="light-verde" class="w-10 h-10 rounded-full bg-gray-600 mb-2 transition-all duration-300"></div>
-                    <span class="font-bold text-green-500">VERDE</span>
+                <div class="row-ctrl">
+                    <span class="lbl">Dimensione Punteggio</span>
+                    <div class="flex items-center gap-2">
+                        <button class="adjust-btn btn-minus" onclick="adj('font_score',-0.5)">-</button>
+                        <span class="val-display" id="val_font_score">15.0</span>
+                        <button class="adjust-btn btn-plus" onclick="adj('font_score',0.5)">+</button>
+                    </div>
                 </div>
-            </div>
-            <!-- Selezione Arma -->
-            <div class="flex flex-col sm:flex-row justify-center gap-4">
-                <button id="wpn-spada" class="weapon-btn bg-gray-600 px-4 py-3 rounded text-lg font-bold flex-1" onclick="setWeapon('spada')">SPADA</button>
-                <button id="wpn-fioretto" class="weapon-btn bg-gray-600 px-4 py-3 rounded text-lg font-bold flex-1" onclick="setWeapon('fioretto')">FIORETTO</button>
-                <button id="wpn-sciabola" class="weapon-btn bg-gray-600 px-4 py-3 rounded text-lg font-bold flex-1" onclick="setWeapon('sciabola')">SCIABOLA</button>
-            </div>
-        </div>
-    </div>
-    
-    <div class="mb-6">
-        <h2 class="text-xl text-yellow-400 mb-2 font-bold">Carattere (Font)</h2>
-        <div id="font-list" class="bg-gray-800 p-2 rounded"><p>Caricamento font...</p></div>
-    </div>
-    
-    <div class="mb-6">
-        <h2 class="text-xl text-yellow-400 mb-2 font-bold">Aspetto Display</h2>
-        <div class="row-ctrl"><span class="lbl">Timer Size</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('font_timer',-0.5)">-</button><span id="val_font_timer" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('font_timer',0.5)">+</button></div></div>
-        <div class="row-ctrl"><span class="lbl">Score Size</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('font_score',-0.5)">-</button><span id="val_font_score" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('font_score',0.5)">+</button></div></div>
-        <div class="row-ctrl"><span class="lbl">Name Size</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('font_name',-0.2)">-</button><span id="val_font_name" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('font_name',0.2)">+</button></div></div>
-        <div class="row-ctrl"><span class="lbl">Font Lista</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('font_list',-0.1)">-</button><span id="val_font_list" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('font_list',0.1)">+</button></div></div>
-        <div class="row-ctrl"><span class="lbl">Larghezza Lista</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('col_center_width',-0.1)">-</button><span id="val_col_center_width" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('col_center_width',0.1)">+</button></div></div>
-        <div class="row-ctrl"><span class="lbl">Spaziatura Lista</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('list_padding',-0.1)">-</button><span id="val_list_padding" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('list_padding',0.1)">+</button></div></div>
-        <div class="row-ctrl"><span class="lbl">Foto (px)</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('photo_size',-10)">-</button><span id="val_photo_size" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('photo_size',10)">+</button></div></div>
-        <div class="row-ctrl"><span class="lbl">Bordo Testo</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('text_border',-0.05)">-</button><span id="val_text_border" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('text_border',0.05)">+</button></div></div>
-    </div>
-    
-    <div class="mb-6">
-        <h2 class="text-xl text-blue-400 mb-2 font-bold">Tempi (Secondi)</h2>
-        <div class="row-ctrl"><span class="lbl">Match</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('time_match',-10)">-</button><span id="val_time_match" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('time_match',10)">+</button></div></div>
-        <div class="row-ctrl"><span class="lbl">Pausa</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('time_break',-10)">-</button><span id="val_time_break" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('time_break',10)">+</button></div></div>
-        <div class="row-ctrl"><span class="lbl">Medico</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('time_medical',-10)">-</button><span id="val_time_medical" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('time_medical',10)">+</button></div></div>
-        <div class="row-ctrl"><span class="lbl">Refresh Dati (s)</span><div class="flex items-center gap-4"><button class="adjust-btn btn-minus" onclick="change('refresh_rate',-5)">-</button><span id="val_refresh_rate" class="val-display">--</span><button class="adjust-btn btn-plus" onclick="change('refresh_rate',5)">+</button></div></div>
-        <!-- VOLUME SLIDER -->
-        <div class="row-ctrl"><span class="lbl">Volume Suono</span><div class="flex items-center gap-4 w-1/2"><input type="range" id="val_buzzer_volume" min="0" max="1" step="0.1" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" onchange="updateText('buzzer_volume',this.value)"></div></div>
-    </div>
-    
-    <div class="mb-6">
-        <h2 class="text-xl text-green-400 mb-2 font-bold">Nomi Default (Reset)</h2>
-        <div class="space-y-2">
-            <div><label class="block text-sm text-gray-400">Atleta Sinistra</label><input type="text" id="val_default_name_left" class="w-full p-3 rounded bg-gray-800 text-white border border-gray-600 font-bold" onchange="updateText('default_name_left',this.value)"></div>
-            <div><label class="block text-sm text-gray-400">Atleta Destra</label><input type="text" id="val_default_name_right" class="w-full p-3 rounded bg-gray-800 text-white border border-gray-600 font-bold" onchange="updateText('default_name_right',this.value)"></div>
-        </div>
-    </div>
-    
-    <div class="mb-6">
-        <h2 class="text-xl text-green-400 mb-2 font-bold">Gestione Colonne</h2>
-        <button onclick="window.location.href='/riferimenti'" class="w-full bg-green-700 p-4 rounded font-bold text-xl mb-2">GESTIONE COLONNE EXCEL</button>
-    </div>
-    
-    <div class="mb-6">
-        <h2 class="text-xl text-purple-400 mb-2 font-bold">Integrazione Cloud</h2>
-        <div class="space-y-4">
-            <div>
-                <label class="block text-sm text-gray-400">ID Foglio Google (Sheet ID)</label>
-                <input type="text" id="val_google_sheet_id" class="w-full p-3 rounded bg-gray-800 text-white border border-gray-600 font-mono" placeholder="Es: 179tfN2PDrSTY..." onchange="updateText('google_sheet_id',this.value)">
-                <p class="text-xs text-gray-500 mt-1">L'ID è la parte lunga dell'URL del tuo foglio tra /d/ e /edit.</p>
-            </div>
-            <div>
-                <label class="block text-sm text-gray-400">URL Google Apps Script</label>
-                <input type="text" id="val_google_script_url" class="w-full p-3 rounded bg-gray-800 text-white border border-gray-600 font-mono" placeholder="https://script.google.com/..." onchange="updateText('google_script_url',this.value)">
-            </div>
-        </div>
-        <div class="mt-4"><button onclick="window.location.href='/wifi'" class="w-full bg-orange-700 p-4 rounded font-bold text-xl mb-2">CONFIGURA WIFI</button></div>
-    </div>
-    
-    <div class="mb-6">
-        <h2 class="text-xl text-purple-400 mb-2 font-bold">Gestione</h2>
-        <button onclick="window.location.href='/foto'" class="w-full bg-blue-700 p-4 rounded font-bold text-xl mb-2">GESTIONE FOTO ATLETI</button>
-        <button onclick="window.location.href='/download'" class="w-full bg-cyan-700 p-4 rounded font-bold text-xl mb-2 mt-2">AREA DOWNLOAD</button>
-    </div>
-    
-    <script>
-        const socket=io();
-        let settings={};
-        const numKeys=['font_timer','font_score','font_name','col_center_width','font_list','list_padding','text_border','time_match','time_break','time_medical','photo_size','refresh_rate'];
-        const textKeys=['default_name_left','default_name_right','google_script_url', 'google_sheet_id', 'buzzer_volume'];
-        
-        fetch('/api/get_fonts').then(r=>r.json()).then(f=>{
-            const l=document.getElementById('font-list');
-            l.innerHTML='';
-            f.forEach(fn=>{
-                const b=document.createElement('button');
-                b.className='font-btn';
-                b.style.fontFamily=fn;
-                b.innerHTML=`<span style="font-size:1.2rem">${fn}</span> <span style="float:right;font-weight:bold;">3:00</span>`;
-                b.onclick=()=>selectFont(fn);
-                if(settings.font_family===fn)b.classList.add('active');
-                l.appendChild(b)
-            })
-        });
-        
-        // Nuova funzione Arma
-        function setWeapon(w) {
-            socket.emit('update_settings', {weapon: w});
-        }
-        
-        socket.on('state_update',s=>{
-            if(s.settings){
-                settings=s.settings;
+                <div class="row-ctrl">
+                    <span class="lbl">Dimensione Nomi</span>
+                    <div class="flex items-center gap-2">
+                        <button class="adjust-btn btn-minus" onclick="adj('font_name',-0.5)">-</button>
+                        <span class="val-display" id="val_font_name">3.0</span>
+                        <button class="adjust-btn btn-plus" onclick="adj('font_name',0.5)">+</button>
+                    </div>
+                </div>
+                <div class="row-ctrl">
+                    <span class="lbl">Dimens. Foto (0=Nascondi)</span>
+                    <div class="flex items-center gap-2">
+                        <button class="adjust-btn btn-minus" onclick="adj('photo_size',-10)">-</button>
+                        <span class="val-display" id="val_photo_size">150</span>
+                        <button class="adjust-btn btn-plus" onclick="adj('photo_size',10)">+</button>
+                    </div>
+                </div>
                 
-                // Aggiorna Pulsanti Arma
-                ['spada', 'fioretto', 'sciabola'].forEach(w => {
-                    const btn = document.getElementById('wpn-' + w);
-                    if (btn) {
-                        if (settings.weapon === w) btn.classList.add('active');
-                        else btn.classList.remove('active');
-                    }
-                });
+                <div class="p-4 border-t border-gray-700 mt-2">
+                    <span class="lbl font-bold text-white block mb-3">Stile Font (Carattere testuale):</span>
+                    <div id="font-list" class="flex flex-wrap gap-2"></div>
+                </div>
+            </div>
+        </details>
 
-                numKeys.forEach(k=>{const el=document.getElementById('val_'+k);if(el)el.innerText=settings[k]});
-                textKeys.forEach(k=>{const el=document.getElementById('val_'+k);if(el&&document.activeElement!==el)el.value=settings[k]});
-                const btns=document.querySelectorAll('.font-btn');
-                btns.forEach(b=>{
-                    if(b.style.fontFamily.replace(/['"]+/g,'')===settings.font_family)b.classList.add('active');
-                    else b.classList.remove('active')
-                })
+        <!-- 2. GESTIONE TEMPO E AUDIO -->
+        <details>
+            <summary>Cronometro & Audio</summary>
+            <div class="details-content">
+                <div class="row-ctrl">
+                    <span class="lbl">Tempo Assalto (secondi)</span>
+                    <div class="flex items-center gap-2">
+                        <button class="adjust-btn btn-minus" onclick="adj('time_match',-10)">-</button>
+                        <span class="val-display" id="val_time_match">180</span>
+                        <button class="adjust-btn btn-plus" onclick="adj('time_match',10)">+</button>
+                    </div>
+                </div>
+                <div class="row-ctrl">
+                    <span class="lbl">Tempo Pausa (secondi)</span>
+                    <div class="flex items-center gap-2">
+                        <button class="adjust-btn btn-minus" onclick="adj('time_break',-10)">-</button>
+                        <span class="val-display" id="val_time_break">60</span>
+                        <button class="adjust-btn btn-plus" onclick="adj('time_break',10)">+</button>
+                    </div>
+                </div>
+                <div class="row-ctrl">
+                    <span class="lbl">Vol. Cicalino (0 = Muto)</span>
+                    <div class="flex items-center gap-2">
+                        <button class="adjust-btn btn-minus" onclick="adj('buzzer_volume',-0.1)">-</button>
+                        <span class="val-display" id="val_buzzer_volume">1.0</span>
+                        <button class="adjust-btn btn-plus" onclick="adj('buzzer_volume',0.1)">+</button>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- 3. CONFIGURAZIONE FOGLI GOOGLE -->
+        <details>
+            <summary>Sincronizzazione Google</summary>
+            <div class="details-content">
+                <div class="p-4">
+                    <label class="lbl font-bold block mb-1">📄 ID Foglio Google (Gironi):</label>
+                    <input type="text" id="google_sheet_id" placeholder="Es: 179tfN2PDrSTYtiAd..." onchange="updateText('google_sheet_id', this.value)">
+                </div>
+                <div class="p-4 border-t border-gray-700">
+                    <label class="lbl font-bold block mb-1">🔗 URL Apps Script (Invio Punti):</label>
+                    <input type="text" id="google_script_url" placeholder="https://script.google.com/macros/s/.../exec" onchange="updateText('google_script_url', this.value)">
+                </div>
+                <div class="row-ctrl border-t border-gray-700 mt-2">
+                    <span class="lbl font-bold">Aggiornamento Auto (sec)</span>
+                    <div class="flex items-center gap-2">
+                        <button class="adjust-btn btn-minus" onclick="adj('refresh_rate',-5)">-</button>
+                        <span class="val-display" id="val_refresh_rate">30</span>
+                        <button class="adjust-btn btn-plus" onclick="adj('refresh_rate',5)">+</button>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <button onclick="window.location.href='/riferimenti'" class="sys-btn bg-blue-800 hover:bg-blue-700 text-white transition">📐 Mappa Colonne Excel</button>
+                </div>
+            </div>
+        </details>
+
+        <!-- 4. INFO SENSORI E BATTERIA -->
+        <details>
+            <summary>Stato Sensori & Batteria</summary>
+            <div class="details-content p-4">
+                <div class="bat-info">
+                    <strong class="text-white text-lg block mb-2">🔋 Info Batterie Sensori Pico:</strong>
+                    <ul class="list-disc pl-5 space-y-2">
+                        <li>Se usi batterie <strong>LiPo/Li-Ion (3.7V)</strong>, la percentuale in alto sul telecomando è accurata.</li>
+                        <li><strong>Pronostico LiPo:</strong> 100% = ~8 ore di gara | 50% = ~4 ore | < 15% = Ricaricare presto.</li>
+                        <li>Se alimenti i sensori con un <strong>Powerbank USB (5V)</strong>, la percentuale segnerà perennemente <strong>100%</strong> perché il powerbank eroga voltaggio pieno fino all'esaurimento totale.</li>
+                    </ul>
+                </div>
+            </div>
+        </details>
+
+        <!-- 5. GESTIONE GENERALE DEL SISTEMA -->
+        <details>
+            <summary>Menu Sistema Avanzato</summary>
+            <div class="details-content p-4">
+                <button onclick="window.location.href='/foto'" class="sys-btn bg-indigo-700 hover:bg-indigo-600 text-white transition">📸 Gestione Foto Atleti</button>
+                <button onclick="window.location.href='/download'" class="sys-btn bg-purple-700 hover:bg-purple-600 text-white transition">💾 Scarica Dati (Backup)</button>
+                <button onclick="window.location.href='/wifi'" class="sys-btn bg-yellow-700 hover:bg-yellow-600 text-white transition mt-4">📡 Impostazioni Wi-Fi Pi4</button>
+            </div>
+        </details>
+        
+    </div>
+
+    <script>
+        const socket = io();
+        let settings = {};
+        
+        socket.on('state_update', s => {
+            if(s.settings) {
+                settings = s.settings;
+                // Aggiorna tutti i campi numerici visualizzati
+                ['font_timer','font_score','font_name','photo_size','time_match','time_break','buzzer_volume','refresh_rate'].forEach(k => {
+                    let e = document.getElementById('val_'+k);
+                    if(e) e.innerText = settings[k];
+                });
+                // Aggiorna gli URL e gli input di testo
+                document.getElementById('google_sheet_id').value = settings.google_sheet_id || '';
+                document.getElementById('google_script_url').value = settings.google_script_url || '';
+                loadFonts();
             }
         });
-        
-        function change(k,d){
-            let v=parseFloat(settings[k])||0;
-            v+=d; v=Math.round(v*100)/100;
-            if(v<0)v=0; settings[k]=v;
-            document.getElementById('val_'+k).innerText=v;
-            socket.emit('update_settings',{[k]:v})
-        }
-        function updateText(k,v){socket.emit('update_settings',{[k]:v})}
-        function selectFont(f){socket.emit('update_settings',{font_family:f})}
 
-        // Polling per lo stato dei Pico W ogni secondo
-        setInterval(() => {
-            fetch('/api/pico_status')
+        // Chiusura esclusiva degli accordion (se ne apri uno, chiudi gli altri)
+        const detailsElements = document.querySelectorAll('details');
+        detailsElements.forEach(targetDetail => {
+            targetDetail.addEventListener('click', () => {
+                detailsElements.forEach(detail => {
+                    if (detail !== targetDetail) detail.removeAttribute('open');
+                });
+            });
+        });
+
+        function adj(k, d) {
+            let v = parseFloat(settings[k]||0) + d;
+            // Arrotonda in base al tipo di parametro per evitare decimali strani
+            if(k === 'photo_size' || k.startswith('time_') || k === 'refresh_rate') v = Math.round(v);
+            else v = Math.round(v*10)/10;
+            
+            if(v < 0) v = 0; 
+            if(k === 'buzzer_volume' && v > 5) v = 5;
+            
+            settings[k] = v;
+            document.getElementById('val_'+k).innerText = v;
+            socket.emit('update_settings', {[k]: v});
+        }
+        
+        function updateText(k, v) { 
+            socket.emit('update_settings', {[k]: v.trim()}); 
+        }
+        
+        function selectFont(f) { 
+            socket.emit('update_settings', {font_family: f}); 
+        }
+
+        function loadFonts() {
+            fetch('/api/get_fonts')
                 .then(r => r.json())
-                .then(status => {
-                    const lr = document.getElementById('light-rosso');
-                    const lv = document.getElementById('light-verde');
-                    
-                    if(status.rosso) {
-                        lr.style.backgroundColor = '#ef4444';
-                        lr.style.boxShadow = '0 0 20px #ef4444';
-                    } else {
-                        lr.style.backgroundColor = '#4b5563';
-                        lr.style.boxShadow = 'none';
-                    }
-                    
-                    if(status.verde) {
-                        lv.style.backgroundColor = '#22c55e';
-                        lv.style.boxShadow = '0 0 20px #22c55e';
-                    } else {
-                        lv.style.backgroundColor = '#4b5563';
-                        lv.style.boxShadow = 'none';
-                    }
-                })
-                .catch(e => console.error("Errore fetch status Pico:", e));
-        }, 1000);
+                .then(fonts => {
+                    const c = document.getElementById('font-list'); 
+                    c.innerHTML = '';
+                    fonts.forEach(f => {
+                        let b = document.createElement('button');
+                        b.className = 'font-btn' + (settings.font_family === f ? ' active' : '');
+                        b.style.fontFamily = f;
+                        b.innerText = f;
+                        b.onclick = () => selectFont(f);
+                        c.appendChild(b);
+                    });
+                });
+        }
     </script>
 </body>
 </html>
