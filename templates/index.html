@@ -27,12 +27,15 @@
         .timer-box { font-size: var(--timer-size); line-height: 1; }
         .fencer-name { font-size: var(--name-size); font-weight: bold; text-align: center; margin-bottom: 20px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .score-box { font-size: var(--score-size); line-height: 1; }
-        .fencer-photo { width: var(--photo-size); height: auto; aspect-ratio: 3/4; border-radius: 10px; object-fit: cover; border: 3px solid #333; transition: box-shadow 0.1s, border-color 0.1s; display: none; }
+        .fencer-photo { width: var(--photo-size); height: auto; aspect-ratio: 3/4; border-radius: 10px; object-fit: cover; border: 3px solid #333; display: none; margin-bottom: 15px;}
         
-        .main-body { flex: 1; display: flex; width: 100%; overflow: hidden; }
-        .fencer-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
-        .score-container { display: flex; align-items: center; justify-content: center; gap: 20px; width: 100%; margin: 20px 0; }
+        .main-body { flex: 1; display: flex; width: 100%; overflow: hidden; padding: 10px; gap: 10px;}
         
+        /* COLONNE ATLETI (Modificate per l'illuminazione totale) */
+        .fencer-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; border-radius: 20px; border: 4px solid transparent; transition: background-color 0.2s, box-shadow 0.2s, border-color 0.2s; }
+        .score-container { display: flex; align-items: center; justify-content: center; gap: 20px; width: 100%; margin: 10px 0; flex-direction: column;}
+        .score-container-row { display: flex; align-items: center; justify-content: center; gap: 20px; }
+
         /* LISTA INCONTRI CENTRALE */
         .center-col { flex: var(--center-flex); background: transparent; display: flex; flex-direction: column; padding: 10px; overflow: hidden; transition: flex 0.3s; }
         .list-title { text-align: center; color: #555; font-size: 1.2rem; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 2px; }
@@ -41,10 +44,22 @@
         .match-item:nth-child(even) { background: rgba(50, 50, 50, 0.5); }
         .match-item span { color: #ccc; font-weight: bold;}
 
-        /* COLORI STOCCATA */
-        .hit-glow-left { border-color: #ff0000 !important; box-shadow: 0 0 60px #ff0000, inset 0 0 20px #ff0000; }
-        .hit-glow-right { border-color: #00ff00 !important; box-shadow: 0 0 60px #00ff00, inset 0 0 20px #00ff00; }
-        .hit-glow-white { border-color: #ffffff !important; box-shadow: 0 0 60px #ffffff, inset 0 0 30px #ffffff; }
+        /* COLORI STOCCATA E MASSA SULL'INTERA COLONNA */
+        .hit-glow-left { 
+            background-color: rgba(255, 0, 0, 0.25) !important;
+            border-color: #ff0000 !important; 
+            box-shadow: 0 0 80px rgba(255, 0, 0, 0.8), inset 0 0 50px rgba(255, 0, 0, 0.5) !important; 
+        }
+        .hit-glow-right { 
+            background-color: rgba(0, 255, 0, 0.25) !important;
+            border-color: #00ff00 !important; 
+            box-shadow: 0 0 80px rgba(0, 255, 0, 0.8), inset 0 0 50px rgba(0, 255, 0, 0.5) !important; 
+        }
+        .hit-glow-white { 
+            background-color: rgba(255, 255, 255, 0.15) !important;
+            border-color: #ffffff !important; 
+            box-shadow: 0 0 60px rgba(255, 255, 255, 0.6), inset 0 0 30px rgba(255, 255, 255, 0.4) !important; 
+        }
 
         /* OVERLAY AUDIO */
         #audio-unlocker { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.95); display: flex; justify-content: center; align-items: center; cursor: pointer; flex-direction: column; }
@@ -63,7 +78,7 @@
     </div>
     
     <div class="main-body">
-        <div class="fencer-col">
+        <div class="fencer-col" id="col-l">
             <h1 id="n-l" class="fencer-name stroked text-red-500">SX</h1>
             <div class="score-container">
                 <img id="ph-l" src="" class="fencer-photo border-red-800" onerror="this.src='/static/photos/default.png'">
@@ -76,11 +91,11 @@
             <div id="match-list-container" class="match-list"></div>
         </div>
 
-        <div class="fencer-col">
+        <div class="fencer-col" id="col-r">
             <h1 id="n-r" class="fencer-name stroked text-green-500">DX</h1>
             <div class="score-container">
-                <span id="s-r" class="score-box stroked text-green-600 font-bold">0</span>
                 <img id="ph-r" src="" class="fencer-photo border-green-800" onerror="this.src='/static/photos/default.png'">
+                <span id="s-r" class="score-box stroked text-green-600 font-bold">0</span>
             </div>
         </div>
     </div>
@@ -110,22 +125,29 @@
         }
 
         socket.on('hw_hit', data => {
-            playBeep(1200, 3.0); 
+            // Suono ridotto a 1.5 secondi per il punto
+            playBeep(1200, 1.5); 
+            
+            // Applica l'illuminazione all'intera colonna (col-l / col-r)
             if (data.side === 'left' || data.is_double) {
-                document.getElementById('ph-l').classList.add('hit-glow-left');
-                setTimeout(() => document.getElementById('ph-l').classList.remove('hit-glow-left'), 3000);
+                const colL = document.getElementById('col-l');
+                colL.classList.add('hit-glow-left');
+                setTimeout(() => colL.classList.remove('hit-glow-left'), 3000);
             }
             if (data.side === 'right' || data.is_double) {
-                document.getElementById('ph-r').classList.add('hit-glow-right');
-                setTimeout(() => document.getElementById('ph-r').classList.remove('hit-glow-right'), 3000);
+                const colR = document.getElementById('col-r');
+                colR.classList.add('hit-glow-right');
+                setTimeout(() => colR.classList.remove('hit-glow-right'), 3000);
             }
         });
 
         socket.on('hw_massa', data => {
-            playBeep(800, 1.0);
-            const img = document.getElementById(data.side === 'left' ? 'ph-l' : 'ph-r');
-            img.classList.add('hit-glow-white');
-            setTimeout(() => img.classList.remove('hit-glow-white'), 1500); 
+            // NESSUN SUONO EMANATO PER LA COCCIA
+            
+            // Illumina di bianco tutta la colonna dell'atleta
+            const col = document.getElementById(data.side === 'left' ? 'col-l' : 'col-r');
+            col.classList.add('hit-glow-white');
+            setTimeout(() => col.classList.remove('hit-glow-white'), 1500); 
         });
 
         socket.on('time_expired', () => { playBeep(500, 1.0); });

@@ -359,7 +359,7 @@ def handle_score(d):
     current_state['running'] = False
     
     if d['delta'] > 0: 
-        socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True})
+        socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True, 'is_manual': True})
         
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
@@ -425,7 +425,7 @@ def db_hit():
     current_state['fencer_right']['score'] += 1
     current_state['running'] = False 
     
-    socketio.emit('hw_hit', {'side': 'double', 'is_double': True, 'score_added': True})
+    socketio.emit('hw_hit', {'side': 'double', 'is_double': True, 'score_added': True, 'is_manual': True})
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
     eventlet.spawn(async_save)
