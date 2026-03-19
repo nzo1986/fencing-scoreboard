@@ -127,7 +127,7 @@ default_settings = {
     "default_name_right": "ATLETA DX", 
     "google_script_url": "", 
     "google_sheet_id": DEFAULT_SHEET_ID, 
-    "columns": default_columns
+    "columns": copy.deepcopy(default_columns)
 }
 
 default_state = {
@@ -147,11 +147,11 @@ default_state = {
     "current_row_idx": None, 
     "manual_selection": False, 
     "swapped": False, 
-    "settings": default_settings.copy(), 
+    "settings": copy.deepcopy(default_settings), 
     "wifi_connected": False
 }
 
-current_state = default_state.copy()
+current_state = copy.deepcopy(default_state)
 
 def save_state():
     try:
@@ -168,15 +168,50 @@ def load_state():
         try:
             with open(file_to_load, 'r') as f:
                 data = json.load(f)
-                data.update({'running': False, 'server_ip': get_local_ip(), 'ssid': get_current_ssid(), 'wifi_connected': get_local_ip() != '127.0.0.1'})
-                saved_s = data.get('settings', {})
-                data['settings'] = default_settings.copy()
-                data['settings'].update(saved_s)
-                if 'fencer_left' in data: data['fencer_left']['photo'] = get_photo_url(data['fencer_left']['name'])
-                if 'fencer_right' in data: data['fencer_right']['photo'] = get_photo_url(data['fencer_right']['name'])
-                current_state = data
-            if file_to_load == OLD_STATE_FILE: save_state()
-        except: pass
+                
+                # Unione intelligente: aggiorna le impostazioni preservando i default
+                if 'settings' in data:
+                    current_state['settings'].update(data['settings'])
+                
+                # Aggiorna fencer_left senza distruggere le nuove chiavi interne (es: p_cards)
+                if 'fencer_left' in data:
+                    if 'cards' in data['fencer_left']:
+                        current_state['fencer_left']['cards'].update(data['fencer_left']['cards'])
+                    if 'p_cards' in data['fencer_left']:
+                        current_state['fencer_left']['p_cards'].update(data['fencer_left']['p_cards'])
+                    
+                    for k, v in data['fencer_left'].items():
+                        if k not in ['cards', 'p_cards']:
+                            current_state['fencer_left'][k] = v
+                    current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left'].get('name', ''))
+
+                # Aggiorna fencer_right
+                if 'fencer_right' in data:
+                    if 'cards' in data['fencer_right']:
+                        current_state['fencer_right']['cards'].update(data['fencer_right']['cards'])
+                    if 'p_cards' in data['fencer_right']:
+                        current_state['fencer_right']['p_cards'].update(data['fencer_right']['p_cards'])
+                        
+                    for k, v in data['fencer_right'].items():
+                        if k not in ['cards', 'p_cards']:
+                            current_state['fencer_right'][k] = v
+                    current_state['fencer_right']['photo'] = get_photo_url(current_state['fencer_right'].get('name', ''))
+                
+                # Aggiorna tutte le altre chiavi generiche
+                for k, v in data.items():
+                    if k not in ['settings', 'fencer_left', 'fencer_right']:
+                        current_state[k] = v
+
+                # Variabili che dipendono dal sistema in tempo reale (non vanno ripescate dal salvataggio)
+                current_state['running'] = False
+                current_state['server_ip'] = get_local_ip()
+                current_state['ssid'] = get_current_ssid()
+                current_state['wifi_connected'] = current_state['server_ip'] != '127.0.0.1'
+                
+            if file_to_load == OLD_STATE_FILE: 
+                save_state()
+        except Exception as e:
+            print(f"Errore nel ricaricare i dati salvati: {e}")
 
 def push_history():
     global history_stack
