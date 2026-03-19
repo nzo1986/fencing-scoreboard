@@ -24,7 +24,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'scherma_secret_key'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
-# --- PERCORSI E FILE ---
+# --- PERCORSI E FILE ASSOLUTI ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PHOTOS_DIR = os.path.join(BASE_DIR, 'static', 'photos')
 STATE_FILE = os.path.join(BASE_DIR, "local_match_state.json")
@@ -37,23 +37,17 @@ GIRONI_MAP_READ = { 'rosso': [0, 1, 2, 3], 'giallo': [5, 6, 7, 8], 'blu': [10, 1
 
 gironi_cache = {'rosso': [], 'giallo': [], 'blu': [], 'verde': [], '32': []}
 history_stack = []
-last_google_status = "ok"
 
-# --- VARIABILI HARDWARE (Pico e Tempi) ---
+# --- VARIABILI HARDWARE ---
 pico_last_seen = {'rosso': {'time': 0, 'bat': 100}, 'verde': {'time': 0, 'bat': 100}}
 last_hit_time = 0
 last_massa_time = {'left': 0, 'right': 0}
 hit_sides_in_window = set()
 
 # --- HELPERS ---
-def letter_to_index(letter): 
-    return ord(letter.upper()) - 65 if letter else 0
-
-def letter_to_sheet_col(letter): 
-    return ord(letter.upper()) - 64 if letter else 1
-
-def clean_fencer_name(raw_name): 
-    return " ".join(re.sub(r'[^a-zA-Z0-9 ]', '', raw_name).split()) if raw_name else ""
+def letter_to_index(letter): return ord(letter.upper()) - 65 if letter else 0
+def letter_to_sheet_col(letter): return ord(letter.upper()) - 64 if letter else 1
+def clean_fencer_name(raw_name): return " ".join(re.sub(r'[^a-zA-Z0-9 ]', '', raw_name).split()) if raw_name else ""
 
 def get_local_ip():
     try: 
@@ -61,15 +55,12 @@ def get_local_ip():
         s.connect(('10.255.255.255',1))
         IP=s.getsockname()[0]
         s.close()
-    except: 
-        IP='127.0.0.1'
+    except: IP='127.0.0.1'
     return IP
 
 def get_current_ssid():
-    try: 
-        return subprocess.check_output("iwgetid -r", shell=True).decode().strip() or "Nessuna Rete"
-    except: 
-        return "Offline"
+    try: return subprocess.check_output("iwgetid -r", shell=True).decode().strip() or "Nessuna Rete"
+    except: return "Offline"
 
 def get_photo_url(name):
     if not name: return "/static/photos/default.png"
@@ -83,75 +74,29 @@ def get_photo_url(name):
     return "/static/photos/default.png"
 
 def new_fencer(name):
-    return { 
-        "name": clean_fencer_name(name), 
-        "score": 0, 
-        "cards": {"Y": False, "R": False, "B": False, "R_count": 0}, 
-        "p_cards": {"Y": False, "R": False, "B": False}, 
-        "photo": get_photo_url(name) 
-    }
+    return { "name": clean_fencer_name(name), "score": 0, "cards": {"Y": False, "R": False, "B": False, "R_count": 0}, "p_cards": {"Y": False, "R": False, "B": False}, "photo": get_photo_url(name) }
 
 def get_system_fonts():
     try:
         output = subprocess.check_output(['fc-list', ':', 'family'], encoding='utf-8')
         fonts = set(f.strip() for line in output.splitlines() for f in line.split(',') if f.strip())
         return sorted(list(fonts))
-    except: 
-        return ['Roboto Mono', 'Arial', 'Verdana']
+    except: return ['Roboto Mono', 'Arial', 'Verdana']
 
-default_columns = {
-    'rosso': {'sx': 'A', 'psx': 'B', 'pdx': 'C', 'dx': 'D'}, 
-    'giallo': {'sx': 'F', 'psx': 'G', 'pdx': 'H', 'dx': 'I'}, 
-    'blu': {'sx': 'K', 'psx': 'L', 'pdx': 'M', 'dx': 'N'}, 
-    'verde': {'sx': 'P', 'psx': 'Q', 'pdx': 'R', 'dx': 'S'}, 
-    '32': {'sx': 'U', 'psx': 'V', 'pdx': 'W', 'dx': 'X'} 
-}
-
-default_settings = {
-    "weapon": "spada", 
-    "font_family": "Roboto Mono", 
-    "font_timer": 8.0, 
-    "font_score": 15.0, 
-    "font_name": 3.0, 
-    "font_list": 1.5, 
-    "col_center_width": 1.2, 
-    "list_padding": 0.5, 
-    "text_border": 0.0, 
-    "photo_size": 150, 
-    "time_match": 180, 
-    "time_break": 60, 
-    "time_medical": 300, 
-    "refresh_rate": 30, 
-    "buzzer_volume": 1.0, 
-    "default_name_left": "ATLETA SX", 
-    "default_name_right": "ATLETA DX", 
-    "google_script_url": "", 
-    "google_sheet_id": DEFAULT_SHEET_ID, 
-    "columns": copy.deepcopy(default_columns)
-}
+default_columns = {'rosso': {'sx': 'A', 'psx': 'B', 'pdx': 'C', 'dx': 'D'}, 'giallo': {'sx': 'F', 'psx': 'G', 'pdx': 'H', 'dx': 'I'}, 'blu': {'sx': 'K', 'psx': 'L', 'pdx': 'M', 'dx': 'N'}, 'verde': {'sx': 'P', 'psx': 'Q', 'pdx': 'R', 'dx': 'S'}, '32': {'sx': 'U', 'psx': 'V', 'pdx': 'W', 'dx': 'X'} }
+default_settings = {"weapon": "spada", "font_family": "Roboto Mono", "font_timer": 8.0, "font_score": 15.0, "font_name": 3.0, "font_list": 1.5, "col_center_width": 1.2, "list_padding": 0.5, "text_border": 0.0, "photo_size": 150, "time_match": 180, "time_break": 60, "time_medical": 300, "refresh_rate": 30, "buzzer_volume": 1.0, "default_name_left": "ATLETA SX", "default_name_right": "ATLETA DX", "google_script_url": "", "google_sheet_id": DEFAULT_SHEET_ID, "columns": default_columns}
 
 default_state = {
-    "timer": 180.0, 
-    "running": False, 
-    "phase": "MATCH", 
-    "priority": None, 
+    "timer": 180.0, "running": False, "phase": "MATCH", "priority": None, 
     "fencer_left": new_fencer(default_settings["default_name_left"]), 
     "fencer_right": new_fencer(default_settings["default_name_right"]), 
-    "period": 1, 
-    "admin_connected": False, 
-    "server_ip": get_local_ip(), 
-    "ssid": get_current_ssid(), 
-    "match_list": [], 
-    "current_girone": "rosso", 
-    "active_girone": "rosso", 
-    "current_row_idx": None, 
-    "manual_selection": False, 
-    "swapped": False, 
-    "settings": copy.deepcopy(default_settings), 
-    "wifi_connected": False
+    "period": 1, "admin_connected": False, "server_ip": get_local_ip(), 
+    "ssid": get_current_ssid(), "match_list": [], "current_girone": "rosso", 
+    "active_girone": "rosso", "current_row_idx": None, "manual_selection": False, 
+    "swapped": False, "settings": default_settings.copy(), "wifi_connected": False
 }
 
-current_state = copy.deepcopy(default_state)
+current_state = default_state.copy()
 
 def save_state():
     try:
@@ -162,61 +107,77 @@ def async_save():
     save_state()
 
 def load_state():
+    """Ricarica stabile alla versione precedente per non perdere dati"""
     global current_state
     file_to_load = STATE_FILE if os.path.exists(STATE_FILE) else OLD_STATE_FILE if os.path.exists(OLD_STATE_FILE) else None
     if file_to_load:
         try:
             with open(file_to_load, 'r') as f:
                 data = json.load(f)
-                
-                # Unione intelligente: aggiorna le impostazioni preservando i default
-                if 'settings' in data:
-                    current_state['settings'].update(data['settings'])
-                
-                # Aggiorna fencer_left senza distruggere le nuove chiavi interne (es: p_cards)
-                if 'fencer_left' in data:
-                    if 'cards' in data['fencer_left']:
-                        current_state['fencer_left']['cards'].update(data['fencer_left']['cards'])
-                    if 'p_cards' in data['fencer_left']:
-                        current_state['fencer_left']['p_cards'].update(data['fencer_left']['p_cards'])
-                    
-                    for k, v in data['fencer_left'].items():
-                        if k not in ['cards', 'p_cards']:
-                            current_state['fencer_left'][k] = v
-                    current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left'].get('name', ''))
-
-                # Aggiorna fencer_right
-                if 'fencer_right' in data:
-                    if 'cards' in data['fencer_right']:
-                        current_state['fencer_right']['cards'].update(data['fencer_right']['cards'])
-                    if 'p_cards' in data['fencer_right']:
-                        current_state['fencer_right']['p_cards'].update(data['fencer_right']['p_cards'])
-                        
-                    for k, v in data['fencer_right'].items():
-                        if k not in ['cards', 'p_cards']:
-                            current_state['fencer_right'][k] = v
-                    current_state['fencer_right']['photo'] = get_photo_url(current_state['fencer_right'].get('name', ''))
-                
-                # Aggiorna tutte le altre chiavi generiche
-                for k, v in data.items():
-                    if k not in ['settings', 'fencer_left', 'fencer_right']:
-                        current_state[k] = v
-
-                # Variabili che dipendono dal sistema in tempo reale (non vanno ripescate dal salvataggio)
-                current_state['running'] = False
-                current_state['server_ip'] = get_local_ip()
-                current_state['ssid'] = get_current_ssid()
-                current_state['wifi_connected'] = current_state['server_ip'] != '127.0.0.1'
-                
-            if file_to_load == OLD_STATE_FILE: 
-                save_state()
-        except Exception as e:
-            print(f"Errore nel ricaricare i dati salvati: {e}")
+                data.update({'running': False, 'server_ip': get_local_ip(), 'ssid': get_current_ssid(), 'wifi_connected': get_local_ip() != '127.0.0.1'})
+                saved_s = data.get('settings', {})
+                data['settings'] = default_settings.copy()
+                data['settings'].update(saved_s)
+                if 'fencer_left' in data: data['fencer_left']['photo'] = get_photo_url(data['fencer_left']['name'])
+                if 'fencer_right' in data: data['fencer_right']['photo'] = get_photo_url(data['fencer_right']['name'])
+                current_state = data
+            if file_to_load == OLD_STATE_FILE: save_state()
+        except: pass
 
 def push_history():
     global history_stack
     history_stack.append(copy.deepcopy(current_state))
     if len(history_stack) > 20: history_stack.pop(0)
+
+# --- LOGICA ARMI E PUNTEGGI (CON FIE LOCKOUT E COCCIA) ---
+def process_massa(side):
+    global last_massa_time
+    now = time.time()
+    # Emette il suono e la luce bianca, MAI il punto. Debounce di 0.5s
+    if now - last_massa_time[side] > 0.5:
+        socketio.emit('hw_massa', {'side': side})
+        last_massa_time[side] = now
+
+def process_hw_hit(side):
+    global last_hit_time, hit_sides_in_window
+    now = time.time()
+    
+    if current_state.get('phase') != 'MATCH': return
+
+    # 1. TEMPO FERMO: Suona e Illumina, ma NESSUN PUNTO
+    if not current_state['running']:
+        if now - last_hit_time > 0.5:
+            socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': False})
+            last_hit_time = now
+        return
+
+    # 2. TEMPO AVVIATO: Calcolo dell'Arma
+    weapon = current_state['settings'].get('weapon', 'spada')
+    lockout_ms = 0.045 # Spada (45 millisecondi)
+    if weapon == 'fioretto': lockout_ms = 0.300 # Fioretto (300 millisecondi)
+    elif weapon == 'sciabola': lockout_ms = 0.170 # Sciabola (170 millisecondi)
+
+    # Prima Stoccata
+    if current_state['running']:
+        current_state['running'] = False
+        last_hit_time = now
+        hit_sides_in_window = {side}
+        current_state[f'fencer_{side}']['score'] += 1
+        
+        socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True})
+        socketio.emit('state_update', current_state)
+        socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+        eventlet.spawn(async_save)
+        
+    # Colpo Doppio (entro la tolleranza dell'arma)
+    elif side not in hit_sides_in_window and (now - last_hit_time <= lockout_ms):
+        hit_sides_in_window.add(side)
+        current_state[f'fencer_{side}']['score'] += 1
+        
+        socketio.emit('hw_hit', {'side': side, 'is_double': True, 'score_added': True})
+        socketio.emit('state_update', current_state)
+        socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+        eventlet.spawn(async_save)
 
 # --- ROUTES PAGINE ---
 @app.route('/')
@@ -234,64 +195,7 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-
-# --- LOGICA ARMI E PUNTEGGI (ZERO LAG) ---
-
-def process_massa(side):
-    """Gestisce il colpo sulla coccia/pedana (Luce Bianca)"""
-    global last_massa_time
-    now = time.time()
-    # Debounce: Evita spam di suoni se la punta striscia a lungo sulla coccia (mezzo secondo)
-    if now - last_massa_time[side] > 0.5:
-        socketio.emit('hw_massa', {'side': side})
-        last_massa_time[side] = now
-
-def process_hw_hit(side):
-    """Gestisce la stoccata in base allo stato del tempo e all'arma"""
-    global last_hit_time, hit_sides_in_window
-    now = time.time()
-    
-    if current_state.get('phase') != 'MATCH': return
-
-    # 1. SE IL TEMPO È FERMO: Luce e Suono ma NESSUN PUNTEGGIO
-    if not current_state['running']:
-        # Debounce per evitare suoni continui a tempo fermo
-        if now - last_hit_time > 0.5:
-            socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': False})
-            last_hit_time = now
-        return
-
-    # Legge i tempi di blocco (Lockout) FIE in base all'arma selezionata
-    weapon = current_state['settings'].get('weapon', 'spada')
-    lockout_ms = 0.045 # Spada (45 ms)
-    if weapon == 'fioretto': lockout_ms = 0.300 # 300 ms
-    elif weapon == 'sciabola': lockout_ms = 0.170 # 170 ms
-
-    # 2. PRIMA STOCCATA VALIDA A TEMPO CORRENTE
-    if current_state['running']:
-        current_state['running'] = False # Ferma immediatamente il tempo
-        last_hit_time = now
-        hit_sides_in_window = {side}
-        current_state[f'fencer_{side}']['score'] += 1
-        
-        # score_added=True dice al frontend che il punto è valido e va segnato
-        socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True})
-        socketio.emit('state_update', current_state)
-        socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
-        eventlet.spawn(async_save)
-        
-    # 3. COLPO DOPPIO (Entro la finestra temporale dell'arma)
-    elif side not in hit_sides_in_window and (now - last_hit_time <= lockout_ms):
-        hit_sides_in_window.add(side)
-        current_state[f'fencer_{side}']['score'] += 1
-        
-        socketio.emit('hw_hit', {'side': side, 'is_double': True, 'score_added': True})
-        socketio.emit('state_update', current_state)
-        socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
-        eventlet.spawn(async_save)
-
-
-# --- API ENDPOINTS ---
+# --- API REST ---
 @app.route('/api/pico_status')
 def get_pico_status():
     now = time.time()
@@ -301,13 +205,9 @@ def get_pico_status():
     })
 
 @app.route('/api/scan_wifi')
-def api_scan(): 
-    return jsonify(scan_wifi_networks())
-
+def api_scan(): return jsonify(scan_wifi_networks())
 @app.route('/api/saved_wifi')
-def api_saved(): 
-    return jsonify(get_saved_networks())
-
+def api_saved(): return jsonify(get_saved_networks())
 @app.route('/api/connect_wifi', methods=['POST'])
 def api_connect():
     data = request.json
@@ -318,8 +218,7 @@ def api_connect():
         current_state['ssid'] = get_current_ssid()
         current_state['wifi_connected'] = True
         return jsonify({"status": "success", "ip": current_state['server_ip']})
-    else: 
-        return jsonify({"status": "error"}), 400
+    else: return jsonify({"status": "error"}), 400
 
 @app.route('/api/delete_wifi', methods=['POST'])
 def api_delete_wifi():
@@ -426,8 +325,7 @@ def download_photos():
     except Exception as e: return jsonify({"error": str(e)}), 500
 
 @app.route('/api/get_fonts')
-def api_get_fonts(): 
-    return jsonify(get_system_fonts())
+def api_get_fonts(): return jsonify(get_system_fonts())
 
 
 # --- SOCKET WEBSOCKET HANDLERS ---
@@ -460,7 +358,6 @@ def handle_score(d):
     current_state[f'fencer_{side}']['score'] = max(0, current_state[f'fencer_{side}']['score'] + d['delta'])
     current_state['running'] = False
     
-    # Se arriva dal telecomando, avvisa gli altri client per luci e suoni
     if d['delta'] > 0: 
         socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True})
         
