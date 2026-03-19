@@ -74,6 +74,30 @@
                     </div>
                 </div>
                 <div class="row-ctrl">
+                    <span class="lbl">Largh. Colonna Incontri (0=Nascondi)</span>
+                    <div class="flex items-center gap-2">
+                        <button class="adjust-btn btn-minus" onclick="adj('col_center_width',-0.2)">-</button>
+                        <span class="val-display" id="val_col_center_width">1.2</span>
+                        <button class="adjust-btn btn-plus" onclick="adj('col_center_width',0.2)">+</button>
+                    </div>
+                </div>
+                <div class="row-ctrl">
+                    <span class="lbl">Dimensione Testo Incontri</span>
+                    <div class="flex items-center gap-2">
+                        <button class="adjust-btn btn-minus" onclick="adj('font_list',-0.2)">-</button>
+                        <span class="val-display" id="val_font_list">1.5</span>
+                        <button class="adjust-btn btn-plus" onclick="adj('font_list',0.2)">+</button>
+                    </div>
+                </div>
+                <div class="row-ctrl">
+                    <span class="lbl">Spaziatura Lista Incontri</span>
+                    <div class="flex items-center gap-2">
+                        <button class="adjust-btn btn-minus" onclick="adj('list_padding',-0.1)">-</button>
+                        <span class="val-display" id="val_list_padding">0.5</span>
+                        <button class="adjust-btn btn-plus" onclick="adj('list_padding',0.1)">+</button>
+                    </div>
+                </div>
+                <div class="row-ctrl border-b-0">
                     <span class="lbl">Dimens. Foto (0=Nascondi)</span>
                     <div class="flex items-center gap-2">
                         <button class="adjust-btn btn-minus" onclick="adj('photo_size',-10)">-</button>
@@ -169,7 +193,7 @@
         socket.on('state_update', s => {
             if(s.settings) {
                 settings = s.settings;
-                ['font_timer','font_score','font_name','photo_size','time_match','time_break','buzzer_volume','refresh_rate'].forEach(k => {
+                ['font_timer','font_score','font_name','photo_size','time_match','time_break','buzzer_volume','refresh_rate','col_center_width','font_list','list_padding'].forEach(k => {
                     let e = document.getElementById('val_'+k);
                     if(e) e.innerText = settings[k];
                 });

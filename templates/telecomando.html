@@ -139,7 +139,7 @@
         let globalSettings = {}; 
         
         setInterval(() => {
-            fetch('/api/pico_status')
+            fetch(window.location.origin + '/api/pico_status')
                 .then(r => r.json())
                 .then(s => {
                     const pr = document.getElementById('stat-pico-r');
@@ -153,6 +153,9 @@
                         pv.className = 'sensor-status sensor-active-green';
                         pv.innerText = s.verde.bat + '%';
                     } else { pv.className = 'sensor-status'; pv.innerText = '--'; }
+                })
+                .catch(e => {
+                    // Evita di inondare la console con errori in caso di micro-cadute di rete
                 });
         }, 1500);
 

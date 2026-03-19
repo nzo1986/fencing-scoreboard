@@ -9,20 +9,21 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@700&display=swap');
         
-        /* Variabili CSS Dinamiche collegate alle Impostazioni */
         :root { 
             --timer-size: 8rem; 
             --score-size: 15rem; 
             --name-size: 3rem; 
             --font-family: 'Roboto Mono'; 
             --photo-size: 150px;
+            --list-size: 1.5rem;
+            --center-flex: 1.2;
+            --list-padding: 0.5rem;
         }
         
         body { background-color: #000; color: white; overflow: hidden; font-family: var(--font-family), monospace; display: flex; flex-direction: column; height: 100vh; margin: 0; }
         .stroked { -webkit-text-stroke: var(--text-stroke, 0px) black; }
         .timer-container { flex: none; display: flex; justify-content: center; align-items: center; background: #000; padding: 1vh 0; position: relative; }
         
-        /* Applicazione delle grandezze dinamiche */
         .timer-box { font-size: var(--timer-size); line-height: 1; }
         .fencer-name { font-size: var(--name-size); font-weight: bold; text-align: center; margin-bottom: 20px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .score-box { font-size: var(--score-size); line-height: 1; }
@@ -32,19 +33,30 @@
         .fencer-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
         .score-container { display: flex; align-items: center; justify-content: center; gap: 20px; width: 100%; margin: 20px 0; }
         
+        /* LISTA INCONTRI CENTRALE */
+        .center-col { flex: var(--center-flex); background: transparent; display: flex; flex-direction: column; padding: 10px; overflow: hidden; transition: flex 0.3s; }
+        .list-title { text-align: center; color: #555; font-size: 1.2rem; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 2px; }
+        .match-list { width: 100%; display: flex; flex-direction: column; gap: 4px; }
+        .match-item { background: rgba(30, 30, 30, 0.5); padding: var(--list-padding) 0; font-size: var(--list-size); text-align: center; color: #888; border-bottom: 1px solid #333; border-radius: 4px;}
+        .match-item:nth-child(even) { background: rgba(50, 50, 50, 0.5); }
+        .match-item span { color: #ccc; font-weight: bold;}
+
         /* COLORI STOCCATA */
         .hit-glow-left { border-color: #ff0000 !important; box-shadow: 0 0 60px #ff0000, inset 0 0 20px #ff0000; }
         .hit-glow-right { border-color: #00ff00 !important; box-shadow: 0 0 60px #00ff00, inset 0 0 20px #00ff00; }
         .hit-glow-white { border-color: #ffffff !important; box-shadow: 0 0 60px #ffffff, inset 0 0 30px #ffffff; }
 
-        #btn-audio { position: absolute; bottom: 10px; right: 10px; background: #222; color: #888; border: 1px solid #444; padding: 8px 15px; border-radius: 5px; cursor: pointer; z-index: 100; font-size: 12px; transition: 0.3s; }
-        #btn-audio:hover { background: #444; color: white; }
+        /* OVERLAY AUDIO */
+        #audio-unlocker { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.95); display: flex; justify-content: center; align-items: center; cursor: pointer; flex-direction: column; }
     </style>
 </head>
-<body class="cursor-none" onclick="unlockAudio()">
+<body class="cursor-none">
 
-    <!-- Pulsante di riserva se il browser blocca l'audio -->
-    <button id="btn-audio" onclick="unlockAudio()">Sblocca Audio</button>
+    <div id="audio-unlocker">
+        <span class="text-6xl text-white font-bold mb-6 text-center">SISTEMA INIZIALIZZATO</span>
+        <button class="bg-green-600 hover:bg-green-500 text-white text-3xl font-bold py-6 px-12 rounded-xl shadow-lg border-4 border-green-400 animate-pulse transition">CLICCA QUI PER SBLOCCARE L'AUDIO 🔊</button>
+        <span class="text-xl mt-6 text-gray-400 text-center">(Questa operazione sblocca i suoni della pedana sul monitor)</span>
+    </div>
 
     <div class="timer-container">
         <div id="timer" class="timer-box stroked text-white font-bold">3:00</div>
@@ -58,6 +70,12 @@
                 <span id="s-l" class="score-box stroked text-red-600 font-bold">0</span>
             </div>
         </div>
+        
+        <div class="center-col" id="center-col-container">
+            <div class="list-title">Prossimi Incontri</div>
+            <div id="match-list-container" class="match-list"></div>
+        </div>
+
         <div class="fencer-col">
             <h1 id="n-r" class="fencer-name stroked text-green-500">DX</h1>
             <div class="score-container">
@@ -70,35 +88,29 @@
     <script>
         const socket = io();
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let audioUnlocked = false; 
         let globalSettings = {};
 
-        // Funzione per forzare lo sblocco audio
-        function unlockAudio() {
+        document.getElementById('audio-unlocker').addEventListener('click', () => {
             if(audioCtx.state === 'suspended') audioCtx.resume();
-            document.getElementById('btn-audio').style.display = 'none'; // Nasconde il pulsante
-        }
+            audioUnlocked = true;
+            document.getElementById('audio-unlocker').style.display = 'none';
+        });
 
-        // Sintetizzatore Audio
         function playBeep(hz, duration) {
-            // Tenta di avviare l'audio in automatico ad ogni segnale
-            if(audioCtx.state === 'suspended') audioCtx.resume(); 
-            
-            const volume = parseFloat(globalSettings.buzzer_volume !== undefined ? globalSettings.buzzer_volume : 1.0);
+            if (!audioUnlocked) return;
+            const volume = parseFloat(globalSettings.buzzer_volume || 1.0);
             if (volume <= 0) return;
             const o = audioCtx.createOscillator(); 
             const g = audioCtx.createGain();
-            o.type = 'square'; 
-            o.frequency.setValueAtTime(hz, audioCtx.currentTime); 
+            o.type = 'square'; o.frequency.setValueAtTime(hz, audioCtx.currentTime); 
             g.gain.setValueAtTime(volume, audioCtx.currentTime);
-            o.connect(g); 
-            g.connect(audioCtx.destination);
-            o.start(); 
-            o.stop(audioCtx.currentTime + duration); 
+            o.connect(g); g.connect(audioCtx.destination);
+            o.start(); o.stop(audioCtx.currentTime + duration); 
         }
 
-        // Evento Stoccata
         socket.on('hw_hit', data => {
-            playBeep(1200, 3.0); // 1200 Hz: SUONO MOLTO ACUTO (Stoccata)
+            playBeep(1200, 3.0); 
             if (data.side === 'left' || data.is_double) {
                 document.getElementById('ph-l').classList.add('hit-glow-left');
                 setTimeout(() => document.getElementById('ph-l').classList.remove('hit-glow-left'), 3000);
@@ -109,15 +121,14 @@
             }
         });
 
-        // Evento Massa (Coccia bianca)
         socket.on('hw_massa', data => {
-            playBeep(800, 1.0); // 800 Hz: Suono intermedio (Coccia)
+            playBeep(800, 1.0);
             const img = document.getElementById(data.side === 'left' ? 'ph-l' : 'ph-r');
             img.classList.add('hit-glow-white');
             setTimeout(() => img.classList.remove('hit-glow-white'), 1500); 
         });
 
-        socket.on('time_expired', () => { playBeep(500, 1.0); }); // 500 Hz: Suono basso (Tempo)
+        socket.on('time_expired', () => { playBeep(500, 1.0); });
         
         socket.on('timer_update', d => { 
             document.getElementById('timer').innerText = d.time > 10 ? `${Math.floor(d.time/60)}:${(Math.floor(d.time%60)<10?'0':'')+Math.floor(d.time%60)}` : d.time.toFixed(1); 
@@ -126,17 +137,26 @@
         socket.on('state_update', s => {
             if(s.settings) { 
                 globalSettings = s.settings; 
-                
-                // FIX: Trasferisce le impostazioni salvate alle variabili CSS del layout
                 const r = document.documentElement;
                 r.style.setProperty('--timer-size', s.settings.font_timer + 'rem');
                 r.style.setProperty('--score-size', s.settings.font_score + 'rem');
                 r.style.setProperty('--name-size', s.settings.font_name + 'rem');
                 r.style.setProperty('--photo-size', s.settings.photo_size + 'px');
                 r.style.setProperty('--font-family', s.settings.font_family);
+                r.style.setProperty('--list-size', s.settings.font_list + 'rem');
+                r.style.setProperty('--center-flex', s.settings.col_center_width);
+                r.style.setProperty('--list-padding', s.settings.list_padding + 'rem');
 
                 document.getElementById('ph-l').style.display = s.settings.photo_size > 0 ? 'block' : 'none'; 
                 document.getElementById('ph-r').style.display = s.settings.photo_size > 0 ? 'block' : 'none'; 
+                
+                // Gestione visibilità colonna centrale
+                const centerCol = document.getElementById('center-col-container');
+                if (s.settings.col_center_width <= 0) {
+                    centerCol.style.display = 'none';
+                } else {
+                    centerCol.style.display = 'flex';
+                }
             }
             
             document.getElementById('n-l').innerText=s.fencer_left.name; 
@@ -146,6 +166,15 @@
             
             if (s.fencer_left.photo) document.getElementById('ph-l').src = s.fencer_left.photo;
             if (s.fencer_right.photo) document.getElementById('ph-r').src = s.fencer_right.photo;
+
+            // Aggiornamento Lista Incontri
+            const listC = document.getElementById('match-list-container');
+            if (s.match_list && s.match_list.length > 0) {
+                const pending = s.match_list.filter(m => (parseInt(m.p_sx)||0)===0 && (parseInt(m.p_dx)||0)===0);
+                listC.innerHTML = pending.slice(0, 8).map(m => `<div class="match-item"><span>${m.sx}</span> vs <span>${m.dx}</span></div>`).join('');
+            } else { 
+                listC.innerHTML = ''; 
+            }
         });
     </script>
 </body>
