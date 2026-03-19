@@ -11,8 +11,14 @@
         button:active{transform:scale(0.97);filter:brightness(0.9)}
         .ctrl-btn{width:18%;height:50px;background:#222;border:1px solid #444;border-radius:4px;font-weight:bold;font-size:1.5rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 0 #111;color:white}
         .text-red{color:#f55}.text-green{color:#5f5}
-        .score-bar{background:black;color:white;display:flex;justify-content:space-between;padding:0 20px;font-size:3rem;font-weight:bold;line-height:1.2;margin:5px 0;border-radius:2px;position:relative;border:1px solid #333}
-        .score-val{width:45%;text-align:center}
+        .score-bar{background:black;color:white;display:flex;justify-content:space-between;padding:0 20px;font-size:3rem;font-weight:bold;line-height:1.2;margin:5px 0;border-radius:2px;position:relative;border:1px solid #333; transition: background 0.2s;}
+        .score-val{width:45%;text-align:center; border-radius: 8px; padding: 5px; transition: background-color 0.1s;}
+        
+        /* Colori per Massa e Fuori Tempo sul telecomando */
+        .glow-white { background-color: #e2e8f0; color: black !important; }
+        .glow-red { background-color: #ef4444; color: white !important; }
+        .glow-green { background-color: #22c55e; color: white !important; }
+
         .start-btn{width:100%;min-height:20vh;padding:20px 0;font-size:4rem;font-weight:bold;color:white;border:none;display:flex;align-items:center;justify-content:center;margin:5px 0;border-radius:4px}
         .bg-start{background:#008800}.bg-stop{background:#cc0000}.bg-pause{background:#eab308;color:black}
         
@@ -27,10 +33,6 @@
         .sys-btn{background:#222;border:1px solid #444;width:100%;padding:10px;margin-bottom:2px;font-weight:bold;border-radius:4px;color:#ccc}
         .timer-text-break{color:#facc15}
         
-        .prio-dot{width:15px;height:15px;border-radius:50%;background:#222;position:absolute;bottom:10px;border:1px solid #444;opacity:0.3}
-        .prio-l{left:25px}.prio-r{right:25px}
-        .prio-active{background:white;box-shadow:0 0 10px white;opacity:1}
-
         .bottom-controls{ display:flex; justify-content:space-between; align-items:center; gap:8px; background:rgba(30,30,30,0.8); padding:8px 15px; border-radius:30px; border:1px solid #444; width:100%; max-width:400px; margin:auto auto 0 auto; }
         .icon-btn { font-size: 1.4rem; text-decoration: none; filter: grayscale(100%) opacity(0.5); transition: 0.3s; display:flex; align-items:center; justify-content:center;}
         .icon-ok { filter: grayscale(0%) opacity(1); }
@@ -43,7 +45,6 @@
         
         #toast-container{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:white;padding:20px 40px;border-radius:12px;font-size:1.5rem;text-align:center;z-index:9999;display:none;box-shadow:0 0 20px rgba(0,0,0,0.5);border:2px solid #555}
         #timer-display{font-size:1.5rem;padding:15px}
-        .swipe-btn { color: #ff4444; font-weight: bold; background: #220000; border: 2px solid #550000; }
     </style>
 </head>
 <body class="flex flex-col min-h-screen p-2 overflow-y-auto overflow-x-hidden">
@@ -57,13 +58,17 @@
         </details>
     </div>
 
-    <div class="flex justify-between gap-1 flex-shrink-0"><button class="ctrl-btn text-red" onclick="scoreOptimistic('left',-1)">-</button><button class="ctrl-btn text-green" onclick="scoreOptimistic('left',1)">+</button><button class="ctrl-btn text-sm" style="width:22%" onclick="doubleHitOptimistic()">DOPPIO</button><button class="ctrl-btn text-green" onclick="scoreOptimistic('right',1)">+</button><button class="ctrl-btn text-red" onclick="scoreOptimistic('right',-1)">-</button></div>
+    <div class="flex justify-between gap-1 flex-shrink-0">
+        <button class="ctrl-btn text-red" onclick="scoreOptimistic('left',-1)">-</button>
+        <button class="ctrl-btn text-green" onclick="scoreOptimistic('left',1)">+</button>
+        <button class="ctrl-btn text-sm" style="width:22%" onclick="doubleHitOptimistic()">DOPPIO</button>
+        <button class="ctrl-btn text-green" onclick="scoreOptimistic('right',1)">+</button>
+        <button class="ctrl-btn text-red" onclick="scoreOptimistic('right',-1)">-</button>
+    </div>
     
     <div class="score-bar flex-shrink-0">
-        <div id="prio-l" class="prio-dot prio-l"></div>
         <div id="s-l" class="score-val text-red-500">0</div>
         <div id="s-r" class="score-val text-green-500">0</div>
-        <div id="prio-r" class="prio-dot prio-r"></div>
     </div>
     
     <button id="btn-toggle" onclick="toggleTimerOptimistic()" class="start-btn bg-start flex-shrink-0">AVVIO</button>
@@ -81,7 +86,7 @@
                 <button class="sys-btn bg-blue-900 border-2 border-blue-600 text-white flex-1 py-4" onclick="sendResult()">INVIA</button>
             </div>
             <div class="mt-1 mb-1">
-                <button class="sys-btn swipe-btn w-full py-4" onclick="socket.emit('swap_fencers')">Swipe Atleti &lt;--&gt;</button>
+                <button class="sys-btn bg-red-900 text-red-200 border-2 border-red-700 w-full py-4" onclick="socket.emit('swap_fencers')">Swipe Atleti &lt;--&gt;</button>
             </div>
             <div class="flex flex-col mt-1">
                 <details id="reset-menu" class="accord">
@@ -151,27 +156,61 @@
                 });
         }, 1500);
 
+        // --- SISTEMA AUDIO INTEGRATO NEL TELECOMANDO ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function unlockAudio() { if (!audioUnlocked && audioCtx.state !== 'running') audioCtx.resume().then(() => audioUnlocked = true); }
+        
+        function unlockAudio() { 
+            if (!audioUnlocked && audioCtx.state !== 'running') {
+                audioCtx.resume().then(() => audioUnlocked = true); 
+            }
+        }
+        
+        // Sblocca al primo tocco sullo schermo
         document.body.addEventListener('touchstart', unlockAudio, {once:true});
         document.body.addEventListener('click', unlockAudio, {once:true});
-        
-        socket.on('hw_hit', data => { if (navigator.vibrate) navigator.vibrate(50); });
 
-        function playBeep() {
+        function playBeep(hz, duration) {
+            if (!audioUnlocked) return;
             const volume = parseFloat(globalSettings.buzzer_volume || 1.0);
             if (volume <= 0) return;
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            const osc = audioCtx.createOscillator(); 
-            const gain = audioCtx.createGain();
-            osc.type = 'square'; 
-            osc.frequency.setValueAtTime(800, audioCtx.currentTime); 
-            gain.gain.value = volume;
-            osc.connect(gain); 
-            gain.connect(audioCtx.destination);
-            osc.start(); 
-            osc.stop(audioCtx.currentTime + 2.0); 
+            const o = audioCtx.createOscillator(); 
+            const g = audioCtx.createGain();
+            o.type = 'square'; o.frequency.setValueAtTime(hz, audioCtx.currentTime); 
+            g.gain.setValueAtTime(volume, audioCtx.currentTime);
+            o.connect(g); g.connect(audioCtx.destination);
+            o.start(); o.stop(audioCtx.currentTime + duration); 
         }
+        
+        socket.on('hw_hit', data => { 
+            if (navigator.vibrate) navigator.vibrate(50); 
+            playBeep(850, 3.0); // Suono stoccata
+
+            // Animazione sul telecomando
+            if (data.side === 'left' || data.is_double) {
+                const b = document.getElementById('s-l');
+                b.classList.add('glow-red');
+                setTimeout(() => b.classList.remove('glow-red'), 3000);
+            }
+            if (data.side === 'right' || data.is_double) {
+                const b = document.getElementById('s-r');
+                b.classList.add('glow-green');
+                setTimeout(() => b.classList.remove('glow-green'), 3000);
+            }
+        });
+
+        socket.on('hw_massa', data => { 
+            playBeep(600, 1.0); // Suono Massa
+            const b = document.getElementById(data.side === 'left' ? 's-l' : 's-r');
+            b.classList.add('glow-white');
+            setTimeout(() => b.classList.remove('glow-white'), 1500);
+        });
+        
+        socket.on('time_expired', () => { 
+            if (navigator.vibrate) navigator.vibrate(500);
+            playBeep(440, 1.0);
+            document.body.style.backgroundColor='#500'; 
+            setTimeout(()=>document.body.style.backgroundColor='#050515',500); 
+        });
 
         const accords = document.querySelectorAll('.accord');
         accords.forEach(acc => {
@@ -194,20 +233,25 @@
             const b = document.getElementById('btn-toggle');
             b.innerText = "AVVIO"; b.className = "start-btn bg-start";
         }
+        
         function scoreOptimistic(side, delta) {
             const el = document.getElementById(side === 'left' ? 's-l' : 's-r');
             el.innerText = Math.max(0, parseInt(el.innerText) + delta);
             forceTimerStopLocally();
+            if(delta > 0) playBeep(850, 3.0); 
             socket.emit('update_score',{side:side,delta:delta});
             if(navigator.vibrate) navigator.vibrate(50);
         }
+        
         function doubleHitOptimistic() {
             document.getElementById('s-l').innerText = parseInt(document.getElementById('s-l').innerText) + 1;
             document.getElementById('s-r').innerText = parseInt(document.getElementById('s-r').innerText) + 1;
             forceTimerStopLocally();
+            playBeep(850, 3.0);
             socket.emit('double_hit');
             if(navigator.vibrate) navigator.vibrate(50);
         }
+        
         function toggleTimerOptimistic() {
             const b = document.getElementById('btn-toggle');
             if (b.innerText === "AVVIO" || b.innerText === "RIPRENDI PAUSA") { b.innerText = "STOP"; b.className = "start-btn bg-stop"; } 
@@ -215,6 +259,7 @@
             socket.emit('toggle_timer');
             if(navigator.vibrate) navigator.vibrate(50);
         }
+        
         function adjustTime(d) { socket.emit('adjust_time',{delta:d}); forceTimerStopLocally(); }
         function resetAction(a) { socket.emit(a); document.getElementById('reset-menu').removeAttribute('open'); forceTimerStopLocally(); }
         function undoAction() { socket.emit('undo'); document.getElementById('reset-menu').removeAttribute('open'); forceTimerStopLocally(); }
@@ -243,12 +288,6 @@
         socket.on('action_feedback', (data) => {
             if (data.status === 'error') alert("ERRORE: " + data.msg);
             else showToast(data.msg, data.status === 'info' ? 5000 : 3000);
-        });
-
-        socket.on('time_expired', () => { 
-            playBeep();
-            document.body.style.backgroundColor='#500'; 
-            setTimeout(()=>document.body.style.backgroundColor='#050515',500); 
         });
 
         setInterval(()=>socket.emit('admin_heartbeat',{active:true}),2000);

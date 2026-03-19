@@ -24,10 +24,9 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'scherma_secret_key'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
+# --- PERCORSI E FILE ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PHOTOS_DIR = os.path.join(BASE_DIR, 'static', 'photos')
-
-# FIX: Usa percorsi assoluti per forzare la lettura corretta dei file di salvataggio
 STATE_FILE = os.path.join(BASE_DIR, "local_match_state.json")
 OLD_STATE_FILE = os.path.join(BASE_DIR, "match_state.json")
 
@@ -40,90 +39,116 @@ gironi_cache = {'rosso': [], 'giallo': [], 'blu': [], 'verde': [], '32': []}
 history_stack = []
 last_google_status = "ok"
 
-# Variabili per gestire i Pico
-pico_last_seen = {
-    'rosso': {'time': 0, 'bat': 100}, 
-    'verde': {'time': 0, 'bat': 100}
-}
+# --- VARIABILI HARDWARE (Pico e Tempi) ---
+pico_last_seen = {'rosso': {'time': 0, 'bat': 100}, 'verde': {'time': 0, 'bat': 100}}
 last_hit_time = 0
+last_massa_time = {'left': 0, 'right': 0}
 hit_sides_in_window = set()
 
 # --- HELPERS ---
-def letter_to_index(letter):
-    if not letter: return 0
-    return ord(letter.upper()) - 65
+def letter_to_index(letter): 
+    return ord(letter.upper()) - 65 if letter else 0
 
-def letter_to_sheet_col(letter):
-    if not letter: return 1
-    return ord(letter.upper()) - 64
+def letter_to_sheet_col(letter): 
+    return ord(letter.upper()) - 64 if letter else 1
 
-def clean_fencer_name(raw_name):
-    if not raw_name: return ""
-    cleaned = re.sub(r'[^a-zA-Z0-9 ]', '', raw_name)
-    return " ".join(cleaned.split())
+def clean_fencer_name(raw_name): 
+    return " ".join(re.sub(r'[^a-zA-Z0-9 ]', '', raw_name).split()) if raw_name else ""
 
 def get_local_ip():
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('10.255.255.255', 1))
-        IP = s.getsockname()[0]
+    try: 
+        s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        s.connect(('10.255.255.255',1))
+        IP=s.getsockname()[0]
         s.close()
-    except Exception: IP = '127.0.0.1'
+    except: 
+        IP='127.0.0.1'
     return IP
 
 def get_current_ssid():
-    try:
-        ssid = subprocess.check_output("iwgetid -r", shell=True).decode().strip()
-        return ssid if ssid else "Nessuna Rete"
-    except: return "Offline"
+    try: 
+        return subprocess.check_output("iwgetid -r", shell=True).decode().strip() or "Nessuna Rete"
+    except: 
+        return "Offline"
 
 def get_photo_url(name):
     if not name: return "/static/photos/default.png"
-    safe_name = name.strip()
     for ext in ['jpg', 'png', 'jpeg', 'JPG', 'PNG']:
-        if os.path.exists(os.path.join(PHOTOS_DIR, f"{safe_name}.{ext}")):
-            return f"/static/photos/{safe_name}.{ext}?v={random.randint(1,1000)}"
+        if os.path.exists(os.path.join(PHOTOS_DIR, f"{name.strip()}.{ext}")): 
+            return f"/static/photos/{name.strip()}.{ext}?v={random.randint(1,1000)}"
     clean = clean_fencer_name(name)
     for ext in ['jpg', 'png', 'jpeg', 'JPG', 'PNG']:
-        if os.path.exists(os.path.join(PHOTOS_DIR, f"{clean}.{ext}")):
+        if os.path.exists(os.path.join(PHOTOS_DIR, f"{clean}.{ext}")): 
             return f"/static/photos/{clean}.{ext}?v={random.randint(1,1000)}"
     return "/static/photos/default.png"
 
 def new_fencer(name):
-    c_name = clean_fencer_name(name)
-    return { "name": c_name, "score": 0, "cards": {"Y": False, "R": False, "B": False, "R_count": 0}, "p_cards": {"Y": False, "R": False, "B": False}, "photo": get_photo_url(name) }
+    return { 
+        "name": clean_fencer_name(name), 
+        "score": 0, 
+        "cards": {"Y": False, "R": False, "B": False, "R_count": 0}, 
+        "p_cards": {"Y": False, "R": False, "B": False}, 
+        "photo": get_photo_url(name) 
+    }
 
 def get_system_fonts():
     try:
         output = subprocess.check_output(['fc-list', ':', 'family'], encoding='utf-8')
-        fonts = set()
-        for line in output.splitlines():
-            for family in line.split(','):
-                f = family.strip()
-                if f: fonts.add(f)
+        fonts = set(f.strip() for line in output.splitlines() for f in line.split(',') if f.strip())
         return sorted(list(fonts))
-    except Exception as e:
-        return ['Roboto Mono', 'Arial', 'Verdana', 'Courier New']
+    except: 
+        return ['Roboto Mono', 'Arial', 'Verdana']
 
 default_columns = {
-    'rosso': {'sx': 'A', 'psx': 'B', 'pdx': 'C', 'dx': 'D'}, 'giallo': {'sx': 'F', 'psx': 'G', 'pdx': 'H', 'dx': 'I'}, 
-    'blu': {'sx': 'K', 'psx': 'L', 'pdx': 'M', 'dx': 'N'}, 'verde': {'sx': 'P', 'psx': 'Q', 'pdx': 'R', 'dx': 'S'}, 
+    'rosso': {'sx': 'A', 'psx': 'B', 'pdx': 'C', 'dx': 'D'}, 
+    'giallo': {'sx': 'F', 'psx': 'G', 'pdx': 'H', 'dx': 'I'}, 
+    'blu': {'sx': 'K', 'psx': 'L', 'pdx': 'M', 'dx': 'N'}, 
+    'verde': {'sx': 'P', 'psx': 'Q', 'pdx': 'R', 'dx': 'S'}, 
     '32': {'sx': 'U', 'psx': 'V', 'pdx': 'W', 'dx': 'X'} 
 }
 
 default_settings = {
-    "weapon": "spada", "font_family": "Roboto Mono", "font_timer": 8.0, "font_score": 15.0, "font_name": 3.0, "font_list": 1.5,
-    "col_center_width": 1.2, "list_padding": 0.5, "text_border": 0.0, "photo_size": 150, "time_match": 180, "time_break": 60, "time_medical": 300,
-    "refresh_rate": 30, "buzzer_volume": 1.0, "default_name_left": "ATLETA SX", "default_name_right": "ATLETA DX", 
-    "google_script_url": "", "google_sheet_id": DEFAULT_SHEET_ID, "columns": default_columns
+    "weapon": "spada", 
+    "font_family": "Roboto Mono", 
+    "font_timer": 8.0, 
+    "font_score": 15.0, 
+    "font_name": 3.0, 
+    "font_list": 1.5, 
+    "col_center_width": 1.2, 
+    "list_padding": 0.5, 
+    "text_border": 0.0, 
+    "photo_size": 150, 
+    "time_match": 180, 
+    "time_break": 60, 
+    "time_medical": 300, 
+    "refresh_rate": 30, 
+    "buzzer_volume": 1.0, 
+    "default_name_left": "ATLETA SX", 
+    "default_name_right": "ATLETA DX", 
+    "google_script_url": "", 
+    "google_sheet_id": DEFAULT_SHEET_ID, 
+    "columns": default_columns
 }
 
 default_state = {
-    "timer": 180.0, "running": False, "phase": "MATCH", "priority": None,
-    "fencer_left": new_fencer(default_settings["default_name_left"]), "fencer_right": new_fencer(default_settings["default_name_right"]),
-    "period": 1, "admin_connected": False, "server_ip": get_local_ip(), "ssid": get_current_ssid(),
-    "match_list": [], "current_girone": "rosso", "active_girone": "rosso", "current_row_idx": None,
-    "manual_selection": False, "swapped": False, "settings": default_settings.copy(), "wifi_connected": False
+    "timer": 180.0, 
+    "running": False, 
+    "phase": "MATCH", 
+    "priority": None, 
+    "fencer_left": new_fencer(default_settings["default_name_left"]), 
+    "fencer_right": new_fencer(default_settings["default_name_right"]), 
+    "period": 1, 
+    "admin_connected": False, 
+    "server_ip": get_local_ip(), 
+    "ssid": get_current_ssid(), 
+    "match_list": [], 
+    "current_girone": "rosso", 
+    "active_girone": "rosso", 
+    "current_row_idx": None, 
+    "manual_selection": False, 
+    "swapped": False, 
+    "settings": default_settings.copy(), 
+    "wifi_connected": False
 }
 
 current_state = default_state.copy()
@@ -138,88 +163,27 @@ def async_save():
 
 def load_state():
     global current_state
-    file_to_load = None
-    loaded_from_old = False
-    
-    if os.path.exists(STATE_FILE):
-        file_to_load = STATE_FILE
-    elif os.path.exists(OLD_STATE_FILE):
-        file_to_load = OLD_STATE_FILE
-        loaded_from_old = True
-        
+    file_to_load = STATE_FILE if os.path.exists(STATE_FILE) else OLD_STATE_FILE if os.path.exists(OLD_STATE_FILE) else None
     if file_to_load:
         try:
             with open(file_to_load, 'r') as f:
                 data = json.load(f)
-                data['running'] = False
-                data['server_ip'] = get_local_ip()
-                data['ssid'] = get_current_ssid()
-                data['wifi_connected'] = data['server_ip'] != '127.0.0.1'
-                if 'priority' not in data: data['priority'] = None
-                if 'match_list' not in data: data['match_list'] = []
-                if 'swapped' not in data: data['swapped'] = False
-                
+                data.update({'running': False, 'server_ip': get_local_ip(), 'ssid': get_current_ssid(), 'wifi_connected': get_local_ip() != '127.0.0.1'})
                 saved_s = data.get('settings', {})
                 data['settings'] = default_settings.copy()
-                data['settings'].update(saved_s) 
-                
-                if 'columns' not in data['settings']: data['settings']['columns'] = default_columns.copy()
-                if 'google_sheet_id' not in data['settings']: data['settings']['google_sheet_id'] = DEFAULT_SHEET_ID
-                if 'buzzer_volume' not in data['settings']: data['settings']['buzzer_volume'] = 1.0
-                if 'weapon' not in data['settings']: data['settings']['weapon'] = 'spada'
-
-                if 'fencer_left' in data: 
-                    data['fencer_left']['photo'] = get_photo_url(data['fencer_left']['name'])
-                    if 'R_count' not in data['fencer_left']['cards']: data['fencer_left']['cards']['R_count'] = 0
-                if 'fencer_right' in data: 
-                    data['fencer_right']['photo'] = get_photo_url(data['fencer_right']['name'])
-                    if 'R_count' not in data['fencer_right']['cards']: data['fencer_right']['cards']['R_count'] = 0
-                
+                data['settings'].update(saved_s)
+                if 'fencer_left' in data: data['fencer_left']['photo'] = get_photo_url(data['fencer_left']['name'])
+                if 'fencer_right' in data: data['fencer_right']['photo'] = get_photo_url(data['fencer_right']['name'])
                 current_state = data
-                if 'active_girone' not in current_state: 
-                    current_state['active_girone'] = current_state.get('current_girone', 'rosso')
-                    
-            if loaded_from_old:
-                save_state()
-        except Exception as e: 
-            print("Errore nel caricamento del salvataggio:", e)
+            if file_to_load == OLD_STATE_FILE: save_state()
+        except: pass
 
 def push_history():
     global history_stack
     history_stack.append(copy.deepcopy(current_state))
     if len(history_stack) > 20: history_stack.pop(0)
 
-# --- NETWORK ---
-def scan_wifi_networks():
-    try:
-        subprocess.call("sudo nmcli dev wifi rescan", shell=True)
-        time.sleep(1)
-        result = subprocess.check_output("sudo nmcli -t -f SSID dev wifi list", shell=True).decode()
-        networks = [line.strip() for line in result.split('\n') if line.strip()]
-        return sorted(list(set(filter(None, networks))))
-    except: return []
-
-def get_saved_networks():
-    try:
-        result = subprocess.check_output("sudo nmcli -t -f NAME,TYPE connection show | grep 802-11-wireless | cut -d: -f1", shell=True).decode()
-        return [line.strip() for line in result.split('\n') if line.strip()]
-    except: return []
-
-def connect_to_wifi(ssid, password):
-    try:
-        subprocess.call(f"sudo nmcli connection delete id '{ssid}'", shell=True)
-        cmd = f"sudo nmcli dev wifi connect '{ssid}' password '{password}'"
-        subprocess.check_call(cmd, shell=True)
-        return True
-    except: return False
-
-def delete_wifi(ssid):
-    try:
-        subprocess.check_call(f"sudo nmcli connection delete id '{ssid}'", shell=True)
-        return True
-    except: return False
-
-# --- ROUTES ---
+# --- ROUTES PAGINE ---
 @app.route('/')
 def index(): return render_template('index.html')
 @app.route('/telecomando')
@@ -235,53 +199,80 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-def process_hw_hit(side, delta=1):
+
+# --- LOGICA ARMI E PUNTEGGI (ZERO LAG) ---
+
+def process_massa(side):
+    """Gestisce il colpo sulla coccia/pedana (Luce Bianca)"""
+    global last_massa_time
+    now = time.time()
+    # Debounce: Evita spam di suoni se la punta striscia a lungo sulla coccia (mezzo secondo)
+    if now - last_massa_time[side] > 0.5:
+        socketio.emit('hw_massa', {'side': side})
+        last_massa_time[side] = now
+
+def process_hw_hit(side):
+    """Gestisce la stoccata in base allo stato del tempo e all'arma"""
     global last_hit_time, hit_sides_in_window
     now = time.time()
-    if current_state.get('phase') != 'MATCH' or current_state['timer'] <= 0: return
-        
+    
+    if current_state.get('phase') != 'MATCH': return
+
+    # 1. SE IL TEMPO È FERMO: Luce e Suono ma NESSUN PUNTEGGIO
+    if not current_state['running']:
+        # Debounce per evitare suoni continui a tempo fermo
+        if now - last_hit_time > 0.5:
+            socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': False})
+            last_hit_time = now
+        return
+
+    # Legge i tempi di blocco (Lockout) FIE in base all'arma selezionata
+    weapon = current_state['settings'].get('weapon', 'spada')
+    lockout_ms = 0.045 # Spada (45 ms)
+    if weapon == 'fioretto': lockout_ms = 0.300 # 300 ms
+    elif weapon == 'sciabola': lockout_ms = 0.170 # 170 ms
+
+    # 2. PRIMA STOCCATA VALIDA A TEMPO CORRENTE
     if current_state['running']:
-        current_state['running'] = False
+        current_state['running'] = False # Ferma immediatamente il tempo
         last_hit_time = now
         hit_sides_in_window = {side}
-        current_state[f'fencer_{side}']['score'] += delta
-        socketio.emit('hw_hit', {'side': side, 'is_double': False})
+        current_state[f'fencer_{side}']['score'] += 1
+        
+        # score_added=True dice al frontend che il punto è valido e va segnato
+        socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True})
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
         eventlet.spawn(async_save)
         
-    elif side not in hit_sides_in_window and (now - last_hit_time < 0.2):
+    # 3. COLPO DOPPIO (Entro la finestra temporale dell'arma)
+    elif side not in hit_sides_in_window and (now - last_hit_time <= lockout_ms):
         hit_sides_in_window.add(side)
-        current_state[f'fencer_{side}']['score'] += delta
-        socketio.emit('hw_hit', {'side': side, 'is_double': True})
+        current_state[f'fencer_{side}']['score'] += 1
+        
+        socketio.emit('hw_hit', {'side': side, 'is_double': True, 'score_added': True})
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
         eventlet.spawn(async_save)
 
-@app.route('/api/update_score_hw', methods=['POST'])
-def update_score_hw():
-    try: data = request.get_json(force=True, silent=True)
-    except: data = None
-    if not data: return jsonify({"status": "error"}), 400
-    side = data.get('side') 
-    delta = data.get('delta', 1)
-    process_hw_hit(side, delta)
-    return jsonify({"status": "ok"}), 200
 
+# --- API ENDPOINTS ---
 @app.route('/api/pico_status')
 def get_pico_status():
     now = time.time()
-    r_active = (now - pico_last_seen['rosso']['time']) < 5
-    v_active = (now - pico_last_seen['verde']['time']) < 5
     return jsonify({
-        'rosso': {'active': r_active, 'bat': pico_last_seen['rosso']['bat'] if r_active else 0},
-        'verde': {'active': v_active, 'bat': pico_last_seen['verde']['bat'] if v_active else 0}
+        'rosso': {'active': (now - pico_last_seen['rosso']['time']) < 5, 'bat': pico_last_seen['rosso']['bat']},
+        'verde': {'active': (now - pico_last_seen['verde']['time']) < 5, 'bat': pico_last_seen['verde']['bat']}
     })
 
 @app.route('/api/scan_wifi')
-def api_scan(): return jsonify(scan_wifi_networks())
+def api_scan(): 
+    return jsonify(scan_wifi_networks())
+
 @app.route('/api/saved_wifi')
-def api_saved(): return jsonify(get_saved_networks())
+def api_saved(): 
+    return jsonify(get_saved_networks())
+
 @app.route('/api/connect_wifi', methods=['POST'])
 def api_connect():
     data = request.json
@@ -292,7 +283,8 @@ def api_connect():
         current_state['ssid'] = get_current_ssid()
         current_state['wifi_connected'] = True
         return jsonify({"status": "success", "ip": current_state['server_ip']})
-    else: return jsonify({"status": "error"}), 400
+    else: 
+        return jsonify({"status": "error"}), 400
 
 @app.route('/api/delete_wifi', methods=['POST'])
 def api_delete_wifi():
@@ -310,6 +302,7 @@ def upload_photo():
     if file.filename == '': return jsonify({"error": "No filename"}), 400
     ext = file.filename.rsplit('.', 1)[1].lower()
     if ext not in ['jpg', 'jpeg', 'png']: return jsonify({"error": "Invalid type"}), 400
+    
     if is_default:
         filename = "default.png"
         for e in ['jpg', 'png', 'jpeg']:
@@ -320,6 +313,7 @@ def upload_photo():
             p = os.path.join(PHOTOS_DIR, f"{clean_name_file}.{e}")
             if os.path.exists(p): os.remove(p)
         filename = f"{clean_name_file}.{ext}"
+    
     file.save(os.path.join(PHOTOS_DIR, filename))
     if not is_default:
         l = clean_fencer_name(current_state['fencer_left']['name'])
@@ -397,8 +391,11 @@ def download_photos():
     except Exception as e: return jsonify({"error": str(e)}), 500
 
 @app.route('/api/get_fonts')
-def api_get_fonts(): return jsonify(get_system_fonts())
+def api_get_fonts(): 
+    return jsonify(get_system_fonts())
 
+
+# --- SOCKET WEBSOCKET HANDLERS ---
 @socketio.on('connect')
 def handle_connect(): 
     current_state['server_ip'] = get_local_ip()
@@ -427,7 +424,11 @@ def handle_score(d):
     side = d['side']
     current_state[f'fencer_{side}']['score'] = max(0, current_state[f'fencer_{side}']['score'] + d['delta'])
     current_state['running'] = False
-    if d['delta'] > 0: socketio.emit('hw_hit', {'side': side, 'is_double': False})
+    
+    # Se arriva dal telecomando, avvisa gli altri client per luci e suoni
+    if d['delta'] > 0: 
+        socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True})
+        
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
     eventlet.spawn(async_save)
@@ -455,6 +456,7 @@ def handle_card(d):
     fencer = current_state[f'fencer_{side}']
     opp_side = 'right' if side == 'left' else 'left'
     opponent = current_state[f'fencer_{opp_side}']
+    
     current_state['running'] = False
 
     if card_type.startswith('P_'):
@@ -490,7 +492,8 @@ def db_hit():
     current_state['fencer_left']['score'] += 1
     current_state['fencer_right']['score'] += 1
     current_state['running'] = False 
-    socketio.emit('hw_hit', {'side': 'double', 'is_double': True})
+    
+    socketio.emit('hw_hit', {'side': 'double', 'is_double': True, 'score_added': True})
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
     eventlet.spawn(async_save)
@@ -550,6 +553,23 @@ def r_timer():
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
     eventlet.spawn(async_save)
 
+@socketio.on('update_settings')
+def up_set(d):
+    for k,v in d.items(): 
+        if k == 'columns': current_state['settings']['columns'] = v
+        elif k in current_state['settings']: 
+            if isinstance(current_state['settings'][k], (int, float)):
+                try: current_state['settings'][k] = float(v)
+                except: pass
+            else: current_state['settings'][k] = str(v)
+    socketio.emit('state_update', current_state)
+    eventlet.spawn(async_save)
+
+@socketio.on('admin_heartbeat')
+def hb(d):
+    current_state['admin_connected'] = d.get('active', False)
+    emit('admin_status', {'connected': current_state['admin_connected']})
+
 @socketio.on('fetch_sheet')
 def f_sheet(d=None):
     if d and 'girone' in d:
@@ -565,12 +585,7 @@ def l_match(d):
     push_history()
     if 'girone' in d: current_state['active_girone'] = d['girone']
     else: current_state['active_girone'] = current_state.get('current_girone', 'rosso')
-    load_match_data(d) 
-    socketio.emit('state_update', current_state)
-    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
-    eventlet.spawn(async_save)
-
-def load_match_data(d):
+    
     current_state['manual_selection'] = True
     current_state['swapped'] = False 
     current_state['current_row_idx'] = d['row']
@@ -578,9 +593,9 @@ def load_match_data(d):
     current_state['fencer_right']['name'] = clean_fencer_name(d['dx'])
     current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left']['name'])
     current_state['fencer_right']['photo'] = get_photo_url(current_state['fencer_right']['name'])
-    try: current_state['fencer_left']['score'] = int(d['p_sx'])
+    try: current_state['fencer_left']['score'] = int(float(d['p_sx']))
     except: current_state['fencer_left']['score'] = 0
-    try: current_state['fencer_right']['score'] = int(d['p_dx'])
+    try: current_state['fencer_right']['score'] = int(float(d['p_dx']))
     except: current_state['fencer_right']['score'] = 0
     current_state['timer'] = float(current_state['settings']['time_match'])
     current_state['phase'] = 'MATCH' 
@@ -589,6 +604,10 @@ def load_match_data(d):
     for s in ['left','right']:
         current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
         current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+
+    socketio.emit('state_update', current_state)
+    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+    eventlet.spawn(async_save)
 
 @socketio.on('swap_fencers')
 def handle_swap():
@@ -632,11 +651,28 @@ def handle_send_result():
             
     if next_match:
         current_state['active_girone'] = g
-        load_match_data(next_match)
+        current_state['manual_selection'] = True
+        current_state['swapped'] = False 
+        current_state['current_row_idx'] = next_match['row']
+        current_state['fencer_left']['name'] = clean_fencer_name(next_match['sx'])
+        current_state['fencer_right']['name'] = clean_fencer_name(next_match['dx'])
+        current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left']['name'])
+        current_state['fencer_right']['photo'] = get_photo_url(current_state['fencer_right']['name'])
+        current_state['fencer_left']['score'] = 0
+        current_state['fencer_right']['score'] = 0
+        current_state['timer'] = float(current_state['settings']['time_match'])
+        current_state['phase'] = 'MATCH' 
+        current_state['running'] = False
+        current_state['priority'] = None
+        for s in ['left','right']:
+            current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
+            current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+            
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
         socketio.emit('action_feedback', {'status': 'success', 'msg': f'Prossimo: {next_match["sx"]} vs {next_match["dx"]}'})
 
+# --- WORKERS BACKGROUND ---
 def process_background_upload(payload, girone):
     try:
         url = current_state['settings']['google_script_url']
@@ -672,27 +708,8 @@ def check_google():
     if not check_internet(): return "error"
     return "ok" 
 
-def check_status_thread_logic(): socketio.emit('status_check', {'internet': check_internet(), 'google': check_google()})
-
-@socketio.on('update_settings')
-def up_set(d):
-    for k,v in d.items(): 
-        if k == 'columns': current_state['settings']['columns'] = v
-        elif k in current_state['settings']: 
-            if k in ['font_family','google_script_url', 'google_sheet_id', 'weapon'] or k.startswith('default_name'):
-                 current_state['settings'][k] = str(v)
-            elif isinstance(current_state['settings'][k], (int, float)):
-                try: current_state['settings'][k] = float(v)
-                except: pass
-            else: current_state['settings'][k] = str(v)
-    socketio.emit('state_update', current_state)
-    eventlet.spawn(async_save)
-    if 'columns' in d or 'google_sheet_id' in d: eventlet.spawn(update_all_gironi_data)
-
-@socketio.on('admin_heartbeat')
-def hb(d):
-    current_state['admin_connected'] = d.get('active', False)
-    emit('admin_status', {'connected': current_state['admin_connected']})
+def check_status_thread_logic(): 
+    socketio.emit('status_check', {'internet': check_internet(), 'google': check_google()})
 
 def update_all_gironi_data():
     global gironi_cache
@@ -743,7 +760,7 @@ def update_all_gironi_data():
         if updated_current: eventlet.spawn(async_save)
             
         if not current_state.get('manual_selection') and not current_state['running'] and current_state['timer'] == float(current_state['settings']['time_match']):
-             next_match = next((m for m in new_cache.get(cg, []) if (int(m['p_sx']) == 0 and int(m['p_dx']) == 0)), None)
+             next_match = next((m for m in new_cache.get(cg, []) if (int(float(m['p_sx'])) == 0 and int(float(m['p_dx'])) == 0)), None)
              if not next_match:
                  current_state['fencer_left']['name'] = current_state['settings']['default_name_left']
                  current_state['fencer_right']['name'] = current_state['settings']['default_name_right']
@@ -803,8 +820,10 @@ def udp_listener_thread():
             data, addr = udp_sock.recvfrom(1024)
             msg = data.decode('utf-8')
             
-            if "HIT_ROSSO" in msg: process_hw_hit("left")
-            elif "HIT_VERDE" in msg: process_hw_hit("right")
+            if msg == "HIT_ROSSO": process_hw_hit("left")
+            elif msg == "HIT_VERDE": process_hw_hit("right")
+            elif msg == "MASSA_ROSSO": process_massa("left")
+            elif msg == "MASSA_VERDE": process_massa("right")
             elif msg.startswith("PING_ROSSO"):
                 parts = msg.split('_')
                 bat = parts[2] if len(parts) > 2 else 100

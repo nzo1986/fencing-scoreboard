@@ -21,7 +21,6 @@
         .font-btn { padding: 10px 15px; margin: 5px; background: #333; border: 1px solid #555; border-radius: 4px; color: white; transition: 0.2s; }
         .font-btn.active { background: #2563eb; border-color: #3b82f6; box-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
         
-        /* Stili avanzati per Accordion (Menu a tendina) */
         details { background: #222; border: 1px solid #444; border-radius: 8px; margin-bottom: 15px; overflow: hidden; transition: all 0.3s ease; }
         summary { padding: 18px 20px; font-size: 1.25rem; font-weight: bold; background: #333; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; user-select: none; }
         summary::-webkit-details-marker { display: none; }
@@ -33,8 +32,8 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
         .sys-btn { width: 100%; padding: 15px; font-size: 1.2rem; font-weight: bold; border-radius: 8px; border: none; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; }
-        input[type="text"] { width: 100%; padding: 12px; background: #111; color: white; border: 1px solid #555; border-radius: 6px; margin-top: 8px; font-family: monospace; font-size: 1rem; }
-        input[type="text"]:focus { border-color: #3b82f6; outline: none; }
+        input[type="text"], select { width: 100%; padding: 12px; background: #111; color: white; border: 1px solid #555; border-radius: 6px; margin-top: 8px; font-family: monospace; font-size: 1rem; }
+        input[type="text"]:focus, select:focus { border-color: #3b82f6; outline: none; }
         
         .bat-info { background: #1a1a1a; padding: 15px; border-radius: 8px; font-size: 0.95rem; color: #aaa; border: 1px dashed #555; line-height: 1.5; }
     </style>
@@ -47,7 +46,6 @@
 
     <div class="px-3 max-w-2xl mx-auto">
         
-        <!-- 1. GRAFICA DISPLAY E FONT -->
         <details>
             <summary>Grafica Display & Font</summary>
             <div class="details-content">
@@ -83,18 +81,24 @@
                         <button class="adjust-btn btn-plus" onclick="adj('photo_size',10)">+</button>
                     </div>
                 </div>
-                
                 <div class="p-4 border-t border-gray-700 mt-2">
-                    <span class="lbl font-bold text-white block mb-3">Stile Font (Carattere testuale):</span>
+                    <span class="lbl font-bold text-white block mb-3">Stile Font:</span>
                     <div id="font-list" class="flex flex-wrap gap-2"></div>
                 </div>
             </div>
         </details>
 
-        <!-- 2. GESTIONE TEMPO E AUDIO -->
         <details>
-            <summary>Cronometro & Audio</summary>
+            <summary>Armi, Cronometro & Audio</summary>
             <div class="details-content">
+                <div class="p-4 border-b border-gray-700">
+                    <label class="lbl font-bold text-white block mb-2">🤺 Arma Attuale (Modifica Lockout FIE):</label>
+                    <select id="weapon_select" onchange="updateText('weapon', this.value)">
+                        <option value="spada">Spada (Lockout 45 ms)</option>
+                        <option value="fioretto">Fioretto (Lockout 300 ms)</option>
+                        <option value="sciabola">Sciabola (Lockout 170 ms)</option>
+                    </select>
+                </div>
                 <div class="row-ctrl">
                     <span class="lbl">Tempo Assalto (secondi)</span>
                     <div class="flex items-center gap-2">
@@ -122,7 +126,6 @@
             </div>
         </details>
 
-        <!-- 3. CONFIGURAZIONE FOGLI GOOGLE -->
         <details>
             <summary>Sincronizzazione Google</summary>
             <div class="details-content">
@@ -148,22 +151,6 @@
             </div>
         </details>
 
-        <!-- 4. INFO SENSORI E BATTERIA -->
-        <details>
-            <summary>Stato Sensori & Batteria</summary>
-            <div class="details-content p-4">
-                <div class="bat-info">
-                    <strong class="text-white text-lg block mb-2">🔋 Info Batterie Sensori Pico:</strong>
-                    <ul class="list-disc pl-5 space-y-2">
-                        <li>Se usi batterie <strong>LiPo/Li-Ion (3.7V)</strong>, la percentuale in alto sul telecomando è accurata.</li>
-                        <li><strong>Pronostico LiPo:</strong> 100% = ~8 ore di gara | 50% = ~4 ore | < 15% = Ricaricare presto.</li>
-                        <li>Se alimenti i sensori con un <strong>Powerbank USB (5V)</strong>, la percentuale segnerà perennemente <strong>100%</strong> perché il powerbank eroga voltaggio pieno fino all'esaurimento totale.</li>
-                    </ul>
-                </div>
-            </div>
-        </details>
-
-        <!-- 5. GESTIONE GENERALE DEL SISTEMA -->
         <details>
             <summary>Menu Sistema Avanzato</summary>
             <div class="details-content p-4">
@@ -182,19 +169,20 @@
         socket.on('state_update', s => {
             if(s.settings) {
                 settings = s.settings;
-                // Aggiorna tutti i campi numerici visualizzati
                 ['font_timer','font_score','font_name','photo_size','time_match','time_break','buzzer_volume','refresh_rate'].forEach(k => {
                     let e = document.getElementById('val_'+k);
                     if(e) e.innerText = settings[k];
                 });
-                // Aggiorna gli URL e gli input di testo
                 document.getElementById('google_sheet_id').value = settings.google_sheet_id || '';
                 document.getElementById('google_script_url').value = settings.google_script_url || '';
+                
+                const wSelect = document.getElementById('weapon_select');
+                if (wSelect) wSelect.value = settings.weapon || 'spada';
+                
                 loadFonts();
             }
         });
 
-        // Chiusura esclusiva degli accordion (se ne apri uno, chiudi gli altri)
         const detailsElements = document.querySelectorAll('details');
         detailsElements.forEach(targetDetail => {
             targetDetail.addEventListener('click', () => {
@@ -206,41 +194,30 @@
 
         function adj(k, d) {
             let v = parseFloat(settings[k]||0) + d;
-            // Arrotonda in base al tipo di parametro per evitare decimali strani
-            if(k === 'photo_size' || k.startswith('time_') || k === 'refresh_rate') v = Math.round(v);
+            if(k === 'photo_size' || k.startsWith('time_') || k === 'refresh_rate') v = Math.round(v);
             else v = Math.round(v*10)/10;
-            
             if(v < 0) v = 0; 
             if(k === 'buzzer_volume' && v > 5) v = 5;
-            
             settings[k] = v;
             document.getElementById('val_'+k).innerText = v;
             socket.emit('update_settings', {[k]: v});
         }
         
-        function updateText(k, v) { 
-            socket.emit('update_settings', {[k]: v.trim()}); 
-        }
-        
-        function selectFont(f) { 
-            socket.emit('update_settings', {font_family: f}); 
-        }
+        function updateText(k, v) { socket.emit('update_settings', {[k]: v.trim()}); }
+        function selectFont(f) { socket.emit('update_settings', {font_family: f}); }
 
         function loadFonts() {
-            fetch('/api/get_fonts')
-                .then(r => r.json())
-                .then(fonts => {
-                    const c = document.getElementById('font-list'); 
-                    c.innerHTML = '';
-                    fonts.forEach(f => {
-                        let b = document.createElement('button');
-                        b.className = 'font-btn' + (settings.font_family === f ? ' active' : '');
-                        b.style.fontFamily = f;
-                        b.innerText = f;
-                        b.onclick = () => selectFont(f);
-                        c.appendChild(b);
-                    });
+            fetch('/api/get_fonts').then(r => r.json()).then(fonts => {
+                const c = document.getElementById('font-list'); c.innerHTML = '';
+                fonts.forEach(f => {
+                    let b = document.createElement('button');
+                    b.className = 'font-btn' + (settings.font_family === f ? ' active' : '');
+                    b.style.fontFamily = f;
+                    b.innerText = f;
+                    b.onclick = () => selectFont(f);
+                    c.appendChild(b);
                 });
+            });
         }
     </script>
 </body>
