@@ -3,42 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kiosk</title>
+    <title>Display</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@700&display=swap');
-        :root { --timer-size: 8rem; --score-size: 15rem; --name-size: 3rem; --font-family: 'Roboto Mono'; }
-        body { background-color: #000; color: white; overflow: hidden; font-family: var(--font-family), monospace; display: flex; flex-direction: column; height: 100vh; }
-        .stroked { -webkit-text-stroke: var(--text-stroke) black; }
+        
+        /* Variabili CSS Dinamiche collegate alle Impostazioni */
+        :root { 
+            --timer-size: 8rem; 
+            --score-size: 15rem; 
+            --name-size: 3rem; 
+            --font-family: 'Roboto Mono'; 
+            --photo-size: 150px;
+        }
+        
+        body { background-color: #000; color: white; overflow: hidden; font-family: var(--font-family), monospace; display: flex; flex-direction: column; height: 100vh; margin: 0; }
+        .stroked { -webkit-text-stroke: var(--text-stroke, 0px) black; }
         .timer-container { flex: none; display: flex; justify-content: center; align-items: center; background: #000; padding: 1vh 0; position: relative; }
+        
+        /* Applicazione delle grandezze dinamiche */
         .timer-box { font-size: var(--timer-size); line-height: 1; }
-        .main-body { flex: 1; display: flex; width: 100%; overflow: hidden; }
-        .fencer-col { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 20px; }
         .fencer-name { font-size: var(--name-size); font-weight: bold; text-align: center; margin-bottom: 20px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .score-container { display: flex; align-items: center; justify-content: center; gap: 20px; width: 100%; margin: 20px 0; }
         .score-box { font-size: var(--score-size); line-height: 1; }
-        .fencer-photo { width: 150px; height: auto; aspect-ratio: 3/4; border-radius: 10px; object-fit: cover; border: 3px solid #333; transition: box-shadow 0.1s, border-color 0.1s; display: none; }
+        .fencer-photo { width: var(--photo-size); height: auto; aspect-ratio: 3/4; border-radius: 10px; object-fit: cover; border: 3px solid #333; transition: box-shadow 0.1s, border-color 0.1s; display: none; }
+        
+        .main-body { flex: 1; display: flex; width: 100%; overflow: hidden; }
+        .fencer-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        .score-container { display: flex; align-items: center; justify-content: center; gap: 20px; width: 100%; margin: 20px 0; }
         
         /* COLORI STOCCATA */
         .hit-glow-left { border-color: #ff0000 !important; box-shadow: 0 0 60px #ff0000, inset 0 0 20px #ff0000; }
         .hit-glow-right { border-color: #00ff00 !important; box-shadow: 0 0 60px #00ff00, inset 0 0 20px #00ff00; }
-        
-        /* COLORE MASSA (BIANCO) */
         .hit-glow-white { border-color: #ffffff !important; box-shadow: 0 0 60px #ffffff, inset 0 0 30px #ffffff; }
 
-        /* OVERLAY SBLOCCO AUDIO OBBLIGATORIO */
-        #audio-unlocker { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.95); display: flex; justify-content: center; align-items: center; cursor: pointer; flex-direction: column; }
+        #btn-audio { position: absolute; bottom: 10px; right: 10px; background: #222; color: #888; border: 1px solid #444; padding: 8px 15px; border-radius: 5px; cursor: pointer; z-index: 100; font-size: 12px; transition: 0.3s; }
+        #btn-audio:hover { background: #444; color: white; }
     </style>
 </head>
-<body class="cursor-none">
+<body class="cursor-none" onclick="unlockAudio()">
 
-    <!-- SCHERMATA OBBLIGATORIA PER SBLOCCARE AUDIO SU CHROME -->
-    <div id="audio-unlocker">
-        <span class="text-6xl text-white font-bold mb-6 text-center">SISTEMA INIZIALIZZATO</span>
-        <button class="bg-green-600 hover:bg-green-500 text-white text-3xl font-bold py-6 px-12 rounded-xl shadow-lg border-4 border-green-400 animate-pulse transition">CLICCA QUI PER SBLOCCARE L'AUDIO 🔊</button>
-        <span class="text-xl mt-6 text-gray-400 text-center">(Questa operazione sblocca i suoni della pedana sul monitor)</span>
-    </div>
+    <!-- Pulsante di riserva se il browser blocca l'audio -->
+    <button id="btn-audio" onclick="unlockAudio()">Sblocca Audio</button>
 
     <div class="timer-container">
         <div id="timer" class="timer-box stroked text-white font-bold">3:00</div>
@@ -64,31 +70,35 @@
     <script>
         const socket = io();
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        let audioUnlocked = false; 
         let globalSettings = {};
 
-        // Sblocco del contesto Audio al clic sull'Overlay
-        document.getElementById('audio-unlocker').addEventListener('click', () => {
+        // Funzione per forzare lo sblocco audio
+        function unlockAudio() {
             if(audioCtx.state === 'suspended') audioCtx.resume();
-            audioUnlocked = true;
-            document.getElementById('audio-unlocker').style.display = 'none';
-        });
+            document.getElementById('btn-audio').style.display = 'none'; // Nasconde il pulsante
+        }
 
+        // Sintetizzatore Audio
         function playBeep(hz, duration) {
-            if (!audioUnlocked) return;
-            const volume = parseFloat(globalSettings.buzzer_volume || 1.0);
+            // Tenta di avviare l'audio in automatico ad ogni segnale
+            if(audioCtx.state === 'suspended') audioCtx.resume(); 
+            
+            const volume = parseFloat(globalSettings.buzzer_volume !== undefined ? globalSettings.buzzer_volume : 1.0);
             if (volume <= 0) return;
             const o = audioCtx.createOscillator(); 
             const g = audioCtx.createGain();
-            o.type = 'square'; o.frequency.setValueAtTime(hz, audioCtx.currentTime); 
+            o.type = 'square'; 
+            o.frequency.setValueAtTime(hz, audioCtx.currentTime); 
             g.gain.setValueAtTime(volume, audioCtx.currentTime);
-            o.connect(g); g.connect(audioCtx.destination);
-            o.start(); o.stop(audioCtx.currentTime + duration); 
+            o.connect(g); 
+            g.connect(audioCtx.destination);
+            o.start(); 
+            o.stop(audioCtx.currentTime + duration); 
         }
 
         // Evento Stoccata
         socket.on('hw_hit', data => {
-            playBeep(850, 3.0); // Suono Acuto Stoccata
+            playBeep(1200, 3.0); // 1200 Hz: SUONO MOLTO ACUTO (Stoccata)
             if (data.side === 'left' || data.is_double) {
                 document.getElementById('ph-l').classList.add('hit-glow-left');
                 setTimeout(() => document.getElementById('ph-l').classList.remove('hit-glow-left'), 3000);
@@ -99,21 +109,41 @@
             }
         });
 
-        // Evento Massa (Coccia - Fuori Bersaglio)
+        // Evento Massa (Coccia bianca)
         socket.on('hw_massa', data => {
-            playBeep(600, 1.0); // Suono Medio
+            playBeep(800, 1.0); // 800 Hz: Suono intermedio (Coccia)
             const img = document.getElementById(data.side === 'left' ? 'ph-l' : 'ph-r');
             img.classList.add('hit-glow-white');
-            setTimeout(() => img.classList.remove('hit-glow-white'), 1500); // 1,5 secondi di luce bianca
+            setTimeout(() => img.classList.remove('hit-glow-white'), 1500); 
         });
 
-        socket.on('time_expired', () => { playBeep(440, 1.0); }); // Suono Grave Scadenza Tempo
-        socket.on('timer_update', d => { document.getElementById('timer').innerText = d.time > 10 ? `${Math.floor(d.time/60)}:${(Math.floor(d.time%60)<10?'0':'')+Math.floor(d.time%60)}` : d.time.toFixed(1); });
+        socket.on('time_expired', () => { playBeep(500, 1.0); }); // 500 Hz: Suono basso (Tempo)
+        
+        socket.on('timer_update', d => { 
+            document.getElementById('timer').innerText = d.time > 10 ? `${Math.floor(d.time/60)}:${(Math.floor(d.time%60)<10?'0':'')+Math.floor(d.time%60)}` : d.time.toFixed(1); 
+        });
 
         socket.on('state_update', s => {
-            if(s.settings) { globalSettings = s.settings; document.getElementById('ph-l').style.display = s.settings.photo_size > 0 ? 'block' : 'none'; document.getElementById('ph-r').style.display = s.settings.photo_size > 0 ? 'block' : 'none'; }
-            document.getElementById('n-l').innerText=s.fencer_left.name; document.getElementById('s-l').innerText=s.fencer_left.score;
-            document.getElementById('n-r').innerText=s.fencer_right.name; document.getElementById('s-r').innerText=s.fencer_right.score;
+            if(s.settings) { 
+                globalSettings = s.settings; 
+                
+                // FIX: Trasferisce le impostazioni salvate alle variabili CSS del layout
+                const r = document.documentElement;
+                r.style.setProperty('--timer-size', s.settings.font_timer + 'rem');
+                r.style.setProperty('--score-size', s.settings.font_score + 'rem');
+                r.style.setProperty('--name-size', s.settings.font_name + 'rem');
+                r.style.setProperty('--photo-size', s.settings.photo_size + 'px');
+                r.style.setProperty('--font-family', s.settings.font_family);
+
+                document.getElementById('ph-l').style.display = s.settings.photo_size > 0 ? 'block' : 'none'; 
+                document.getElementById('ph-r').style.display = s.settings.photo_size > 0 ? 'block' : 'none'; 
+            }
+            
+            document.getElementById('n-l').innerText=s.fencer_left.name; 
+            document.getElementById('s-l').innerText=s.fencer_left.score;
+            document.getElementById('n-r').innerText=s.fencer_right.name; 
+            document.getElementById('s-r').innerText=s.fencer_right.score;
+            
             if (s.fencer_left.photo) document.getElementById('ph-l').src = s.fencer_left.photo;
             if (s.fencer_right.photo) document.getElementById('ph-r').src = s.fencer_right.photo;
         });
