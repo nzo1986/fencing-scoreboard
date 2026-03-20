@@ -31,12 +31,9 @@
         
         .main-body { flex: 1; display: flex; width: 100%; overflow: hidden; padding: 10px; gap: 10px;}
         
-        /* COLONNE ATLETI (Modificate per l'illuminazione totale) */
         .fencer-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; border-radius: 20px; border: 4px solid transparent; transition: background-color 0.2s, box-shadow 0.2s, border-color 0.2s; }
         .score-container { display: flex; align-items: center; justify-content: center; gap: 20px; width: 100%; margin: 10px 0; flex-direction: column;}
-        .score-container-row { display: flex; align-items: center; justify-content: center; gap: 20px; }
 
-        /* LISTA INCONTRI CENTRALE */
         .center-col { flex: var(--center-flex); background: transparent; display: flex; flex-direction: column; padding: 10px; overflow: hidden; transition: flex 0.3s; }
         .list-title { text-align: center; color: #555; font-size: 1.2rem; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 2px; }
         .match-list { width: 100%; display: flex; flex-direction: column; gap: 4px; }
@@ -44,7 +41,7 @@
         .match-item:nth-child(even) { background: rgba(50, 50, 50, 0.5); }
         .match-item span { color: #ccc; font-weight: bold;}
 
-        /* COLORI STOCCATA E MASSA SULL'INTERA COLONNA */
+        /* COLONNA INTERA CHE SI ILLUMINA */
         .hit-glow-left { 
             background-color: rgba(255, 0, 0, 0.25) !important;
             border-color: #ff0000 !important; 
@@ -61,7 +58,6 @@
             box-shadow: 0 0 60px rgba(255, 255, 255, 0.6), inset 0 0 30px rgba(255, 255, 255, 0.4) !important; 
         }
 
-        /* OVERLAY AUDIO */
         #audio-unlocker { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.95); display: flex; justify-content: center; align-items: center; cursor: pointer; flex-direction: column; }
     </style>
 </head>
@@ -70,7 +66,6 @@
     <div id="audio-unlocker">
         <span class="text-6xl text-white font-bold mb-6 text-center">SISTEMA INIZIALIZZATO</span>
         <button class="bg-green-600 hover:bg-green-500 text-white text-3xl font-bold py-6 px-12 rounded-xl shadow-lg border-4 border-green-400 animate-pulse transition">CLICCA QUI PER SBLOCCARE L'AUDIO 🔊</button>
-        <span class="text-xl mt-6 text-gray-400 text-center">(Questa operazione sblocca i suoni della pedana sul monitor)</span>
     </div>
 
     <div class="timer-container">
@@ -125,10 +120,10 @@
         }
 
         socket.on('hw_hit', data => {
-            // Suono ridotto a 1.5 secondi per il punto
-            playBeep(1200, 1.5); 
+            // Se manuale = 0.5s, se automatico = 1.5s
+            let durataSuono = data.is_manual ? 0.5 : 1.5;
+            playBeep(1200, durataSuono); 
             
-            // Applica l'illuminazione all'intera colonna (col-l / col-r)
             if (data.side === 'left' || data.is_double) {
                 const colL = document.getElementById('col-l');
                 colL.classList.add('hit-glow-left');
@@ -142,9 +137,7 @@
         });
 
         socket.on('hw_massa', data => {
-            // NESSUN SUONO EMANATO PER LA COCCIA
-            
-            // Illumina di bianco tutta la colonna dell'atleta
+            // NESSUN SUONO EMANATO
             const col = document.getElementById(data.side === 'left' ? 'col-l' : 'col-r');
             col.classList.add('hit-glow-white');
             setTimeout(() => col.classList.remove('hit-glow-white'), 1500); 
@@ -172,31 +165,23 @@
                 document.getElementById('ph-l').style.display = s.settings.photo_size > 0 ? 'block' : 'none'; 
                 document.getElementById('ph-r').style.display = s.settings.photo_size > 0 ? 'block' : 'none'; 
                 
-                // Gestione visibilità colonna centrale
                 const centerCol = document.getElementById('center-col-container');
-                if (s.settings.col_center_width <= 0) {
-                    centerCol.style.display = 'none';
-                } else {
-                    centerCol.style.display = 'flex';
-                }
+                if (s.settings.col_center_width <= 0) { centerCol.style.display = 'none'; } 
+                else { centerCol.style.display = 'flex'; }
             }
             
             document.getElementById('n-l').innerText=s.fencer_left.name; 
             document.getElementById('s-l').innerText=s.fencer_left.score;
             document.getElementById('n-r').innerText=s.fencer_right.name; 
             document.getElementById('s-r').innerText=s.fencer_right.score;
-            
             if (s.fencer_left.photo) document.getElementById('ph-l').src = s.fencer_left.photo;
             if (s.fencer_right.photo) document.getElementById('ph-r').src = s.fencer_right.photo;
 
-            // Aggiornamento Lista Incontri
             const listC = document.getElementById('match-list-container');
             if (s.match_list && s.match_list.length > 0) {
                 const pending = s.match_list.filter(m => (parseInt(m.p_sx)||0)===0 && (parseInt(m.p_dx)||0)===0);
                 listC.innerHTML = pending.slice(0, 8).map(m => `<div class="match-item"><span>${m.sx}</span> vs <span>${m.dx}</span></div>`).join('');
-            } else { 
-                listC.innerHTML = ''; 
-            }
+            } else { listC.innerHTML = ''; }
         });
     </script>
 </body>

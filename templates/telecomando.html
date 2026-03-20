@@ -15,7 +15,6 @@
         .score-bar{background:black;color:white;display:flex;justify-content:space-between;padding:0 20px;font-size:3rem;font-weight:bold;line-height:1.2;margin:5px 0;border-radius:2px;position:relative;border:1px solid #333; transition: background 0.2s;}
         .score-val{width:45%;text-align:center; border-radius: 8px; padding: 5px; transition: background-color 0.1s;}
         
-        /* Colori per Massa e Fuori Tempo sul telecomando */
         .glow-white { background-color: #e2e8f0; color: black !important; }
         .glow-red { background-color: #ef4444; color: white !important; }
         .glow-green { background-color: #22c55e; color: white !important; }
@@ -153,18 +152,11 @@
                         pv.className = 'sensor-status sensor-active-green';
                         pv.innerText = s.verde.bat + '%';
                     } else { pv.className = 'sensor-status'; pv.innerText = '--'; }
-                })
-                .catch(e => {
-                    // Evita di inondare la console con errori in caso di micro-cadute di rete
-                });
+                }).catch(e => {});
         }, 1500);
 
-        // --- SISTEMA AUDIO ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        function unlockAudio() { 
-            if (audioCtx.state === 'suspended') { audioCtx.resume(); }
-        }
+        function unlockAudio() { if (audioCtx.state === 'suspended') { audioCtx.resume(); } }
         
         function playBeep(hz, duration) {
             if (audioCtx.state === 'suspended') { audioCtx.resume(); }
@@ -172,8 +164,7 @@
             if (volume <= 0) return;
             const o = audioCtx.createOscillator(); 
             const g = audioCtx.createGain();
-            o.type = 'square'; 
-            o.frequency.setValueAtTime(hz, audioCtx.currentTime); 
+            o.type = 'square'; o.frequency.setValueAtTime(hz, audioCtx.currentTime); 
             g.gain.setValueAtTime(volume, audioCtx.currentTime);
             o.connect(g); g.connect(audioCtx.destination);
             o.start(); o.stop(audioCtx.currentTime + duration); 
@@ -181,7 +172,10 @@
         
         socket.on('hw_hit', data => { 
             if (navigator.vibrate) navigator.vibrate(50); 
-            playBeep(1200, 3.0); // 1200 Hz: ACUTO
+            
+            // Se manuale = 0.5s, se automatico = 1.5s
+            let durataSuono = data.is_manual ? 0.5 : 1.5;
+            playBeep(1200, durataSuono); 
 
             if (data.side === 'left' || data.is_double) {
                 const b = document.getElementById('s-l');
@@ -196,7 +190,7 @@
         });
 
         socket.on('hw_massa', data => { 
-            playBeep(800, 1.0); // 800 Hz: MEDIO
+            // NESSUN SUONO
             const b = document.getElementById(data.side === 'left' ? 's-l' : 's-r');
             b.classList.add('glow-white');
             setTimeout(() => b.classList.remove('glow-white'), 1500);
@@ -204,7 +198,7 @@
         
         socket.on('time_expired', () => { 
             if (navigator.vibrate) navigator.vibrate(500);
-            playBeep(500, 1.0); // 500 Hz: BASSO
+            playBeep(500, 1.0);
             document.body.style.backgroundColor='#500'; 
             setTimeout(()=>document.body.style.backgroundColor='#050515',500); 
         });
@@ -235,7 +229,7 @@
             const el = document.getElementById(side === 'left' ? 's-l' : 's-r');
             el.innerText = Math.max(0, parseInt(el.innerText) + delta);
             forceTimerStopLocally();
-            if(delta > 0) playBeep(1200, 3.0); 
+            if(delta > 0) playBeep(1200, 0.5); // Predizione locale
             socket.emit('update_score',{side:side,delta:delta});
             if(navigator.vibrate) navigator.vibrate(50);
         }
@@ -244,7 +238,7 @@
             document.getElementById('s-l').innerText = parseInt(document.getElementById('s-l').innerText) + 1;
             document.getElementById('s-r').innerText = parseInt(document.getElementById('s-r').innerText) + 1;
             forceTimerStopLocally();
-            playBeep(1200, 3.0);
+            playBeep(1200, 0.5); // Predizione locale
             socket.emit('double_hit');
             if(navigator.vibrate) navigator.vibrate(50);
         }
@@ -357,4 +351,4 @@
         });
     </script>
 </body>
-</html>
+</html>a
