@@ -1,0 +1,98 @@
+import network
+import time
+import socket
+from machine import Pin, ADC
+
+WIFI_SSID = "RouterEnzoM"
+WIFI_PASS = "Aurorapad5"
+
+PICO_NAME = "rosso"
+UDP_IP = "192.168.1.110"
+UDP_PORT = 7777
+
+PIN_A = Pin(13, Pin.OUT)
+PIN_A.value(0) # GND Logico
+PIN_B = Pin(14, Pin.IN, Pin.PULL_UP) # Punta
+PIN_C = Pin(15, Pin.IN, Pin.PULL_UP) # Coccia
+
+udp_socket = None
+
+def get_battery_percentage():
+    try:
+        try: Pin(25, Pin.OUT).value(1)
+        except: pass
+        try: Pin("WL_GPIO2", Pin.OUT).value(1)
+        except: pass
+        time.sleep_ms(10)
+        try: raw = ADC(29).read_u16()
+        except: raw = ADC(3).read_u16()
+        if raw < 5000: raw = ADC(3).read_u16()
+        try: Pin(25, Pin.OUT).value(0)
+        except: pass
+        try: Pin("WL_GPIO2", Pin.OUT).value(0)
+        except: pass
+        voltage = raw * (3.3 / 65535) * 3.0
+        if voltage < 1.0: return 0
+        pct = int(((voltage - 3.2) / (4.2 - 3.2)) * 100)
+        return max(0, min(100, pct)) 
+    except: return 0
+
+def connect_wifi():
+    global udp_socket
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    wlan.connect(WIFI_SSID, WIFI_PASS)
+    while not wlan.isconnected(): time.sleep(0.5)
+    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+def loop():
+    connect_wifi()
+    b_was_pressed = False
+    in_lockout = False
+    lockout_start_time = 0
+    ping_next_time = time.ticks_ms()
+    last_coccia_send = 0
+
+    while True:
+        current_time = time.ticks_ms()
+
+        if time.ticks_diff(current_time, ping_next_time) >= 0:
+            bat = get_battery_percentage()
+            try: udp_socket.sendto(f"PING_{PICO_NAME.upper()}_{bat}".encode('utf-8'), (UDP_IP, UDP_PORT))
+            except: pass
+            ping_next_time = time.ticks_add(current_time, 2000)
+
+        b_pressed = (PIN_B.value() == 0)
+        c_pressed = (PIN_C.value() == 0)
+
+        # 1. CONTROLLO PUNTA SCHIACCIATA
+        if b_pressed and not b_was_pressed and not in_lockout:
+            time.sleep_ms(2) # Antirimbalzo
+            if PIN_B.value() == 0:
+                if PIN_C.value() == 0: 
+                    # Tocco sulla PROPRIA coccia (Annullato subito dal Pico)
+                    try: udp_socket.sendto(f"MASSA_MIA_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
+                    except: pass
+                else:
+                    # Tocco potenziale, invia al server per verifica
+                    try: udp_socket.sendto(f"HIT_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
+                    except: pass
+                    in_lockout = True
+                    lockout_start_time = current_time
+
+        # 2. CONTROLLO COCCIA AVVERSARIA
+        # Se la mia coccia va a 0 (perché l'avversario l'ha toccata con la punta)
+        if c_pressed and not b_pressed:
+            if time.ticks_diff(current_time, last_coccia_send) > 50:
+                try: udp_socket.sendto(f"COCCIA_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
+                except: pass
+                last_coccia_send = current_time
+
+        if in_lockout and time.ticks_diff(current_time, lockout_start_time) >= 800:
+            in_lockout = False
+
+        b_was_pressed = b_pressed
+        time.sleep_ms(1)
+
+try: loop()
+except: pass

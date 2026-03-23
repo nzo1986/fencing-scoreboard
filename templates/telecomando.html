@@ -11,17 +11,13 @@
         button:active{transform:scale(0.97);filter:brightness(0.9)}
         .ctrl-btn{width:18%;height:50px;background:#222;border:1px solid #444;border-radius:4px;font-weight:bold;font-size:1.5rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 0 #111;color:white}
         .text-red{color:#f55}.text-green{color:#5f5}
-        
         .score-bar{background:black;color:white;display:flex;justify-content:space-between;padding:0 20px;font-size:3rem;font-weight:bold;line-height:1.2;margin:5px 0;border-radius:2px;position:relative;border:1px solid #333; transition: background 0.2s;}
         .score-val{width:45%;text-align:center; border-radius: 8px; padding: 5px; transition: background-color 0.1s;}
-        
         .glow-white { background-color: #e2e8f0; color: black !important; }
         .glow-red { background-color: #ef4444; color: white !important; }
         .glow-green { background-color: #22c55e; color: white !important; }
-
         .start-btn{width:100%;min-height:20vh;padding:20px 0;font-size:4rem;font-weight:bold;color:white;border:none;display:flex;align-items:center;justify-content:center;margin:5px 0;border-radius:4px}
         .bg-start{background:#008800}.bg-stop{background:#cc0000}.bg-pause{background:#eab308;color:black}
-        
         .bottom-grid{display:grid;grid-template-columns:1fr 2fr 1fr;gap:4px;margin-bottom:15px}
         .side-col{display:flex;flex-direction:column;gap:4px}.center-col{display:flex;flex-direction:column;gap:4px}
         .card-btn{min-height:60px;border-radius:4px;border:1px solid #444;font-weight:bold;font-size:0.9rem;display:flex;align-items:center;justify-content:center;background:#222;box-shadow:0 1px 0 #111;color:#ccc}
@@ -32,17 +28,14 @@
         details>summary::-webkit-details-marker{display:none}
         .sys-btn{background:#222;border:1px solid #444;width:100%;padding:10px;margin-bottom:2px;font-weight:bold;border-radius:4px;color:#ccc}
         .timer-text-break{color:#facc15}
-        
         .bottom-controls{ display:flex; justify-content:space-between; align-items:center; gap:8px; background:rgba(30,30,30,0.8); padding:8px 15px; border-radius:30px; border:1px solid #444; width:100%; max-width:400px; margin:auto auto 0 auto; }
         .icon-btn { font-size: 1.4rem; text-decoration: none; filter: grayscale(100%) opacity(0.5); transition: 0.3s; display:flex; align-items:center; justify-content:center;}
         .icon-ok { filter: grayscale(0%) opacity(1); }
         .icon-error { filter: grayscale(0%) opacity(1) hue-rotate(150deg); }
         .gear-btn{ background:transparent; border:none; font-size:1.6rem; color:#ccc; padding:0; display:flex; align-items:center; justify-content:center;}
-        
         .sensor-status { width: 38px; height: 38px; border-radius: 50%; background: #333; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; color: white; border: 2px solid #555; transition: all 0.3s; }
         .sensor-active-red { background: #ef4444; box-shadow: 0 0 10px #ef4444; border-color: #fff; }
         .sensor-active-green { background: #22c55e; box-shadow: 0 0 10px #22c55e; border-color: #fff; }
-        
         #toast-container{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:white;padding:20px 40px;border-radius:12px;font-size:1.5rem;text-align:center;z-index:9999;display:none;box-shadow:0 0 20px rgba(0,0,0,0.5);border:2px solid #555}
         #timer-display{font-size:1.5rem;padding:15px}
     </style>
@@ -50,7 +43,6 @@
 <body class="flex flex-col min-h-screen p-2 overflow-y-auto overflow-x-hidden" onclick="unlockAudio()">
     
     <div id="toast-container"></div>
-    
     <div class="flex justify-between items-center mb-1 flex-shrink-0">
         <details class="flex-grow accord">
             <summary id="timer-display">Modifica Tempo (3:00)</summary>
@@ -143,15 +135,10 @@
                 .then(s => {
                     const pr = document.getElementById('stat-pico-r');
                     const pv = document.getElementById('stat-pico-v');
-                    if(s.rosso.active) {
-                        pr.className = 'sensor-status sensor-active-red';
-                        pr.innerText = s.rosso.bat + '%';
-                    } else { pr.className = 'sensor-status'; pr.innerText = '--'; }
-                    
-                    if(s.verde.active) {
-                        pv.className = 'sensor-status sensor-active-green';
-                        pv.innerText = s.verde.bat + '%';
-                    } else { pv.className = 'sensor-status'; pv.innerText = '--'; }
+                    if(s.rosso.active) { pr.className = 'sensor-status sensor-active-red'; pr.innerText = s.rosso.bat + '%'; } 
+                    else { pr.className = 'sensor-status'; pr.innerText = '--'; }
+                    if(s.verde.active) { pv.className = 'sensor-status sensor-active-green'; pv.innerText = s.verde.bat + '%'; } 
+                    else { pv.className = 'sensor-status'; pv.innerText = '--'; }
                 }).catch(e => {});
         }, 1500);
 
@@ -172,8 +159,6 @@
         
         socket.on('hw_hit', data => { 
             if (navigator.vibrate) navigator.vibrate(50); 
-            
-            // Se manuale = 0.5s, se automatico = 1.5s
             let durataSuono = data.is_manual ? 0.5 : 1.5;
             playBeep(1200, durataSuono); 
 
@@ -190,7 +175,6 @@
         });
 
         socket.on('hw_massa', data => { 
-            // NESSUN SUONO
             const b = document.getElementById(data.side === 'left' ? 's-l' : 's-r');
             b.classList.add('glow-white');
             setTimeout(() => b.classList.remove('glow-white'), 1500);
@@ -204,32 +188,16 @@
         });
 
         const accords = document.querySelectorAll('.accord');
-        accords.forEach(acc => {
-            acc.addEventListener('toggle', (e) => {
-                if (acc.open) {
-                    accords.forEach(other => { if (other !== acc && other.open) other.removeAttribute('open'); });
-                    setTimeout(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, 50);
-                }
-            });
-        });
+        accords.forEach(acc => { acc.addEventListener('toggle', (e) => { if (acc.open) { accords.forEach(other => { if (other !== acc && other.open) other.removeAttribute('open'); }); setTimeout(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, 50); } }); });
 
-        function showToast(msg, duration = 3000) {
-            const t = document.getElementById('toast-container');
-            t.innerText = msg; t.style.display = 'block';
-            if(window.toastTimeout) clearTimeout(window.toastTimeout);
-            window.toastTimeout = setTimeout(() => { t.style.display = 'none'; }, duration);
-        }
-        
-        function forceTimerStopLocally() {
-            const b = document.getElementById('btn-toggle');
-            b.innerText = "AVVIO"; b.className = "start-btn bg-start";
-        }
+        function showToast(msg, duration = 3000) { const t = document.getElementById('toast-container'); t.innerText = msg; t.style.display = 'block'; if(window.toastTimeout) clearTimeout(window.toastTimeout); window.toastTimeout = setTimeout(() => { t.style.display = 'none'; }, duration); }
+        function forceTimerStopLocally() { const b = document.getElementById('btn-toggle'); b.innerText = "AVVIO"; b.className = "start-btn bg-start"; }
         
         function scoreOptimistic(side, delta) {
             const el = document.getElementById(side === 'left' ? 's-l' : 's-r');
             el.innerText = Math.max(0, parseInt(el.innerText) + delta);
             forceTimerStopLocally();
-            if(delta > 0) playBeep(1200, 0.5); // Predizione locale
+            if(delta > 0) playBeep(1200, 0.5); 
             socket.emit('update_score',{side:side,delta:delta});
             if(navigator.vibrate) navigator.vibrate(50);
         }
@@ -238,7 +206,7 @@
             document.getElementById('s-l').innerText = parseInt(document.getElementById('s-l').innerText) + 1;
             document.getElementById('s-r').innerText = parseInt(document.getElementById('s-r').innerText) + 1;
             forceTimerStopLocally();
-            playBeep(1200, 0.5); // Predizione locale
+            playBeep(1200, 0.5); 
             socket.emit('double_hit');
             if(navigator.vibrate) navigator.vibrate(50);
         }
@@ -257,63 +225,23 @@
 
         function handleCardClick(s,c){
             let cc=c;
-            if(pMode[s]){
-                cc=`P_${c}`; pMode[s]=false; updatePButton(s);
-                socket.emit('card_action',{side:s,card:cc}); forceTimerStopLocally();
-                return;
-            }
+            if(pMode[s]){ cc=`P_${c}`; pMode[s]=false; updatePButton(s); socket.emit('card_action',{side:s,card:cc}); forceTimerStopLocally(); return; }
             let cardName = c === 'Y' ? "GIALLO" : c === 'R' ? "ROSSO" : "NERO";
-            if (confirm("Assegnare cartellino " + cardName + " a " + (s==='left'?'SX':'DX') + "?")) {
-                socket.emit('card_action',{side:s,card:cc});
-                forceTimerStopLocally(); 
-            }
+            if (confirm("Assegnare cartellino " + cardName + " a " + (s==='left'?'SX':'DX') + "?")) { socket.emit('card_action',{side:s,card:cc}); forceTimerStopLocally(); }
         }
 
-        socket.on('status_check', (s) => {
-            const wf = document.getElementById('stat-wifi');
-            const go = document.getElementById('stat-google');
-            wf.className = 'icon-btn ' + (s.internet ? 'icon-ok' : 'icon-error');
-            go.className = 'icon-btn ' + (s.google === 'ok' ? 'icon-ok' : 'icon-error');
-        });
-
-        socket.on('action_feedback', (data) => {
-            if (data.status === 'error') alert("ERRORE: " + data.msg);
-            else showToast(data.msg, data.status === 'info' ? 5000 : 3000);
-        });
-
+        socket.on('status_check', (s) => { document.getElementById('stat-wifi').className = 'icon-btn ' + (s.internet ? 'icon-ok' : 'icon-error'); document.getElementById('stat-google').className = 'icon-btn ' + (s.google === 'ok' ? 'icon-ok' : 'icon-error'); });
+        socket.on('action_feedback', (data) => { if (data.status === 'error') alert("ERRORE: " + data.msg); else showToast(data.msg, data.status === 'info' ? 5000 : 3000); });
         setInterval(()=>socket.emit('admin_heartbeat',{active:true}),2000);
         
-        function changeGirone(g){
-            currentGirone = g;
-            document.getElementById('girone-label').innerText="Girone: "+g.charAt(0).toUpperCase()+g.slice(1);
-            socket.emit('fetch_sheet', {girone: g});
-            document.getElementById('girone-details').removeAttribute('open');
-        }
-        function triggerMatchLoad(){
-            const sel = document.getElementById('sel');
-            if(sel.value === "") return;
-            if(confirm("Caricare l'assalto selezionato sul Display?")){
-                let matchData = matches[sel.value];
-                matchData.girone = currentGirone; 
-                socket.emit('load_match', matchData);
-                forceTimerStopLocally();
-            }
-        }
+        function changeGirone(g){ currentGirone = g; document.getElementById('girone-label').innerText="Girone: "+g.charAt(0).toUpperCase()+g.slice(1); socket.emit('fetch_sheet', {girone: g}); document.getElementById('girone-details').removeAttribute('open'); }
+        function triggerMatchLoad(){ const sel = document.getElementById('sel'); if(sel.value === "") return; if(confirm("Caricare l'assalto selezionato sul Display?")){ let matchData = matches[sel.value]; matchData.girone = currentGirone; socket.emit('load_match', matchData); forceTimerStopLocally(); } }
         function forceUpdate(){ socket.emit('fetch_sheet', {girone: currentGirone}); showToast("Aggiornamento Google..."); }
         function sendResult(){ if(confirm("Inviare punteggio a Google?")) socket.emit('send_result'); }
-        
         function toggleP(s){pMode[s]=!pMode[s];updatePButton(s)}
-        function updatePButton(s){
-            const b=document.getElementById(`btn-${s[0]}-P`);
-            if(pMode[s]){b.classList.add('bg-p-active');b.innerText="P (ON)"} else{b.classList.remove('bg-p-active');b.innerText="P"}
-        }
+        function updatePButton(s){ const b=document.getElementById(`btn-${s[0]}-P`); if(pMode[s]){b.classList.add('bg-p-active');b.innerText="P (ON)"} else{b.classList.remove('bg-p-active');b.innerText="P"} }
         
-        const updateTimeUI=(t,p)=>{
-            const ts=`${Math.floor(t/60)}:${(Math.floor(t%60)<10?'0':'')+Math.floor(t%60)}`;
-            const d=document.getElementById('timer-display');
-            if(p==='BREAK'){d.innerText=`PAUSA (${ts})`;d.classList.add('timer-text-break')} else{d.innerText=`Modifica Tempo (${ts})`;d.classList.remove('timer-text-break')}
-        };
-
+        const updateTimeUI=(t,p)=>{ const ts=`${Math.floor(t/60)}:${(Math.floor(t%60)<10?'0':'')+Math.floor(t%60)}`; const d=document.getElementById('timer-display'); if(p==='BREAK'){d.innerText=`PAUSA (${ts})`;d.classList.add('timer-text-break')} else{d.innerText=`Modifica Tempo (${ts})`;d.classList.remove('timer-text-break')} };
         socket.on('timer_update',d=>updateTimeUI(d.time,d.phase));
         
         socket.on('state_update',s=>{
@@ -332,23 +260,10 @@
                 if(d.cards.B){let e=document.getElementById(`btn-${sc}-B`); if(e) e.classList.add('active');}
             };
             upC('left',s.fencer_left); upC('right',s.fencer_right);
-            if (s.current_row_idx && matches.length > 0) {
-                const idx = matches.findIndex(m => m.row === s.current_row_idx);
-                const sel = document.getElementById('sel');
-                if (idx !== -1 && sel.value != idx) sel.value = idx;
-            }
+            if (s.current_row_idx && matches.length > 0) { const idx = matches.findIndex(m => m.row === s.current_row_idx); const sel = document.getElementById('sel'); if (idx !== -1 && sel.value != idx) sel.value = idx; }
         });
         
-        socket.on('gironi_cache_update', (cache) => {
-            matches = cache[currentGirone] || [];
-            const sel = document.getElementById('sel');
-            const currentVal = sel.value; 
-            sel.innerHTML='<option value="">Seleziona Assalto...</option>';
-            matches.forEach((m,i)=>{
-                let o=document.createElement('option'); o.value=i; o.text=`${m.sx} (${m.p_sx}) - (${m.p_dx}) ${m.dx}`; sel.appendChild(o)
-            });
-            if(currentVal && currentVal < matches.length) sel.value = currentVal;
-        });
+        socket.on('gironi_cache_update', (cache) => { matches = cache[currentGirone] || []; const sel = document.getElementById('sel'); const currentVal = sel.value; sel.innerHTML='<option value="">Seleziona Assalto...</option>'; matches.forEach((m,i)=>{ let o=document.createElement('option'); o.value=i; o.text=`${m.sx} (${m.p_sx}) - (${m.p_dx}) ${m.dx}`; sel.appendChild(o) }); if(currentVal && currentVal < matches.length) sel.value = currentVal; });
     </script>
 </body>
-</html>a
+</html>

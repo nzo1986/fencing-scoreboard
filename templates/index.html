@@ -8,70 +8,35 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@700&display=swap');
-        
-        :root { 
-            --timer-size: 8rem; 
-            --score-size: 15rem; 
-            --name-size: 3rem; 
-            --font-family: 'Roboto Mono'; 
-            --photo-size: 150px;
-            --list-size: 1.5rem;
-            --center-flex: 1.2;
-            --list-padding: 0.5rem;
-        }
-        
+        :root { --timer-size: 8rem; --score-size: 15rem; --name-size: 3rem; --font-family: 'Roboto Mono'; --photo-size: 150px; --list-size: 1.5rem; --center-flex: 1.2; --list-padding: 0.5rem; }
         body { background-color: #000; color: white; overflow: hidden; font-family: var(--font-family), monospace; display: flex; flex-direction: column; height: 100vh; margin: 0; }
         .stroked { -webkit-text-stroke: var(--text-stroke, 0px) black; }
         .timer-container { flex: none; display: flex; justify-content: center; align-items: center; background: #000; padding: 1vh 0; position: relative; }
-        
         .timer-box { font-size: var(--timer-size); line-height: 1; }
         .fencer-name { font-size: var(--name-size); font-weight: bold; text-align: center; margin-bottom: 20px; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .score-box { font-size: var(--score-size); line-height: 1; }
         .fencer-photo { width: var(--photo-size); height: auto; aspect-ratio: 3/4; border-radius: 10px; object-fit: cover; border: 3px solid #333; display: none; margin-bottom: 15px;}
-        
         .main-body { flex: 1; display: flex; width: 100%; overflow: hidden; padding: 10px; gap: 10px;}
-        
         .fencer-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; border-radius: 20px; border: 4px solid transparent; transition: background-color 0.2s, box-shadow 0.2s, border-color 0.2s; }
         .score-container { display: flex; align-items: center; justify-content: center; gap: 20px; width: 100%; margin: 10px 0; flex-direction: column;}
-
         .center-col { flex: var(--center-flex); background: transparent; display: flex; flex-direction: column; padding: 10px; overflow: hidden; transition: flex 0.3s; }
         .list-title { text-align: center; color: #555; font-size: 1.2rem; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 2px; }
         .match-list { width: 100%; display: flex; flex-direction: column; gap: 4px; }
         .match-item { background: rgba(30, 30, 30, 0.5); padding: var(--list-padding) 0; font-size: var(--list-size); text-align: center; color: #888; border-bottom: 1px solid #333; border-radius: 4px;}
         .match-item:nth-child(even) { background: rgba(50, 50, 50, 0.5); }
         .match-item span { color: #ccc; font-weight: bold;}
-
-        /* COLONNA INTERA CHE SI ILLUMINA */
-        .hit-glow-left { 
-            background-color: rgba(255, 0, 0, 0.25) !important;
-            border-color: #ff0000 !important; 
-            box-shadow: 0 0 80px rgba(255, 0, 0, 0.8), inset 0 0 50px rgba(255, 0, 0, 0.5) !important; 
-        }
-        .hit-glow-right { 
-            background-color: rgba(0, 255, 0, 0.25) !important;
-            border-color: #00ff00 !important; 
-            box-shadow: 0 0 80px rgba(0, 255, 0, 0.8), inset 0 0 50px rgba(0, 255, 0, 0.5) !important; 
-        }
-        .hit-glow-white { 
-            background-color: rgba(255, 255, 255, 0.15) !important;
-            border-color: #ffffff !important; 
-            box-shadow: 0 0 60px rgba(255, 255, 255, 0.6), inset 0 0 30px rgba(255, 255, 255, 0.4) !important; 
-        }
-
+        .hit-glow-left { background-color: rgba(255, 0, 0, 0.25) !important; border-color: #ff0000 !important; box-shadow: 0 0 80px rgba(255, 0, 0, 0.8), inset 0 0 50px rgba(255, 0, 0, 0.5) !important; }
+        .hit-glow-right { background-color: rgba(0, 255, 0, 0.25) !important; border-color: #00ff00 !important; box-shadow: 0 0 80px rgba(0, 255, 0, 0.8), inset 0 0 50px rgba(0, 255, 0, 0.5) !important; }
+        .hit-glow-white { background-color: rgba(255, 255, 255, 0.15) !important; border-color: #ffffff !important; box-shadow: 0 0 60px rgba(255, 255, 255, 0.6), inset 0 0 30px rgba(255, 255, 255, 0.4) !important; }
         #audio-unlocker { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.95); display: flex; justify-content: center; align-items: center; cursor: pointer; flex-direction: column; }
     </style>
 </head>
 <body class="cursor-none">
-
     <div id="audio-unlocker">
         <span class="text-6xl text-white font-bold mb-6 text-center">SISTEMA INIZIALIZZATO</span>
         <button class="bg-green-600 hover:bg-green-500 text-white text-3xl font-bold py-6 px-12 rounded-xl shadow-lg border-4 border-green-400 animate-pulse transition">CLICCA QUI PER SBLOCCARE L'AUDIO 🔊</button>
     </div>
-
-    <div class="timer-container">
-        <div id="timer" class="timer-box stroked text-white font-bold">3:00</div>
-    </div>
-    
+    <div class="timer-container"><div id="timer" class="timer-box stroked text-white font-bold">3:00</div></div>
     <div class="main-body">
         <div class="fencer-col" id="col-l">
             <h1 id="n-l" class="fencer-name stroked text-red-500">SX</h1>
@@ -80,12 +45,10 @@
                 <span id="s-l" class="score-box stroked text-red-600 font-bold">0</span>
             </div>
         </div>
-        
         <div class="center-col" id="center-col-container">
             <div class="list-title">Prossimi Incontri</div>
             <div id="match-list-container" class="match-list"></div>
         </div>
-
         <div class="fencer-col" id="col-r">
             <h1 id="n-r" class="fencer-name stroked text-green-500">DX</h1>
             <div class="score-container">
@@ -94,7 +57,6 @@
             </div>
         </div>
     </div>
-    
     <script>
         const socket = io();
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -120,10 +82,8 @@
         }
 
         socket.on('hw_hit', data => {
-            // Se manuale = 0.5s, se automatico = 1.5s
             let durataSuono = data.is_manual ? 0.5 : 1.5;
             playBeep(1200, durataSuono); 
-            
             if (data.side === 'left' || data.is_double) {
                 const colL = document.getElementById('col-l');
                 colL.classList.add('hit-glow-left');
@@ -137,7 +97,6 @@
         });
 
         socket.on('hw_massa', data => {
-            // NESSUN SUONO EMANATO
             const col = document.getElementById(data.side === 'left' ? 'col-l' : 'col-r');
             col.classList.add('hit-glow-white');
             setTimeout(() => col.classList.remove('hit-glow-white'), 1500); 
@@ -145,9 +104,7 @@
 
         socket.on('time_expired', () => { playBeep(500, 1.0); });
         
-        socket.on('timer_update', d => { 
-            document.getElementById('timer').innerText = d.time > 10 ? `${Math.floor(d.time/60)}:${(Math.floor(d.time%60)<10?'0':'')+Math.floor(d.time%60)}` : d.time.toFixed(1); 
-        });
+        socket.on('timer_update', d => { document.getElementById('timer').innerText = d.time > 10 ? `${Math.floor(d.time/60)}:${(Math.floor(d.time%60)<10?'0':'')+Math.floor(d.time%60)}` : d.time.toFixed(1); });
 
         socket.on('state_update', s => {
             if(s.settings) { 

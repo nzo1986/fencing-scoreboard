@@ -8,19 +8,15 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         body { background: #111; color: #eee; font-family: sans-serif; touch-action: manipulation; padding-bottom: 30px; }
-        
         .adjust-btn { width: 45px; height: 45px; font-size: 1.5rem; font-weight: bold; border-radius: 8px; border: none; display: flex; align-items: center; justify-content: center; }
         .btn-minus { background: #d32f2f; color: white; }
         .btn-plus { background: #388e3c; color: white; }
         .val-display { font-size: 1.2rem; font-weight: bold; min-width: 50px; text-align: center; }
-        
         .row-ctrl { display: flex; align-items: center; justify-content: space-between; padding: 15px; border-bottom: 1px solid #333; }
         .row-ctrl:last-child { border-bottom: none; }
         .lbl { font-size: 1.1rem; color: #ccc; }
-        
         .font-btn { padding: 10px 15px; margin: 5px; background: #333; border: 1px solid #555; border-radius: 4px; color: white; transition: 0.2s; }
         .font-btn.active { background: #2563eb; border-color: #3b82f6; box-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
-        
         details { background: #222; border: 1px solid #444; border-radius: 8px; margin-bottom: 15px; overflow: hidden; transition: all 0.3s ease; }
         summary { padding: 18px 20px; font-size: 1.25rem; font-weight: bold; background: #333; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; user-select: none; }
         summary::-webkit-details-marker { display: none; }
@@ -28,14 +24,10 @@
         details[open] summary::after { transform: rotate(180deg); color: white; }
         details[open] summary { border-bottom: 1px solid #444; background: #3a3a3a; color: #60a5fa; }
         .details-content { padding: 10px 5px; animation: fadeIn 0.3s ease-in-out; }
-        
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
-
         .sys-btn { width: 100%; padding: 15px; font-size: 1.2rem; font-weight: bold; border-radius: 8px; border: none; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; }
         input[type="text"], select { width: 100%; padding: 12px; background: #111; color: white; border: 1px solid #555; border-radius: 6px; margin-top: 8px; font-family: monospace; font-size: 1rem; }
         input[type="text"]:focus, select:focus { border-color: #3b82f6; outline: none; }
-        
-        .bat-info { background: #1a1a1a; padding: 15px; border-radius: 8px; font-size: 0.95rem; color: #aaa; border: 1px dashed #555; line-height: 1.5; }
     </style>
 </head>
 <body>
@@ -45,65 +37,32 @@
     </div>
 
     <div class="px-3 max-w-2xl mx-auto">
-        
         <details>
             <summary>Grafica Display & Font</summary>
             <div class="details-content">
                 <div class="row-ctrl">
                     <span class="lbl">Dimensione Timer</span>
-                    <div class="flex items-center gap-2">
-                        <button class="adjust-btn btn-minus" onclick="adj('font_timer',-0.5)">-</button>
-                        <span class="val-display" id="val_font_timer">8.0</span>
-                        <button class="adjust-btn btn-plus" onclick="adj('font_timer',0.5)">+</button>
-                    </div>
+                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('font_timer',-0.5)">-</button><span class="val-display" id="val_font_timer">8.0</span><button class="adjust-btn btn-plus" onclick="adj('font_timer',0.5)">+</button></div>
                 </div>
                 <div class="row-ctrl">
                     <span class="lbl">Dimensione Punteggio</span>
-                    <div class="flex items-center gap-2">
-                        <button class="adjust-btn btn-minus" onclick="adj('font_score',-0.5)">-</button>
-                        <span class="val-display" id="val_font_score">15.0</span>
-                        <button class="adjust-btn btn-plus" onclick="adj('font_score',0.5)">+</button>
-                    </div>
+                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('font_score',-0.5)">-</button><span class="val-display" id="val_font_score">15.0</span><button class="adjust-btn btn-plus" onclick="adj('font_score',0.5)">+</button></div>
                 </div>
                 <div class="row-ctrl">
                     <span class="lbl">Dimensione Nomi</span>
-                    <div class="flex items-center gap-2">
-                        <button class="adjust-btn btn-minus" onclick="adj('font_name',-0.5)">-</button>
-                        <span class="val-display" id="val_font_name">3.0</span>
-                        <button class="adjust-btn btn-plus" onclick="adj('font_name',0.5)">+</button>
-                    </div>
+                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('font_name',-0.5)">-</button><span class="val-display" id="val_font_name">3.0</span><button class="adjust-btn btn-plus" onclick="adj('font_name',0.5)">+</button></div>
                 </div>
                 <div class="row-ctrl">
                     <span class="lbl">Largh. Colonna Incontri (0=Nascondi)</span>
-                    <div class="flex items-center gap-2">
-                        <button class="adjust-btn btn-minus" onclick="adj('col_center_width',-0.2)">-</button>
-                        <span class="val-display" id="val_col_center_width">1.2</span>
-                        <button class="adjust-btn btn-plus" onclick="adj('col_center_width',0.2)">+</button>
-                    </div>
+                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('col_center_width',-0.2)">-</button><span class="val-display" id="val_col_center_width">1.2</span><button class="adjust-btn btn-plus" onclick="adj('col_center_width',0.2)">+</button></div>
                 </div>
                 <div class="row-ctrl">
                     <span class="lbl">Dimensione Testo Incontri</span>
-                    <div class="flex items-center gap-2">
-                        <button class="adjust-btn btn-minus" onclick="adj('font_list',-0.2)">-</button>
-                        <span class="val-display" id="val_font_list">1.5</span>
-                        <button class="adjust-btn btn-plus" onclick="adj('font_list',0.2)">+</button>
-                    </div>
-                </div>
-                <div class="row-ctrl">
-                    <span class="lbl">Spaziatura Lista Incontri</span>
-                    <div class="flex items-center gap-2">
-                        <button class="adjust-btn btn-minus" onclick="adj('list_padding',-0.1)">-</button>
-                        <span class="val-display" id="val_list_padding">0.5</span>
-                        <button class="adjust-btn btn-plus" onclick="adj('list_padding',0.1)">+</button>
-                    </div>
+                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('font_list',-0.2)">-</button><span class="val-display" id="val_font_list">1.5</span><button class="adjust-btn btn-plus" onclick="adj('font_list',0.2)">+</button></div>
                 </div>
                 <div class="row-ctrl border-b-0">
                     <span class="lbl">Dimens. Foto (0=Nascondi)</span>
-                    <div class="flex items-center gap-2">
-                        <button class="adjust-btn btn-minus" onclick="adj('photo_size',-10)">-</button>
-                        <span class="val-display" id="val_photo_size">150</span>
-                        <button class="adjust-btn btn-plus" onclick="adj('photo_size',10)">+</button>
-                    </div>
+                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('photo_size',-10)">-</button><span class="val-display" id="val_photo_size">150</span><button class="adjust-btn btn-plus" onclick="adj('photo_size',10)">+</button></div>
                 </div>
                 <div class="p-4 border-t border-gray-700 mt-2">
                     <span class="lbl font-bold text-white block mb-3">Stile Font:</span>
@@ -125,27 +84,15 @@
                 </div>
                 <div class="row-ctrl">
                     <span class="lbl">Tempo Assalto (secondi)</span>
-                    <div class="flex items-center gap-2">
-                        <button class="adjust-btn btn-minus" onclick="adj('time_match',-10)">-</button>
-                        <span class="val-display" id="val_time_match">180</span>
-                        <button class="adjust-btn btn-plus" onclick="adj('time_match',10)">+</button>
-                    </div>
+                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('time_match',-10)">-</button><span class="val-display" id="val_time_match">180</span><button class="adjust-btn btn-plus" onclick="adj('time_match',10)">+</button></div>
                 </div>
                 <div class="row-ctrl">
                     <span class="lbl">Tempo Pausa (secondi)</span>
-                    <div class="flex items-center gap-2">
-                        <button class="adjust-btn btn-minus" onclick="adj('time_break',-10)">-</button>
-                        <span class="val-display" id="val_time_break">60</span>
-                        <button class="adjust-btn btn-plus" onclick="adj('time_break',10)">+</button>
-                    </div>
+                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('time_break',-10)">-</button><span class="val-display" id="val_time_break">60</span><button class="adjust-btn btn-plus" onclick="adj('time_break',10)">+</button></div>
                 </div>
                 <div class="row-ctrl">
                     <span class="lbl">Vol. Cicalino (0 = Muto)</span>
-                    <div class="flex items-center gap-2">
-                        <button class="adjust-btn btn-minus" onclick="adj('buzzer_volume',-0.1)">-</button>
-                        <span class="val-display" id="val_buzzer_volume">1.0</span>
-                        <button class="adjust-btn btn-plus" onclick="adj('buzzer_volume',0.1)">+</button>
-                    </div>
+                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('buzzer_volume',-0.1)">-</button><span class="val-display" id="val_buzzer_volume">1.0</span><button class="adjust-btn btn-plus" onclick="adj('buzzer_volume',0.1)">+</button></div>
                 </div>
             </div>
         </details>
@@ -163,15 +110,9 @@
                 </div>
                 <div class="row-ctrl border-t border-gray-700 mt-2">
                     <span class="lbl font-bold">Aggiornamento Auto (sec)</span>
-                    <div class="flex items-center gap-2">
-                        <button class="adjust-btn btn-minus" onclick="adj('refresh_rate',-5)">-</button>
-                        <span class="val-display" id="val_refresh_rate">30</span>
-                        <button class="adjust-btn btn-plus" onclick="adj('refresh_rate',5)">+</button>
-                    </div>
+                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('refresh_rate',-5)">-</button><span class="val-display" id="val_refresh_rate">30</span><button class="adjust-btn btn-plus" onclick="adj('refresh_rate',5)">+</button></div>
                 </div>
-                <div class="p-4">
-                    <button onclick="window.location.href='/riferimenti'" class="sys-btn bg-blue-800 hover:bg-blue-700 text-white transition">📐 Mappa Colonne Excel</button>
-                </div>
+                <div class="p-4"><button onclick="window.location.href='/riferimenti'" class="sys-btn bg-blue-800 hover:bg-blue-700 text-white transition">📐 Mappa Colonne Excel</button></div>
             </div>
         </details>
 
@@ -183,7 +124,6 @@
                 <button onclick="window.location.href='/wifi'" class="sys-btn bg-yellow-700 hover:bg-yellow-600 text-white transition mt-4">📡 Impostazioni Wi-Fi Pi4</button>
             </div>
         </details>
-        
     </div>
 
     <script>
@@ -193,28 +133,16 @@
         socket.on('state_update', s => {
             if(s.settings) {
                 settings = s.settings;
-                ['font_timer','font_score','font_name','photo_size','time_match','time_break','buzzer_volume','refresh_rate','col_center_width','font_list','list_padding'].forEach(k => {
-                    let e = document.getElementById('val_'+k);
-                    if(e) e.innerText = settings[k];
-                });
+                ['font_timer','font_score','font_name','photo_size','time_match','time_break','buzzer_volume','refresh_rate','col_center_width','font_list','list_padding'].forEach(k => { let e = document.getElementById('val_'+k); if(e) e.innerText = settings[k]; });
                 document.getElementById('google_sheet_id').value = settings.google_sheet_id || '';
                 document.getElementById('google_script_url').value = settings.google_script_url || '';
-                
-                const wSelect = document.getElementById('weapon_select');
-                if (wSelect) wSelect.value = settings.weapon || 'spada';
-                
+                const wSelect = document.getElementById('weapon_select'); if (wSelect) wSelect.value = settings.weapon || 'spada';
                 loadFonts();
             }
         });
 
         const detailsElements = document.querySelectorAll('details');
-        detailsElements.forEach(targetDetail => {
-            targetDetail.addEventListener('click', () => {
-                detailsElements.forEach(detail => {
-                    if (detail !== targetDetail) detail.removeAttribute('open');
-                });
-            });
-        });
+        detailsElements.forEach(targetDetail => { targetDetail.addEventListener('click', () => { detailsElements.forEach(detail => { if (detail !== targetDetail) detail.removeAttribute('open'); }); }); });
 
         function adj(k, d) {
             let v = parseFloat(settings[k]||0) + d;
@@ -222,9 +150,7 @@
             else v = Math.round(v*10)/10;
             if(v < 0) v = 0; 
             if(k === 'buzzer_volume' && v > 5) v = 5;
-            settings[k] = v;
-            document.getElementById('val_'+k).innerText = v;
-            socket.emit('update_settings', {[k]: v});
+            settings[k] = v; document.getElementById('val_'+k).innerText = v; socket.emit('update_settings', {[k]: v});
         }
         
         function updateText(k, v) { socket.emit('update_settings', {[k]: v.trim()}); }
@@ -233,14 +159,7 @@
         function loadFonts() {
             fetch('/api/get_fonts').then(r => r.json()).then(fonts => {
                 const c = document.getElementById('font-list'); c.innerHTML = '';
-                fonts.forEach(f => {
-                    let b = document.createElement('button');
-                    b.className = 'font-btn' + (settings.font_family === f ? ' active' : '');
-                    b.style.fontFamily = f;
-                    b.innerText = f;
-                    b.onclick = () => selectFont(f);
-                    c.appendChild(b);
-                });
+                fonts.forEach(f => { let b = document.createElement('button'); b.className = 'font-btn' + (settings.font_family === f ? ' active' : ''); b.style.fontFamily = f; b.innerText = f; b.onclick = () => selectFont(f); c.appendChild(b); });
             });
         }
     </script>
