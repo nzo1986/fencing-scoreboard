@@ -5,9 +5,8 @@ eventlet.monkey_patch()
 
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_socketio import SocketIO, emit
-import os, time, csv, io, zipfile, random
+import os, time
 
-# Moduli separati
 from config_state import current_state, load_state, save_state, push_history, pico_last_seen, gironi_cache, get_photo_url, clean_fencer_name, PHOTOS_DIR, get_system_fonts, letter_to_sheet_col, default_columns
 from fencing_logic import handle_hit_request, emit_massa_visual, register_coccia, apply_card
 from google_api import update_all_gironi_data, process_background_upload, check_internet, check_google
@@ -59,8 +58,7 @@ def handle_score(d):
     side = d['side']
     current_state[f'fencer_{side}']['score'] = max(0, current_state[f'fencer_{side}']['score'] + d['delta'])
     current_state['running'] = False
-    if d['delta'] > 0: 
-        socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True, 'is_manual': True})
+    if d['delta'] > 0: socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True, 'is_manual': True})
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
     eventlet.spawn(save_state)
@@ -107,6 +105,38 @@ def r_scores():
     socketio.emit('state_update', current_state)
     eventlet.spawn(save_state)
 
+@socketio.on('reset_timer')
+def r_timer():
+    push_history()
+    current_state['timer'] = float(current_state['settings']['time_match'])
+    current_state['phase'] = 'MATCH'
+    current_state['running'] = False
+    socketio.emit('state_update', current_state)
+    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+    eventlet.spawn(save_state)
+
+@socketio.on('reset_all')
+def r_all():
+    push_history()
+    current_state['timer'] = float(current_state['settings']['time_match'])
+    current_state['phase'] = 'MATCH'
+    current_state['running'] = False
+    current_state['priority'] = None
+    current_state['manual_selection'] = False 
+    current_state['swapped'] = False 
+    for s in ['left','right']:
+        current_state[f'fencer_{s}']['score'] = 0
+        current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
+        current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+    current_state['fencer_left']['name'] = current_state['settings']['default_name_left']
+    current_state['fencer_right']['name'] = current_state['settings']['default_name_right']
+    current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left']['name'])
+    current_state['fencer_right']['photo'] = get_photo_url(current_state['fencer_right']['name'])
+    current_state['current_row_idx'] = None
+    socketio.emit('state_update', current_state)
+    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+    eventlet.spawn(save_state)
+
 @socketio.on('update_settings')
 def up_set(d):
     for k,v in d.items(): 
@@ -133,8 +163,12 @@ def l_match(d):
     current_state['manual_selection'] = True
     current_state['swapped'] = False 
     current_state['current_row_idx'] = d['row']
+    
     current_state['fencer_left']['name'] = clean_fencer_name(d['sx'])
     current_state['fencer_right']['name'] = clean_fencer_name(d['dx'])
+    current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left']['name'])
+    current_state['fencer_right']['photo'] = get_photo_url(current_state['fencer_right']['name'])
+    
     try: current_state['fencer_left']['score'] = int(float(d['p_sx']))
     except: current_state['fencer_left']['score'] = 0
     try: current_state['fencer_right']['score'] = int(float(d['p_dx']))
@@ -142,6 +176,7 @@ def l_match(d):
     current_state['timer'] = float(current_state['settings']['time_match'])
     current_state['phase'] = 'MATCH' 
     current_state['running'] = False
+    current_state['priority'] = None
     for s in ['left','right']:
         current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
         current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
@@ -153,6 +188,7 @@ def handle_send_result():
     if not current_state['settings'].get('google_script_url') or not current_state['current_row_idx']:
         socketio.emit('action_feedback', {'status': 'error', 'msg': 'Errore URL o Assalto.'})
         return
+    
     g = current_state.get('active_girone', current_state.get('current_girone', 'rosso'))
     cols_map = current_state['settings'].get('columns', default_columns)
     cols = cols_map.get(g, default_columns['rosso']) 
@@ -160,12 +196,53 @@ def handle_send_result():
     val_dx = current_state['fencer_left']['score'] if current_state.get('swapped') else current_state['fencer_right']['score']
     
     payload = {
-        "sheet_name": "display3gir", "row": current_state['current_row_idx'],
+        "sheet_name": "display3gir", "row": current_state['current_row_idx'], 
         "col_sx": letter_to_sheet_col(cols['psx']), "val_sx": val_sx, 
         "col_dx": letter_to_sheet_col(cols['pdx']), "val_dx": val_dx
     }
+    
     socketio.emit('action_feedback', {'status': 'info', 'msg': 'Invio in background...'})
     eventlet.spawn(process_background_upload, payload, g, socketio)
+
+    matches = gironi_cache.get(g, [])
+    next_match = None
+    
+    for m in matches:
+        if m['row'] != current_state['current_row_idx']:
+            try: p_sx = int(float(m.get('p_sx', '0') or '0'))
+            except: p_sx = 0
+            try: p_dx = int(float(m.get('p_dx', '0') or '0'))
+            except: p_dx = 0
+            
+            if p_sx == 0 and p_dx == 0:
+                next_match = m
+                break
+                
+    if next_match:
+        current_state['active_girone'] = g
+        current_state['manual_selection'] = True
+        current_state['swapped'] = False 
+        current_state['current_row_idx'] = next_match['row']
+        current_state['fencer_left']['name'] = clean_fencer_name(next_match['sx'])
+        current_state['fencer_right']['name'] = clean_fencer_name(next_match['dx'])
+        current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left']['name'])
+        current_state['fencer_right']['photo'] = get_photo_url(current_state['fencer_right']['name'])
+        current_state['fencer_left']['score'] = 0
+        current_state['fencer_right']['score'] = 0
+        current_state['timer'] = float(current_state['settings']['time_match'])
+        current_state['phase'] = 'MATCH' 
+        current_state['running'] = False
+        current_state['priority'] = None
+        for s in ['left','right']:
+            current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
+            current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+        
+        socketio.emit('state_update', current_state)
+        socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+        socketio.emit('action_feedback', {'status': 'success', 'msg': f"Caricato: {next_match['sx']} vs {next_match['dx']}"})
+        eventlet.spawn(save_state)
+    else:
+        socketio.emit('action_feedback', {'status': 'info', 'msg': 'Nessun altro assalto a 0 nel girone!'})
 
 @socketio.on('fetch_sheet')
 def f_sheet(d=None):
@@ -184,10 +261,10 @@ def timer_thread():
                 socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase','MATCH')})
                 if current_state['timer'] <= 0:
                     socketio.emit('time_expired')
-                    if current_state.get('phase') == 'MATCH':
-                        current_state['phase'], current_state['timer'], current_state['running'] = 'BREAK', float(current_state['settings']['time_break']), True
-                    else:
-                        current_state['phase'], current_state['timer'], current_state['running'] = 'MATCH', float(current_state['settings']['time_match']), False
+                    current_state['timer'] = float(current_state['settings']['time_match'])
+                    current_state['phase'] = 'MATCH'
+                    current_state['running'] = False
+                    socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
                     socketio.emit('state_update', current_state)
                     eventlet.spawn(save_state)
             else:
@@ -205,18 +282,18 @@ def udp_listener_thread():
             msg = data.decode('utf-8')
             now = time.time()
             
+            # --- DEBUG LOG WEB ---
+            try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': msg})
+            except: pass
+
             if msg == "HIT_ROSSO": eventlet.spawn(handle_hit_request, "left", now, socketio)
             elif msg == "HIT_VERDE": eventlet.spawn(handle_hit_request, "right", now, socketio)
             elif msg == "COCCIA_ROSSO": register_coccia("left")
             elif msg == "COCCIA_VERDE": register_coccia("right")
             elif msg == "MASSA_MIA_ROSSO": emit_massa_visual("left", socketio)
             elif msg == "MASSA_MIA_VERDE": emit_massa_visual("right", socketio)
-            elif msg.startswith("PING_ROSSO"):
-                bat = msg.split('_')[2] if len(msg.split('_')) > 2 else 100
-                pico_last_seen['rosso'] = {'time': now, 'bat': bat}
-            elif msg.startswith("PING_VERDE"):
-                bat = msg.split('_')[2] if len(msg.split('_')) > 2 else 100
-                pico_last_seen['verde'] = {'time': now, 'bat': bat}
+            elif msg.startswith("PING_ROSSO"): pico_last_seen['rosso'] = {'time': now, 'bat': msg.split('_')[2] if len(msg.split('_'))>2 else 100}
+            elif msg.startswith("PING_VERDE"): pico_last_seen['verde'] = {'time': now, 'bat': msg.split('_')[2] if len(msg.split('_'))>2 else 100}
         except: pass
         eventlet.sleep(0.005)
 
