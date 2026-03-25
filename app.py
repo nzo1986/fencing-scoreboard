@@ -32,12 +32,30 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-# --- ROTTE AGGIORNAMENTO DI SISTEMA (OTA - SOFT RESTART) ---
+# --- ROTTE AGGIORNAMENTO DI SISTEMA (OTA - STREAMING LOG) ---
 @app.route('/api/update_system', methods=['POST'])
 def update_system():
-    # Fa un pull da GitHub, chiude l'app Python e la riapre (nessun riavvio della macchina)
-    cmd = "nohup bash -c 'sleep 2 && cd ~/fencing_scoreboard && git fetch origin && git reset --hard origin/main && pkill -f \"python app.py\" || true; source venv/bin/activate && python app.py' >/dev/null 2>&1 &"
-    os.system(cmd)
+    def run_update_process():
+        import subprocess
+        # Esegue il setup e cattura i log riga per riga per inviarli al web
+        cmd = ['python', 'setup_fencing_kiosk.py']
+        try:
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=BASE_DIR)
+            for line in iter(process.stdout.readline, ''):
+                if line:
+                    socketio.emit('update_log', {'msg': line.strip()})
+            process.stdout.close()
+            process.wait()
+            socketio.emit('update_complete')
+            
+            # Applica un soft-restart dopo 2 secondi
+            os.system("nohup bash -c 'sleep 2 && pkill -f \"python app.py\" || true; source venv/bin/activate && python app.py' >/dev/null 2>&1 &")
+        except Exception as e:
+            socketio.emit('update_log', {'msg': f"[ERRORE FATALE] {str(e)}"})
+            socketio.emit('update_complete')
+
+    # Fa partire l'aggiornamento in un thread in background separato
+    eventlet.spawn(run_update_process)
     return jsonify({"status": "updating"})
 
 @app.route('/api/ota/<pico_name>/version')
