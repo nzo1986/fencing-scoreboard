@@ -32,7 +32,7 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-# --- ROTTE AGGIORNAMENTO DI SISTEMA (OTA) ---
+# --- ROTTE AGGIORNAMENTO DI SISTEMA (OTA - STREAMING LOG) ---
 @app.route('/api/update_system', methods=['POST'])
 def update_system():
     def run_update_process():
@@ -133,16 +133,39 @@ def handle_adjust_time(data):
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
     eventlet.spawn(save_state)
 
-# GESTIONE PRIORITÀ
+# --- NUOVA GESTIONE PRIORITÀ (ANIMAZIONE + MINUTO SUPPLEMENTARE) ---
 @socketio.on('toggle_priority')
 def handle_priority():
     push_history()
     curr = current_state.get('priority')
-    if curr is None: current_state['priority'] = random.choice(['left', 'right'])
-    elif curr == 'left': current_state['priority'] = 'right'
-    else: current_state['priority'] = None
-    socketio.emit('state_update', current_state)
-    eventlet.spawn(save_state)
+    
+    if curr:
+        # Se c'è già una priorità, la annulla
+        current_state['priority'] = None
+        socketio.emit('state_update', current_state)
+        eventlet.spawn(save_state)
+    else:
+        # Se non c'è, fa partire l'animazione della roulette
+        winner = random.choice(['left', 'right'])
+        
+        # Comunica a tutti i client di avviare l'animazione di 2.5 secondi
+        socketio.emit('priority_animation', {'duration': 2500})
+        
+        def apply_priority():
+            eventlet.sleep(2.5) # Attende la fine dell'animazione
+            current_state['priority'] = winner
+            current_state['timer'] = 60.0 # Imposta il timer a 1 minuto (60 sec)
+            current_state['running'] = False
+            
+            # Aggiorna lo stato finale a tutti i display
+            socketio.emit('state_update', current_state)
+            socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+            save_state()
+            
+            # Log nel debug
+            socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': 'SYS', 'msg': f"🎲 Priorità assegnata a: {'ROSSO (SX)' if winner == 'left' else 'VERDE (DX)'}"})
+            
+        eventlet.spawn(apply_priority)
 
 @socketio.on('reset_scores')
 def r_scores():
@@ -204,7 +227,6 @@ def handle_swap():
     current_state['swapped'] = not current_state['swapped']
     current_state['fencer_left'], current_state['fencer_right'] = current_state['fencer_right'], current_state['fencer_left']
     
-    # Inverti anche la priorità se presente
     curr = current_state.get('priority')
     if curr == 'left': current_state['priority'] = 'right'
     elif curr == 'right': current_state['priority'] = 'left'
@@ -340,7 +362,6 @@ def udp_listener_thread():
             now = time.time()
             
             if not msg.startswith("PING_"):
-                # Invio al frontend solo se NON è un hit per evitare doppi log (gli hit vengono loggati in logic)
                 if not (msg.startswith("HIT_") or msg.startswith("OFF_TARGET_")):
                     try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': msg})
                     except: pass
@@ -363,7 +384,6 @@ def udp_listener_thread():
                 bat = parts[2] if len(parts) > 2 else 100
                 pico_last_seen[side] = {'time': now, 'bat': bat}
                 
-                # Sincronizza l'arma in tempo reale ai Pico
                 try:
                     weapon = current_state['settings'].get('weapon', 'spada')
                     udp_sock.sendto(f"SET_WEAPON_{weapon.upper()}".encode('utf-8'), (addr[0], 7778))
