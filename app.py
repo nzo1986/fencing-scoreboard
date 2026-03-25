@@ -32,10 +32,12 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-# --- ROTTE AGGIORNAMENTO DI SISTEMA (OTA) ---
+# --- ROTTE AGGIORNAMENTO DI SISTEMA (OTA - SOFT RESTART) ---
 @app.route('/api/update_system', methods=['POST'])
 def update_system():
-    os.system("nohup bash -c 'sleep 1 && cd ~/fencing_scoreboard && git fetch origin && git reset --hard origin/main && sudo reboot' >/dev/null 2>&1 &")
+    # Fa un pull da GitHub, chiude l'app Python e la riapre (nessun riavvio della macchina)
+    cmd = "nohup bash -c 'sleep 2 && cd ~/fencing_scoreboard && git fetch origin && git reset --hard origin/main && pkill -f \"python app.py\" || true; source venv/bin/activate && python app.py' >/dev/null 2>&1 &"
+    os.system(cmd)
     return jsonify({"status": "updating"})
 
 @app.route('/api/ota/<pico_name>/version')

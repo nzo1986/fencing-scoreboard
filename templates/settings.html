@@ -39,7 +39,7 @@
 
     <div class="px-3 max-w-2xl mx-auto">
         <button onclick="updateSystem()" id="btn-update" class="sys-btn bg-green-700 hover:bg-green-600 text-white shadow-[0_0_15px_rgba(34,197,94,0.5)] border border-green-500 mb-6">
-            🔄 Aggiorna Sistema da GitHub
+            🔄 Aggiorna App da GitHub
         </button>
 
         <details>
@@ -148,12 +148,12 @@
         let settings = {};
         
         function updateSystem() {
-            if(confirm("Vuoi scaricare gli aggiornamenti da GitHub e riavviare il sistema?")) {
+            if(confirm("Vuoi scaricare gli aggiornamenti da GitHub e riavviare l'app? (Impiegherà circa 6 secondi)")) {
                 document.getElementById('btn-update').innerText = "⏳ Aggiornamento in corso...";
                 document.getElementById('btn-update').disabled = true;
                 fetch('/api/update_system', {method: 'POST'})
                 .then(() => {
-                    setTimeout(() => { alert("Il sistema si sta riavviando! Attendi 20 secondi e ricarica la pagina."); window.location.href = "/"; }, 2000);
+                    setTimeout(() => { alert("L'app è stata aggiornata! Ricarico la pagina."); window.location.href = "/"; }, 6000);
                 });
             }
         }
