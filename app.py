@@ -32,7 +32,7 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-# --- ROTTE AGGIORNAMENTO DI SISTEMA (OTA - STREAMING LOG) ---
+# --- ROTTE AGGIORNAMENTO DI SISTEMA E PICO ---
 @app.route('/api/update_system', methods=['POST'])
 def update_system():
     def run_update_process():
@@ -53,6 +53,18 @@ def update_system():
 
     eventlet.spawn(run_update_process)
     return jsonify({"status": "updating"})
+
+@app.route('/api/reboot_picos', methods=['POST'])
+def reboot_picos():
+    # Invia un segnale broadcast UDP per ordinare a tutte le Pico di riavviarsi istantaneamente
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        s.sendto(b"REBOOT_PICO", ('<broadcast>', 7778))
+        s.sendto(b"REBOOT_PICO", ('255.255.255.255', 7778)) # Fallback
+        s.close()
+    except Exception as e: print(e)
+    return jsonify({"status": "ok"})
 
 @app.route('/api/ota/<pico_name>/version')
 def ota_version(pico_name):
@@ -133,38 +145,26 @@ def handle_adjust_time(data):
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
     eventlet.spawn(save_state)
 
-# --- NUOVA GESTIONE PRIORITÀ (ANIMAZIONE + MINUTO SUPPLEMENTARE) ---
 @socketio.on('toggle_priority')
 def handle_priority():
     push_history()
     curr = current_state.get('priority')
-    
     if curr:
-        # Se c'è già una priorità, la annulla
         current_state['priority'] = None
         socketio.emit('state_update', current_state)
         eventlet.spawn(save_state)
     else:
-        # Se non c'è, fa partire l'animazione della roulette
         winner = random.choice(['left', 'right'])
-        
-        # Comunica a tutti i client di avviare l'animazione di 2.5 secondi
         socketio.emit('priority_animation', {'duration': 2500})
-        
         def apply_priority():
-            eventlet.sleep(2.5) # Attende la fine dell'animazione
+            eventlet.sleep(2.5)
             current_state['priority'] = winner
-            current_state['timer'] = 60.0 # Imposta il timer a 1 minuto (60 sec)
+            current_state['timer'] = 60.0 
             current_state['running'] = False
-            
-            # Aggiorna lo stato finale a tutti i display
             socketio.emit('state_update', current_state)
             socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
             save_state()
-            
-            # Log nel debug
             socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': 'SYS', 'msg': f"🎲 Priorità assegnata a: {'ROSSO (SX)' if winner == 'left' else 'VERDE (DX)'}"})
-            
         eventlet.spawn(apply_priority)
 
 @socketio.on('reset_scores')
@@ -226,11 +226,9 @@ def up_set(d):
 def handle_swap():
     current_state['swapped'] = not current_state['swapped']
     current_state['fencer_left'], current_state['fencer_right'] = current_state['fencer_right'], current_state['fencer_left']
-    
     curr = current_state.get('priority')
     if curr == 'left': current_state['priority'] = 'right'
     elif curr == 'right': current_state['priority'] = 'left'
-        
     socketio.emit('state_update', current_state)
     eventlet.spawn(save_state)
 
@@ -241,12 +239,10 @@ def l_match(d):
     current_state['manual_selection'] = True
     current_state['swapped'] = False 
     current_state['current_row_idx'] = d['row']
-    
     current_state['fencer_left']['name'] = clean_fencer_name(d['sx'])
     current_state['fencer_right']['name'] = clean_fencer_name(d['dx'])
     current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left']['name'])
     current_state['fencer_right']['photo'] = get_photo_url(current_state['fencer_right']['name'])
-    
     try: current_state['fencer_left']['score'] = int(float(d['p_sx']))
     except: current_state['fencer_left']['score'] = 0
     try: current_state['fencer_right']['score'] = int(float(d['p_dx']))
@@ -266,36 +262,26 @@ def handle_send_result():
     if not current_state['settings'].get('google_script_url') or not current_state['current_row_idx']:
         socketio.emit('action_feedback', {'status': 'error', 'msg': 'Errore URL o Assalto.'})
         return
-    
     g = current_state.get('active_girone', current_state.get('current_girone', 'rosso'))
     cols_map = current_state['settings'].get('columns', default_columns)
     cols = cols_map.get(g, default_columns['rosso']) 
     val_sx = current_state['fencer_right']['score'] if current_state.get('swapped') else current_state['fencer_left']['score']
     val_dx = current_state['fencer_left']['score'] if current_state.get('swapped') else current_state['fencer_right']['score']
-    
-    payload = {
-        "sheet_name": "display3gir", "row": current_state['current_row_idx'], 
-        "col_sx": letter_to_sheet_col(cols['psx']), "val_sx": val_sx, 
-        "col_dx": letter_to_sheet_col(cols['pdx']), "val_dx": val_dx
-    }
-    
+    payload = { "sheet_name": "display3gir", "row": current_state['current_row_idx'], "col_sx": letter_to_sheet_col(cols['psx']), "val_sx": val_sx, "col_dx": letter_to_sheet_col(cols['pdx']), "val_dx": val_dx }
     socketio.emit('action_feedback', {'status': 'info', 'msg': 'Invio in background...'})
     eventlet.spawn(process_background_upload, payload, g, socketio)
 
     matches = gironi_cache.get(g, [])
     next_match = None
-    
     for m in matches:
         if m['row'] != current_state['current_row_idx']:
             try: p_sx = int(float(m.get('p_sx', '0') or '0'))
             except: p_sx = 0
             try: p_dx = int(float(m.get('p_dx', '0') or '0'))
             except: p_dx = 0
-            
             if p_sx == 0 and p_dx == 0:
                 next_match = m
                 break
-                
     if next_match:
         current_state['active_girone'] = g
         current_state['manual_selection'] = True
@@ -314,7 +300,6 @@ def handle_send_result():
         for s in ['left','right']:
             current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
             current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
-        
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
         socketio.emit('action_feedback', {'status': 'success', 'msg': f"Caricato: {next_match['sx']} vs {next_match['dx']}"})

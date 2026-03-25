@@ -25,7 +25,7 @@
         details[open] summary { border-bottom: 1px solid #444; background: #3a3a3a; color: #60a5fa; }
         .details-content { padding: 10px 5px; animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
-        .sys-btn { width: 100%; padding: 15px; font-size: 1.2rem; font-weight: bold; border-radius: 8px; border: none; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .sys-btn { width: 100%; padding: 15px; font-size: 1.2rem; font-weight: bold; border-radius: 8px; border: none; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all 0.2s;}
         input[type="text"] { width: 100%; padding: 12px; background: #111; color: white; border: 1px solid #555; border-radius: 6px; margin-top: 8px; font-family: monospace; font-size: 1rem; }
         input[type="text"]:focus { border-color: #3b82f6; outline: none; }
         #debug-console, #update-terminal { font-family: monospace; font-size: 0.85rem; color: #0f0; background: #000; padding: 10px; height: 250px; overflow-y: auto; border: 1px solid #444; border-radius: 5px; line-height: 1.4; word-wrap: break-word;}
@@ -40,7 +40,7 @@
 
     <div class="px-3 max-w-2xl mx-auto">
         
-        <!-- SELEZIONE ARMI -->
+        <!-- SELEZIONE ARMI VELOCE IN CIMA -->
         <h2 class="text-gray-400 font-bold text-sm mb-2 uppercase tracking-wider">Arma Selezionata</h2>
         <div class="mb-6 grid grid-cols-3 gap-2">
             <button id="btn-wpn-spada" onclick="updateText('weapon', 'spada')" class="sys-btn bg-gray-800 text-gray-500 border border-gray-700 m-0 h-16 text-lg hover:bg-gray-700 transition">SPADA</button>
@@ -153,9 +153,18 @@
             </div>
         </div>
 
-        <button onclick="updateSystem()" id="btn-update" class="mt-4 mb-10 sys-btn bg-green-700 hover:bg-green-600 text-white shadow-[0_0_15px_rgba(34,197,94,0.5)] border border-green-500">
-            🔄 Aggiorna App da GitHub
-        </button>
+        <!-- PULSANTI AGGIORNAMENTO POSTI IN FONDO -->
+        <div class="mt-10 mb-10 border-t border-gray-700 pt-6">
+            <h2 class="text-gray-400 font-bold text-sm mb-2 uppercase tracking-wider text-center">Zona Sviluppo & Aggiornamenti</h2>
+            
+            <button onclick="updateSystem()" id="btn-update" class="mt-2 sys-btn bg-green-700 hover:bg-green-600 text-white shadow-[0_0_15px_rgba(34,197,94,0.5)] border border-green-500">
+                🔄 Aggiorna App da GitHub
+            </button>
+            
+            <button onclick="forcePicoReboot()" id="btn-pico-update" class="mt-4 sys-btn bg-cyan-700 hover:bg-cyan-600 text-white border border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.4)]">
+                🔌 Forza Riavvio e Aggiornamento Sensori (Pico)
+            </button>
+        </div>
         
     </div>
 
@@ -171,12 +180,26 @@
                 document.getElementById('update-terminal-container').style.display = 'block';
                 const term = document.getElementById('update-terminal');
                 term.innerHTML = '<span class="text-blue-400">[SISTEMA] Richiesta inviata alla Raspberry Pi... Avvio setup_fencing_kiosk.py</span><br>';
+                window.scrollTo(0, document.body.scrollHeight);
                 
                 fetch('/api/update_system', {method: 'POST'})
                 .then(response => {
                     if(!response.ok) { term.innerHTML += '<span class="text-red-500">[ERRORE] Impossibile contattare il server!</span><br>'; }
                 })
                 .catch(err => { term.innerHTML += '<span class="text-red-500">[ERRORE] '+ err +'</span><br>'; });
+            }
+        }
+
+        function forcePicoReboot() {
+            if(confirm("Inviare segnale di riavvio alle Pico W? (Se c'è un aggiornamento lo scaricheranno prima di accendersi)")) {
+                document.getElementById('btn-pico-update').innerText = "⏳ Invio Segnale Radio...";
+                fetch('/api/reboot_picos', {method: 'POST'})
+                .then(() => {
+                    setTimeout(() => { 
+                        document.getElementById('btn-pico-update').innerHTML = "🔌 Forza Riavvio e Aggiornamento Sensori (Pico)";
+                        alert("Segnale inviato! Le Pico W si stanno riavviando.");
+                    }, 1500);
+                });
             }
         }
 
@@ -208,7 +231,7 @@
                 document.getElementById('google_sheet_id').value = settings.google_sheet_id || '';
                 document.getElementById('google_script_url').value = settings.google_script_url || '';
                 
-                // Aggiorna lo stile dei bottoni dell'arma
+                // Aggiorna lo stile dei bottoni dell'arma (Verde se attivo, Grigio se inattivo)
                 if(settings.weapon) {
                     ['spada','fioretto','sciabola'].forEach(w => {
                         let b = document.getElementById('btn-wpn-' + w);
