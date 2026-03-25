@@ -6,8 +6,9 @@ eventlet.monkey_patch()
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_socketio import SocketIO, emit
 import os, time
+from eventlet.green import socket
 
-from config_state import current_state, load_state, save_state, push_history, pico_last_seen, gironi_cache, get_photo_url, clean_fencer_name, PHOTOS_DIR, get_system_fonts, letter_to_sheet_col, default_columns
+from config_state import current_state, load_state, save_state, push_history, pico_last_seen, gironi_cache, get_photo_url, clean_fencer_name, PHOTOS_DIR, get_system_fonts, letter_to_sheet_col, default_columns, BASE_DIR
 from fencing_logic import handle_hit_request, emit_massa_visual, register_coccia, apply_card
 from google_api import update_all_gironi_data, process_background_upload, check_internet, check_google
 
@@ -15,6 +16,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'scherma_secret_key'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
+# --- ROTTE WEB ---
 @app.route('/')
 def index(): return render_template('index.html')
 @app.route('/telecomando')
@@ -30,6 +32,27 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
+# --- ROTTE AGGIORNAMENTO DI SISTEMA (OTA) ---
+@app.route('/api/update_system', methods=['POST'])
+def update_system():
+    os.system("nohup bash -c 'sleep 1 && cd ~/fencing_scoreboard && git fetch origin && git reset --hard origin/main && sudo reboot' >/dev/null 2>&1 &")
+    return jsonify({"status": "updating"})
+
+@app.route('/api/ota/<pico_name>/version')
+def ota_version(pico_name):
+    try:
+        file_path = os.path.join(BASE_DIR, "pico_code", f"pico_{pico_name}.py")
+        if os.path.exists(file_path):
+            return str(int(os.path.getmtime(file_path)))
+    except Exception as e: print(e)
+    return "0"
+
+@app.route('/api/ota/<pico_name>/code')
+def ota_code(pico_name):
+    file_path = os.path.join(BASE_DIR, "pico_code", f"pico_{pico_name}.py")
+    return send_file(file_path, mimetype='text/plain')
+
+# --- ROTTE API STANDARD ---
 @app.route('/api/pico_status')
 def get_pico_status():
     now = time.time()
@@ -37,7 +60,6 @@ def get_pico_status():
         'rosso': {'active': (now - pico_last_seen['rosso']['time']) < 5, 'bat': pico_last_seen['rosso']['bat']},
         'verde': {'active': (now - pico_last_seen['verde']['time']) < 5, 'bat': pico_last_seen['verde']['bat']}
     })
-
 @app.route('/api/get_fonts')
 def api_get_fonts(): return jsonify(get_system_fonts())
 @app.route('/api/scan_wifi')
@@ -45,6 +67,7 @@ def api_scan(): return jsonify([])
 @app.route('/api/saved_wifi')
 def api_saved(): return jsonify([])
 
+# --- SOCKET IO EVENTS ---
 @socketio.on('connect')
 def handle_connect(): 
     emit('status_check', {'internet': check_internet(), 'google': check_google()})
@@ -276,15 +299,16 @@ def udp_listener_thread():
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     udp_sock.bind(('0.0.0.0', 7777))
+    print("[UDP] Server in ascolto su 0.0.0.0:7777")
     while True:
         try:
             data, addr = udp_sock.recvfrom(1024)
             msg = data.decode('utf-8')
             now = time.time()
             
-            # --- DEBUG LOG WEB ---
-            try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': msg})
-            except: pass
+            if not msg.startswith("PING_"):
+                try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': msg})
+                except: pass
 
             if msg == "HIT_ROSSO": eventlet.spawn(handle_hit_request, "left", now, socketio)
             elif msg == "HIT_VERDE": eventlet.spawn(handle_hit_request, "right", now, socketio)

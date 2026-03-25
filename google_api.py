@@ -1,23 +1,21 @@
-import requests
-import csv
-import time
-import eventlet
+import requests, csv, time, eventlet
 from config_state import current_state, gironi_cache, GIRONI_MAP_READ, default_columns, letter_to_index, clean_fencer_name, get_photo_url, save_state, DEFAULT_SHEET_ID
 
 def check_internet():
-    try: 
-        requests.get('https://www.google.com', timeout=2)
-        return True
+    try: requests.get('https://www.google.com', timeout=2); return True
     except: return False
 
 def check_google():
+    sid = current_state['settings'].get('google_sheet_id', '').strip()
+    if not sid: sid = DEFAULT_SHEET_ID
     if not current_state['settings'].get('google_script_url'): return "missing"
     if not check_internet(): return "error"
     return "ok"
 
 def update_all_gironi_data(socketio):
     try:
-        sid = current_state['settings'].get('google_sheet_id', DEFAULT_SHEET_ID)
+        sid = current_state['settings'].get('google_sheet_id', '').strip()
+        if not sid: sid = DEFAULT_SHEET_ID
         r = requests.get(f"https://docs.google.com/spreadsheets/d/{sid}/gviz/tq?tqx=out:csv&sheet=display3gir&t={int(time.time())}", headers={'User-Agent': 'Mozilla/5.0'})
         r.encoding = 'utf-8'
         lines = r.text.strip().split('\n')
@@ -27,17 +25,20 @@ def update_all_gironi_data(socketio):
         
         for i, line in enumerate(lines[1:]): 
             row_idx = i + 2
-            p = list(csv.reader([line]))[0]
+            parsed_line = list(csv.reader([line]))
+            if not parsed_line: continue
+            p = parsed_line[0]
+            
             for girone in GIRONI_MAP_READ.keys():
                 g_cols = cols_map.get(girone)
                 if not g_cols: continue
                 idx_sx, idx_psx, idx_pdx, idx_dx = letter_to_index(g_cols['sx']), letter_to_index(g_cols['psx']), letter_to_index(g_cols['pdx']), letter_to_index(g_cols['dx'])
                 max_idx = max(idx_sx, idx_psx, idx_pdx, idx_dx)
                 
-                if len(p) > max_idx and p[idx_sx] and p[idx_dx]:
+                if len(p) > max_idx and p[idx_sx].strip() and p[idx_dx].strip():
                     name_sx, name_dx = clean_fencer_name(p[idx_sx]), clean_fencer_name(p[idx_dx])
                     if not name_sx or not name_dx or name_sx.isdigit() or name_dx.isdigit() or len(name_sx) < 2 or len(name_dx) < 2: continue
-                    new_cache[girone].append({"sx": name_sx, "p_sx": p[idx_psx] if p[idx_psx] else "0", "p_dx": p[idx_pdx] if p[idx_pdx] else "0", "dx": name_dx, "row": row_idx})
+                    new_cache[girone].append({"sx": name_sx, "p_sx": p[idx_psx].strip() if p[idx_psx].strip() else "0", "p_dx": p[idx_pdx].strip() if p[idx_pdx].strip() else "0", "dx": name_dx, "row": row_idx})
         
         global gironi_cache
         gironi_cache.clear()
@@ -64,7 +65,6 @@ def update_all_gironi_data(socketio):
         current_state['match_list'] = gironi_cache.get(cg, [])
         socketio.emit('state_update', current_state)
         if updated_current: eventlet.spawn(save_state)
-
     except Exception as e: print(f"Update error: {e}")
 
 def process_background_upload(payload, girone, socketio):
@@ -86,9 +86,6 @@ def process_background_upload(payload, girone, socketio):
         if match_data:
             try:
                 if int(float(match_data['p_sx'])) == int(payload['val_sx']) and int(float(match_data['p_dx'])) == int(payload['val_dx']):
-                    socketio.emit('upload_status', {'color': 'green'}) 
-                    eventlet.sleep(5)
-                    socketio.emit('upload_status', {'color': 'none'})
-                    return
+                    socketio.emit('upload_status', {'color': 'green'}); eventlet.sleep(5); socketio.emit('upload_status', {'color': 'none'}); return
             except: pass
     socketio.emit('upload_status', {'color': 'red'})

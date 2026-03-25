@@ -1,5 +1,4 @@
-import time
-import eventlet
+import time, eventlet
 from config_state import current_state, save_state
 
 last_hit_timestamp = 0
@@ -20,14 +19,10 @@ def emit_massa_visual(side, socketio):
 
 def handle_hit_request(side, hit_timestamp, socketio):
     opp_side = 'right' if side == 'left' else 'left'
-    
-    # Pausa di 40ms per compensare la latenza del Wi-Fi e aspettare il segnale della coccia avversaria
-    eventlet.sleep(0.04)
-    
-    if abs(last_coccia_time[opp_side] - hit_timestamp) < 0.1:
+    eventlet.sleep(0.06) 
+    if abs(last_coccia_time[opp_side] - hit_timestamp) < 0.2:
         emit_massa_visual(side, socketio)
         return
-        
     evaluate_valid_hit(side, hit_timestamp, socketio)
 
 def evaluate_valid_hit(side, hit_timestamp, socketio):
@@ -81,8 +76,7 @@ def apply_card(side, card_type, socketio):
                 if not has_yellow and red_count == 0:
                     if card_type == 'Y': fencer['cards']['Y'] = True
                     elif card_type == 'R':
-                        red_count = 1
-                        opponent['score'] += 1
+                        red_count = 1; opponent['score'] += 1
                 else:
                     if red_count < 2: red_count += 1
                     opponent['score'] += 1
