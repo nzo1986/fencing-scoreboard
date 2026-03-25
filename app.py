@@ -218,6 +218,17 @@ def up_set(d):
                 try: current_state['settings'][k] = float(v)
                 except: pass
             else: current_state['settings'][k] = str(v)
+            
+            # Se viene cambiata l'arma, forza l'invio immediato ai Pico
+            if k == 'weapon':
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                    s.sendto(f"SET_WEAPON_{str(v).upper()}".encode('utf-8'), ('<broadcast>', 7778))
+                    s.sendto(f"SET_WEAPON_{str(v).upper()}".encode('utf-8'), ('255.255.255.255', 7778))
+                    s.close()
+                except Exception as e: print("Errore broadcast:", e)
+                
     socketio.emit('state_update', current_state)
     eventlet.spawn(save_state)
 
@@ -345,7 +356,6 @@ def udp_listener_thread():
             msg = data.decode('utf-8')
             now = time.time()
             
-            # LOG DI DEBUG DALLE PICO
             if msg.startswith("DEBUG_"):
                 try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': f"🔍 {msg}"})
                 except: pass
