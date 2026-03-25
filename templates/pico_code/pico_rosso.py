@@ -6,7 +6,6 @@ WIFI_SSID, WIFI_PASS = "RouterEnzoM", "Aurorapad5"
 PICO_NAME, UDP_IP, UDP_PORT = "rosso", "192.168.1.110", 7777
 
 def check_ota():
-    # Legge la data dell'ultimo aggiornamento salvata internamente
     try:
         with open("version.txt", "r") as f: LOCAL_VERSION = f.read().strip()
     except: LOCAL_VERSION = "0"
@@ -27,7 +26,6 @@ def check_ota():
             r.close()
             print(f"[OTA] Data file sul Raspberry: {remote_version}")
             
-            # Se la data di modifica è diversa, c'è un aggiornamento!
             if remote_version != LOCAL_VERSION and remote_version != "0" and len(remote_version) < 15:
                 print(f"[OTA] File modificato rilevato! Scarico il nuovo codice...")
                 r = requests.get(f"http://{UDP_IP}:5000/api/ota/{PICO_NAME}/code")
@@ -36,7 +34,6 @@ def check_ota():
                 r.close()
                 os.rename("temp.py", "main.py")
                 
-                # Salva la nuova data in memoria
                 with open("version.txt", "w") as f:
                     f.write(remote_version)
                     
@@ -46,10 +43,9 @@ def check_ota():
         except Exception as e:
             print("[OTA] Nessun aggiornamento o server offline:", e)
 
-# 1. PRIMA COSA: Controlla aggiornamenti
 check_ota()
 
-# 2. Avvio normale del programma
+# PIN_A = Massa (Pelle/Lama)
 PIN_A = Pin(13, Pin.OUT); PIN_A.value(0)
 PIN_B = Pin(14, Pin.IN, Pin.PULL_UP)
 PIN_C_NUM = 15 
@@ -81,44 +77,117 @@ def connect_wifi():
     wlan.active(True)
     if not wlan.isconnected(): wlan.connect(WIFI_SSID, WIFI_PASS)
     while not wlan.isconnected(): time.sleep(0.5)
+    
     udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # Binda la porta per ricevere messaggi "al volo" dal server (Cambio Arma)
+    udp_socket.bind(('0.0.0.0', 7778))
+    udp_socket.setblocking(False)
 
 def loop():
     connect_wifi()
     b_was_pressed, in_lockout, lockout_start_time = False, False, 0
     ping_next_time, last_coccia_send = time.ticks_ms(), 0
+    current_weapon = "spada" # Arma predefinita all'avvio
 
     while True:
         current_time = time.ticks_ms()
+        
+        # Ascolto messaggi in arrivo dal server (Cambio Arma Config)
+        try:
+            data, addr = udp_socket.recvfrom(1024)
+            msg = data.decode('utf-8')
+            if msg.startswith("SET_WEAPON_"):
+                current_weapon = msg.split("_")[2].lower()
+        except OSError:
+            pass
+
+        # Ping del segnale di vita (e invio batteria)
         if time.ticks_diff(current_time, ping_next_time) >= 0:
             try: udp_socket.sendto(f"PING_{PICO_NAME.upper()}_{get_battery_percentage()}".encode('utf-8'), (UDP_IP, UDP_PORT))
             except: pass
             ping_next_time = time.ticks_add(current_time, 2000)
 
-        pin_c = Pin(PIN_C_NUM, Pin.OUT); pin_c.value(0)
-        time.sleep_ms(3) 
+        # ----------------------- LOGICA ARMI ----------------------- #
+        if current_weapon == "spada":
+            pin_c = Pin(PIN_C_NUM, Pin.OUT); pin_c.value(0)
+            time.sleep_ms(3) 
+            pin_c = Pin(PIN_C_NUM, Pin.IN, Pin.PULL_UP)
+            time.sleep_ms(1)
 
-        pin_c = Pin(PIN_C_NUM, Pin.IN, Pin.PULL_UP)
-        time.sleep_ms(1)
+            b_pressed, c_pressed = (PIN_B.value() == 0), (pin_c.value() == 0)
 
-        b_pressed, c_pressed = (PIN_B.value() == 0), (pin_c.value() == 0)
+            if b_pressed and not b_was_pressed and not in_lockout:
+                if not c_pressed:
+                    try: udp_socket.sendto(f"HIT_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
+                    except: pass
+                    in_lockout = True
+                    lockout_start_time = current_time
 
-        if b_pressed and not b_was_pressed and not in_lockout:
-            if c_pressed: pass 
-            else:
+            if c_pressed and not b_pressed:
+                if time.ticks_diff(current_time, last_coccia_send) > 80:
+                    try: udp_socket.sendto(f"COCCIA_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
+                    except: pass
+                    last_coccia_send = current_time
+
+            if in_lockout and time.ticks_diff(current_time, lockout_start_time) >= 800: in_lockout = False
+            b_was_pressed = b_pressed
+
+        elif current_weapon == "fioretto":
+            GP14 = PIN_B
+            GP15 = Pin(PIN_C_NUM)
+            GP14.init(Pin.IN, Pin.PULL_UP)
+            GP15.init(Pin.IN, Pin.PULL_UP)
+            
+            v14 = GP14.value()
+            v15 = GP15.value()
+            
+            # Se entrambi i fili sono a livello logico ALTO (Non toccano massa avversaria)
+            if v14 == 1 and v15 == 1:
+                # Controllo se sono connessi tra loro (Pulsante normalmente chiuso)
+                GP14.init(Pin.OUT); GP14.value(0)
+                time.sleep_us(50)
+                is_open = (GP15.value() == 1)
+                GP14.init(Pin.IN, Pin.PULL_UP)
+                
+                # Se è aperto E non tocca bersaglio -> BERSAGLIO NON VALIDO (Luce Bianca)
+                if is_open and not b_was_pressed and not in_lockout:
+                    try: udp_socket.sendto(f"OFF_TARGET_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
+                    except: pass
+                    in_lockout = True
+                    lockout_start_time = current_time
+                    b_was_pressed = True
+                elif not is_open:
+                    b_was_pressed = False
+                    
+            # Se la punta è aperta E tocca il giubbetto avversario (Massa / GND) -> BERSAGLIO VALIDO
+            elif (v14 == 0 and v15 == 1) or (v14 == 1 and v15 == 0):
+                if not b_was_pressed and not in_lockout:
+                    try: udp_socket.sendto(f"HIT_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
+                    except: pass
+                    in_lockout = True
+                    lockout_start_time = current_time
+                    b_was_pressed = True
+                    
+            elif v14 == 0 and v15 == 0:
+                # Trascinamento sul giubbetto a vuoto, nessun evento
+                b_was_pressed = False
+                
+            if in_lockout and time.ticks_diff(current_time, lockout_start_time) >= 800: in_lockout = False
+
+        elif current_weapon == "sciabola":
+            # Per la sciabola, è sufficiente che la lama (GP14) tocchi la massa avversaria
+            GP14 = PIN_B
+            GP14.init(Pin.IN, Pin.PULL_UP)
+            if GP14.value() == 0 and not b_was_pressed and not in_lockout:
                 try: udp_socket.sendto(f"HIT_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
                 except: pass
                 in_lockout = True
                 lockout_start_time = current_time
+                b_was_pressed = True
+            elif GP14.value() == 1:
+                b_was_pressed = False
 
-        if c_pressed and not b_pressed:
-            if time.ticks_diff(current_time, last_coccia_send) > 80:
-                try: udp_socket.sendto(f"COCCIA_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
-                except: pass
-                last_coccia_send = current_time
-
-        if in_lockout and time.ticks_diff(current_time, lockout_start_time) >= 800: in_lockout = False
-        b_was_pressed = b_pressed
+            if in_lockout and time.ticks_diff(current_time, lockout_start_time) >= 800: in_lockout = False
 
 try: loop()
 except: pass

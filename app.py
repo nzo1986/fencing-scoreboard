@@ -37,7 +37,6 @@ def download_page(): return render_template('download.html')
 def update_system():
     def run_update_process():
         import subprocess
-        # Esegue il setup e cattura i log riga per riga per inviarli al web
         cmd = ['python', 'setup_fencing_kiosk.py']
         try:
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=BASE_DIR)
@@ -47,14 +46,11 @@ def update_system():
             process.stdout.close()
             process.wait()
             socketio.emit('update_complete')
-            
-            # Applica un soft-restart dopo 2 secondi
             os.system("nohup bash -c 'sleep 2 && pkill -f \"python app.py\" || true; source venv/bin/activate && python app.py' >/dev/null 2>&1 &")
         except Exception as e:
             socketio.emit('update_log', {'msg': f"[ERRORE FATALE] {str(e)}"})
             socketio.emit('update_complete')
 
-    # Fa partire l'aggiornamento in un thread in background separato
     eventlet.spawn(run_update_process)
     return jsonify({"status": "updating"})
 
@@ -330,14 +326,30 @@ def udp_listener_thread():
                 try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': msg})
                 except: pass
 
-            if msg == "HIT_ROSSO": eventlet.spawn(handle_hit_request, "left", now, socketio)
-            elif msg == "HIT_VERDE": eventlet.spawn(handle_hit_request, "right", now, socketio)
-            elif msg == "COCCIA_ROSSO": register_coccia("left")
-            elif msg == "COCCIA_VERDE": register_coccia("right")
-            elif msg == "MASSA_MIA_ROSSO": emit_massa_visual("left", socketio)
-            elif msg == "MASSA_MIA_VERDE": emit_massa_visual("right", socketio)
-            elif msg.startswith("PING_ROSSO"): pico_last_seen['rosso'] = {'time': now, 'bat': msg.split('_')[2] if len(msg.split('_'))>2 else 100}
-            elif msg.startswith("PING_VERDE"): pico_last_seen['verde'] = {'time': now, 'bat': msg.split('_')[2] if len(msg.split('_'))>2 else 100}
+            if msg.startswith("HIT_"):
+                side = "left" if "ROSSO" in msg else "right"
+                eventlet.spawn(handle_hit_request, side, now, socketio, "HIT")
+            elif msg.startswith("OFF_TARGET_"):
+                side = "left" if "ROSSO" in msg else "right"
+                eventlet.spawn(handle_hit_request, side, now, socketio, "OFF_TARGET")
+            elif msg.startswith("COCCIA_"):
+                side = "left" if "ROSSO" in msg else "right"
+                register_coccia(side)
+            elif msg.startswith("MASSA_MIA_"):
+                side = "left" if "ROSSO" in msg else "right"
+                emit_massa_visual(side, socketio)
+            elif msg.startswith("PING_"):
+                side = "rosso" if "ROSSO" in msg else "verde"
+                parts = msg.split('_')
+                bat = parts[2] if len(parts) > 2 else 100
+                pico_last_seen[side] = {'time': now, 'bat': bat}
+                
+                # Invia il comando dell'arma al Pico sulla porta 7778
+                try:
+                    weapon = current_state['settings'].get('weapon', 'spada')
+                    udp_sock.sendto(f"SET_WEAPON_{weapon.upper()}".encode('utf-8'), (addr[0], 7778))
+                except: pass
+
         except: pass
         eventlet.sleep(0.005)
 
