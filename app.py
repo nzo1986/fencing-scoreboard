@@ -5,7 +5,7 @@ eventlet.monkey_patch()
 
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_socketio import SocketIO, emit
-import os, time
+import os, time, random
 from eventlet.green import socket
 
 from config_state import current_state, load_state, save_state, push_history, pico_last_seen, gironi_cache, get_photo_url, clean_fencer_name, PHOTOS_DIR, get_system_fonts, letter_to_sheet_col, default_columns, BASE_DIR
@@ -32,7 +32,7 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-# --- ROTTE AGGIORNAMENTO DI SISTEMA (OTA - STREAMING LOG) ---
+# --- ROTTE AGGIORNAMENTO DI SISTEMA (OTA) ---
 @app.route('/api/update_system', methods=['POST'])
 def update_system():
     def run_update_process():
@@ -133,6 +133,17 @@ def handle_adjust_time(data):
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
     eventlet.spawn(save_state)
 
+# GESTIONE PRIORITÀ
+@socketio.on('toggle_priority')
+def handle_priority():
+    push_history()
+    curr = current_state.get('priority')
+    if curr is None: current_state['priority'] = random.choice(['left', 'right'])
+    elif curr == 'left': current_state['priority'] = 'right'
+    else: current_state['priority'] = None
+    socketio.emit('state_update', current_state)
+    eventlet.spawn(save_state)
+
 @socketio.on('reset_scores')
 def r_scores():
     push_history()
@@ -192,6 +203,12 @@ def up_set(d):
 def handle_swap():
     current_state['swapped'] = not current_state['swapped']
     current_state['fencer_left'], current_state['fencer_right'] = current_state['fencer_right'], current_state['fencer_left']
+    
+    # Inverti anche la priorità se presente
+    curr = current_state.get('priority')
+    if curr == 'left': current_state['priority'] = 'right'
+    elif curr == 'right': current_state['priority'] = 'left'
+        
     socketio.emit('state_update', current_state)
     eventlet.spawn(save_state)
 
@@ -323,8 +340,10 @@ def udp_listener_thread():
             now = time.time()
             
             if not msg.startswith("PING_"):
-                try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': msg})
-                except: pass
+                # Invio al frontend solo se NON è un hit per evitare doppi log (gli hit vengono loggati in logic)
+                if not (msg.startswith("HIT_") or msg.startswith("OFF_TARGET_")):
+                    try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': msg})
+                    except: pass
 
             if msg.startswith("HIT_"):
                 side = "left" if "ROSSO" in msg else "right"
@@ -344,7 +363,7 @@ def udp_listener_thread():
                 bat = parts[2] if len(parts) > 2 else 100
                 pico_last_seen[side] = {'time': now, 'bat': bat}
                 
-                # Invia il comando dell'arma al Pico sulla porta 7778
+                # Sincronizza l'arma in tempo reale ai Pico
                 try:
                     weapon = current_state['settings'].get('weapon', 'spada')
                     udp_sock.sendto(f"SET_WEAPON_{weapon.upper()}".encode('utf-8'), (addr[0], 7778))

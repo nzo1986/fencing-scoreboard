@@ -74,7 +74,7 @@
         </div>
         <div class="center-col pb-1">
             <div class="flex gap-1">
-                <button class="sys-btn bg-gray-800 border-2 border-gray-600 text-white flex-1 py-4" onclick="socket.emit('toggle_priority')">Priorità</button>
+                <button id="btn-priority" class="sys-btn bg-gray-800 border-2 border-gray-600 text-white flex-1 py-4" onclick="socket.emit('toggle_priority')">Priorità</button>
                 <button class="sys-btn bg-blue-900 border-2 border-blue-600 text-white flex-1 py-4" onclick="sendResult()">INVIA</button>
             </div>
             <div class="mt-1 mb-1">
@@ -84,7 +84,6 @@
                 <details id="reset-menu" class="accord">
                     <summary>Menu Reset</summary>
                     <div class="flex flex-col bg-gray-800 p-2 rounded">
-                        <button class="sys-btn text-gray-200 bg-gray-700 mb-4" onclick="undoAction()">&#x21BA; UNDO (Annulla)</button>
                         <button class="sys-btn text-blue-300" onclick="resetAction('reset_scores')">Reset Punti</button>
                         <button class="sys-btn text-yellow-300" onclick="resetAction('reset_timer')">Reset Tempo</button>
                         <button class="sys-btn text-red-300 bg-red-900" onclick="if(confirm('Reset TOTALE?'))resetAction('reset_all')">Reset TUTTO</button>
@@ -164,13 +163,13 @@
 
             if (data.side === 'left' || data.is_double) {
                 const b = document.getElementById('s-l');
-                b.classList.add('glow-red');
-                setTimeout(() => b.classList.remove('glow-red'), 3000);
+                b.classList.add(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-red');
+                setTimeout(() => b.classList.remove(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-red'), 3000);
             }
             if (data.side === 'right' || data.is_double) {
                 const b = document.getElementById('s-r');
-                b.classList.add('glow-green');
-                setTimeout(() => b.classList.remove('glow-green'), 3000);
+                b.classList.add(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-green');
+                setTimeout(() => b.classList.remove(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-green'), 3000);
             }
         });
 
@@ -221,7 +220,6 @@
         
         function adjustTime(d) { socket.emit('adjust_time',{delta:d}); forceTimerStopLocally(); }
         function resetAction(a) { socket.emit(a); document.getElementById('reset-menu').removeAttribute('open'); forceTimerStopLocally(); }
-        function undoAction() { socket.emit('undo'); document.getElementById('reset-menu').removeAttribute('open'); forceTimerStopLocally(); }
 
         function handleCardClick(s,c){
             let cc=c;
@@ -232,7 +230,6 @@
 
         socket.on('status_check', (s) => { document.getElementById('stat-wifi').className = 'icon-btn ' + (s.internet ? 'icon-ok' : 'icon-error'); document.getElementById('stat-google').className = 'icon-btn ' + (s.google === 'ok' ? 'icon-ok' : 'icon-error'); });
         socket.on('action_feedback', (data) => { if (data.status === 'error') alert("ERRORE: " + data.msg); else showToast(data.msg, data.status === 'info' ? 5000 : 3000); });
-        setInterval(()=>socket.emit('admin_heartbeat',{active:true}),2000);
         
         function changeGirone(g){ currentGirone = g; document.getElementById('girone-label').innerText="Girone: "+g.charAt(0).toUpperCase()+g.slice(1); socket.emit('fetch_sheet', {girone: g}); document.getElementById('girone-details').removeAttribute('open'); }
         function triggerMatchLoad(){ const sel = document.getElementById('sel'); if(sel.value === "") return; if(confirm("Caricare l'assalto selezionato sul Display?")){ let matchData = matches[sel.value]; matchData.girone = currentGirone; socket.emit('load_match', matchData); forceTimerStopLocally(); } }
@@ -249,9 +246,24 @@
             document.getElementById('s-l').innerText=s.fencer_left.score;
             document.getElementById('s-r').innerText=s.fencer_right.score;
             updateTimeUI(s.timer,s.phase);
+            
             const b=document.getElementById('btn-toggle');
             if(s.phase==='BREAK'){ b.innerText=s.running?"IN PAUSA":"RIPRENDI PAUSA"; b.className=s.running?"start-btn bg-pause":"start-btn bg-start"; } 
             else { b.innerText=s.running?"STOP":"AVVIO"; b.className=s.running?"start-btn bg-stop":"start-btn bg-start"; }
+            
+            // AGGIORNAMENTO BOTTONE PRIORITÀ
+            const prioBtn = document.getElementById('btn-priority');
+            if(s.priority === 'left') {
+                prioBtn.innerText = "Priorità: SX (Rossa)";
+                prioBtn.className = "sys-btn bg-red-800 border-2 border-red-500 text-white flex-1 py-4";
+            } else if(s.priority === 'right') {
+                prioBtn.innerText = "Priorità: DX (Verde)";
+                prioBtn.className = "sys-btn bg-green-800 border-2 border-green-500 text-white flex-1 py-4";
+            } else {
+                prioBtn.innerText = "Priorità";
+                prioBtn.className = "sys-btn bg-gray-800 border-2 border-gray-600 text-white flex-1 py-4";
+            }
+
             const upC=(side,d)=>{
                 const sc=side[0];
                 ['Y','R','B'].forEach(c=>{let e=document.getElementById(`btn-${sc}-${c}`); if(e) e.classList.remove('active');});
