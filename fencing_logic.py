@@ -15,7 +15,6 @@ def register_coccia(side):
 def emit_massa_visual(side, socketio):
     global last_massa_emit
     now = time.time()
-    # Evita sfarfallii se arriva troppo velocemente
     if now - last_massa_emit[side] > 0.3:
         socketio.emit('hw_massa', {'side': side})
         last_massa_emit[side] = now
@@ -24,7 +23,6 @@ def handle_hit_request(side, hit_timestamp, socketio, hit_type="HIT"):
     opp_side = 'right' if side == 'left' else 'left'
     weapon = current_state['settings'].get('weapon', 'spada')
     
-    # SPADA: Controllo anti-rimbalzo della coccia
     if weapon == 'spada' and hit_type == 'HIT':
         eventlet.sleep(0.08)
         if abs(last_coccia_time[opp_side] - hit_timestamp) < 0.3:
@@ -41,44 +39,38 @@ def evaluate_valid_hit(side, hit_timestamp, socketio, hit_type):
         
     weapon = current_state['settings'].get('weapon', 'spada')
     
-    # TEMPI DI BLOCCO FIE
-    lockout_ms = 0.045 # Spada: 45ms per il colpo doppio
-    if weapon == 'fioretto': lockout_ms = 0.300 # Fioretto 300ms
-    elif weapon == 'sciabola': lockout_ms = 0.170 # Sciabola 170ms
+    lockout_ms = 0.045
+    if weapon == 'fioretto': lockout_ms = 0.300
+    elif weapon == 'sciabola': lockout_ms = 0.170 
     
     is_within_lockout = (hit_timestamp - last_hit_timestamp <= lockout_ms)
 
     if current_state['running']:
-        # --- PRIMO COLPO RILEVATO ---
         current_state['running'] = False
         last_hit_timestamp = hit_timestamp
         first_hit_side = side
         hit_sides_in_window = {side: hit_timestamp}
         
-        # Punteggio automatico: SOLO LA SPADA fa punto!
         if weapon == 'spada':
             current_state[f'fencer_{side}']['score'] += 1
             score_added = True
         else:
-            score_added = False # Fioretto/Sciabola fermano solo il tempo
+            score_added = False
             
         socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': score_added, 'is_manual': False, 'hit_type': hit_type})
         socketio.emit('state_update', current_state)
         
-        # LOG DEBUG
         color = "Rosso" if side == "left" else "Verde"
-        t_type = "Valida" if hit_type == "HIT" else "Non Valida (Luce Bianca)"
+        t_type = "Valida" if hit_type == "HIT" else "Non Valida (Bianca)"
         icon = "🎯" if hit_type == "HIT" else "⚪"
-        socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': 'SYS', 'msg': f"{icon} Stoccata Singola: {color} [{t_type}]"})
+        socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': 'SYS', 'msg': f"{icon} Stoccata: {color} [{t_type}]"})
         
         eventlet.spawn(save_state)
         
     elif side not in hit_sides_in_window and is_within_lockout:
-        # --- SECONDO COLPO (DOPPIA) ENTRO IL TEMPO LIMITE ---
         hit_sides_in_window[side] = hit_timestamp
         diff_ms = int((hit_timestamp - last_hit_timestamp) * 1000)
         
-        # Punteggio automatico per la spada
         if weapon == 'spada':
             current_state[f'fencer_{side}']['score'] += 1
             score_added = True
@@ -88,17 +80,15 @@ def evaluate_valid_hit(side, hit_timestamp, socketio, hit_type):
         socketio.emit('hw_hit', {'side': side, 'is_double': True, 'score_added': score_added, 'is_manual': False, 'hit_type': hit_type})
         socketio.emit('state_update', current_state)
         
-        # LOG DEBUG PER LA DOPPIA SPACCATA AL MILLISECONDO
         first_color = "Rosso" if first_hit_side == "left" else "Verde"
         second_color = "Rosso" if side == "left" else "Verde"
-        t_type = "Valida" if hit_type == "HIT" else "Non Valida (Luce Bianca)"
+        t_type = "Valida" if hit_type == "HIT" else "Non Valida (Bianca)"
         icon = "🎯" if hit_type == "HIT" else "⚪"
         socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': 'SYS', 'msg': f"⚔️ Doppia: {first_color} > {diff_ms}ms > {second_color} [{t_type}]"})
         
         eventlet.spawn(save_state)
 
     elif not current_state['running']:
-        # TEST ARMI: permette di provare l'arma se è passato 1.5s dall'ultimo colpo senza dare punti
         if (hit_timestamp - last_hit_timestamp) > 1.5:
             socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': False, 'is_manual': False, 'hit_type': hit_type})
             last_hit_timestamp = hit_timestamp

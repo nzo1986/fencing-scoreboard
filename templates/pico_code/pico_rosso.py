@@ -45,7 +45,6 @@ def check_ota():
 
 check_ota()
 
-# PIN_A = Massa (Pelle/Lama)
 PIN_A = Pin(13, Pin.OUT); PIN_A.value(0)
 PIN_B_NUM = 14
 PIN_C_NUM = 15 
@@ -85,30 +84,28 @@ def connect_wifi():
 def loop():
     connect_wifi()
     b_was_pressed, in_lockout, lockout_start_time = False, False, 0
-    ping_next_time, last_coccia_send = time.ticks_ms(), 0
-    current_weapon = "spada" # Arma predefinita all'avvio
+    ping_next_time, last_coccia_send, debug_next_time = time.ticks_ms(), 0, 0
+    current_weapon = "spada"
 
     while True:
         current_time = time.ticks_ms()
         
-        # Ascolto messaggi in arrivo dal server
         try:
             data, addr = udp_socket.recvfrom(1024)
             msg = data.decode('utf-8')
             if msg.startswith("SET_WEAPON_"):
                 current_weapon = msg.split("_")[2].lower()
             elif msg == "REBOOT_PICO":
-                machine.reset() # Riavvio forzato dal server OTA
+                machine.reset() 
         except OSError:
             pass
 
-        # Ping del segnale di vita (e invio batteria)
         if time.ticks_diff(current_time, ping_next_time) >= 0:
             try: udp_socket.sendto(f"PING_{PICO_NAME.upper()}_{get_battery_percentage()}".encode('utf-8'), (UDP_IP, UDP_PORT))
             except: pass
             ping_next_time = time.ticks_add(current_time, 2000)
 
-        # ----------------------- LOGICA ARMI ----------------------- #
+        # --- LOGICA ARMI ---
         if current_weapon == "spada":
             PIN_B = Pin(PIN_B_NUM, Pin.IN, Pin.PULL_UP)
             PIN_C = Pin(PIN_C_NUM, Pin.OUT); PIN_C.value(0)
@@ -117,6 +114,11 @@ def loop():
             time.sleep_ms(1)
 
             b_pressed, c_pressed = (PIN_B.value() == 0), (PIN_C.value() == 0)
+
+            if time.ticks_diff(current_time, debug_next_time) >= 0:
+                try: udp_socket.sendto(f"DEBUG_{PICO_NAME.upper()}_SPADA Punta:{b_pressed} Coccia:{c_pressed}".encode('utf-8'), (UDP_IP, UDP_PORT))
+                except: pass
+                debug_next_time = time.ticks_add(current_time, 1000)
 
             if b_pressed and not b_was_pressed and not in_lockout:
                 if not c_pressed:
@@ -135,35 +137,33 @@ def loop():
             b_was_pressed = b_pressed
 
         elif current_weapon == "fioretto":
-            # LETTURA NORMALMENTE CHIUSO (NC)
             GP14 = Pin(PIN_B_NUM, Pin.IN, Pin.PULL_UP)
             GP15 = Pin(PIN_C_NUM, Pin.IN, Pin.PULL_UP)
             
-            # 1. Controlliamo se l'interruttore fisico è CHIUSO
             GP14.init(Pin.OUT); GP14.value(0)
             time.sleep_us(100)
             is_closed = (GP15.value() == 0)
             
-            # 2. Resettiamo e controlliamo se tocca il bersaglio avversario (Massa)
             GP14.init(Pin.IN, Pin.PULL_UP)
             time.sleep_us(100)
             touching_opp = (GP14.value() == 0 or GP15.value() == 0)
 
-            # Se l'interruttore si è appena APERTO (Bottone schiacciato)
+            if time.ticks_diff(current_time, debug_next_time) >= 0:
+                try: udp_socket.sendto(f"DEBUG_{PICO_NAME.upper()}_FIORETTO Chiuso:{is_closed} Bersaglio:{touching_opp}".encode('utf-8'), (UDP_IP, UDP_PORT))
+                except: pass
+                debug_next_time = time.ticks_add(current_time, 1000)
+
             if not is_closed and not b_was_pressed and not in_lockout:
                 if touching_opp:
-                    # Tocca la massa -> Bersaglio Valido
                     try: udp_socket.sendto(f"HIT_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
                     except: pass
                 else:
-                    # Non tocca la massa -> Bersaglio Non Valido (Luce Bianca)
                     try: udp_socket.sendto(f"OFF_TARGET_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
                     except: pass
                 in_lockout = True
                 lockout_start_time = current_time
                 b_was_pressed = True
                 
-            # Se l'interruttore è chiuso, resettiamo lo stato
             elif is_closed:
                 b_was_pressed = False
                 
@@ -171,13 +171,20 @@ def loop():
 
         elif current_weapon == "sciabola":
             GP14 = Pin(PIN_B_NUM, Pin.IN, Pin.PULL_UP)
-            if GP14.value() == 0 and not b_was_pressed and not in_lockout:
+            touching_opp = (GP14.value() == 0)
+            
+            if time.ticks_diff(current_time, debug_next_time) >= 0:
+                try: udp_socket.sendto(f"DEBUG_{PICO_NAME.upper()}_SCIABOLA Bersaglio:{touching_opp}".encode('utf-8'), (UDP_IP, UDP_PORT))
+                except: pass
+                debug_next_time = time.ticks_add(current_time, 1000)
+                
+            if touching_opp and not b_was_pressed and not in_lockout:
                 try: udp_socket.sendto(f"HIT_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
                 except: pass
                 in_lockout = True
                 lockout_start_time = current_time
                 b_was_pressed = True
-            elif GP14.value() == 1:
+            elif not touching_opp:
                 b_was_pressed = False
 
             if in_lockout and time.ticks_diff(current_time, lockout_start_time) >= 800: in_lockout = False

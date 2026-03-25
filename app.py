@@ -56,12 +56,11 @@ def update_system():
 
 @app.route('/api/reboot_picos', methods=['POST'])
 def reboot_picos():
-    # Invia un segnale broadcast UDP per ordinare a tutte le Pico di riavviarsi istantaneamente
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         s.sendto(b"REBOOT_PICO", ('<broadcast>', 7778))
-        s.sendto(b"REBOOT_PICO", ('255.255.255.255', 7778)) # Fallback
+        s.sendto(b"REBOOT_PICO", ('255.255.255.255', 7778)) 
         s.close()
     except Exception as e: print(e)
     return jsonify({"status": "ok"})
@@ -346,7 +345,12 @@ def udp_listener_thread():
             msg = data.decode('utf-8')
             now = time.time()
             
-            if not msg.startswith("PING_"):
+            # LOG DI DEBUG DALLE PICO
+            if msg.startswith("DEBUG_"):
+                try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': f"🔍 {msg}"})
+                except: pass
+            
+            elif not msg.startswith("PING_"):
                 if not (msg.startswith("HIT_") or msg.startswith("OFF_TARGET_")):
                     try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': msg})
                     except: pass

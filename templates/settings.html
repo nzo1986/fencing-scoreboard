@@ -2,282 +2,312 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Impostazioni</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <title>Control</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        body { background: #111; color: #eee; font-family: sans-serif; touch-action: manipulation; padding-bottom: 30px; }
-        .adjust-btn { width: 45px; height: 45px; font-size: 1.5rem; font-weight: bold; border-radius: 8px; border: none; display: flex; align-items: center; justify-content: center; }
-        .btn-minus { background: #d32f2f; color: white; }
-        .btn-plus { background: #388e3c; color: white; }
-        .val-display { font-size: 1.2rem; font-weight: bold; min-width: 50px; text-align: center; }
-        .row-ctrl { display: flex; align-items: center; justify-content: space-between; padding: 15px; border-bottom: 1px solid #333; }
-        .row-ctrl:last-child { border-bottom: none; }
-        .lbl { font-size: 1.1rem; color: #ccc; }
-        .font-btn { padding: 10px 15px; margin: 5px; background: #333; border: 1px solid #555; border-radius: 4px; color: white; transition: 0.2s; }
-        .font-btn.active { background: #2563eb; border-color: #3b82f6; box-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
-        details { background: #222; border: 1px solid #444; border-radius: 8px; margin-bottom: 15px; overflow: hidden; transition: all 0.3s ease; }
-        summary { padding: 18px 20px; font-size: 1.25rem; font-weight: bold; background: #333; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; user-select: none; }
-        summary::-webkit-details-marker { display: none; }
-        summary::after { content: "▼"; font-size: 1.1rem; color: #888; transition: transform 0.3s; }
-        details[open] summary::after { transform: rotate(180deg); color: white; }
-        details[open] summary { border-bottom: 1px solid #444; background: #3a3a3a; color: #60a5fa; }
-        .details-content { padding: 10px 5px; animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
-        .sys-btn { width: 100%; padding: 15px; font-size: 1.2rem; font-weight: bold; border-radius: 8px; border: none; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all 0.2s;}
-        input[type="text"] { width: 100%; padding: 12px; background: #111; color: white; border: 1px solid #555; border-radius: 6px; margin-top: 8px; font-family: monospace; font-size: 1rem; }
-        input[type="text"]:focus { border-color: #3b82f6; outline: none; }
-        #debug-console, #update-terminal { font-family: monospace; font-size: 0.85rem; color: #0f0; background: #000; padding: 10px; height: 250px; overflow-y: auto; border: 1px solid #444; border-radius: 5px; line-height: 1.4; word-wrap: break-word;}
-        #update-terminal { height: 300px; color: #cbd5e1; }
+        body{user-select:none;-webkit-user-select:none;background:#050515;color:#eee;touch-action:manipulation;font-family:sans-serif;min-height:100vh;overflow-y:auto;overflow-x:hidden;padding-bottom:10px}
+        button:active{transform:scale(0.97);filter:brightness(0.9)}
+        .ctrl-btn{width:18%;height:50px;background:#222;border:1px solid #444;border-radius:4px;font-weight:bold;font-size:1.5rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 0 #111;color:white}
+        .text-red{color:#f55}.text-green{color:#5f5}
+        .score-bar{background:black;color:white;display:flex;justify-content:space-between;padding:0 20px;font-size:3rem;font-weight:bold;line-height:1.2;margin:5px 0;border-radius:2px;position:relative;border:1px solid #333; transition: background 0.2s;}
+        .score-val{width:45%;text-align:center; border-radius: 8px; padding: 5px; transition: all 0.1s;}
+        
+        .glow-white { background-color: #e2e8f0; color: black !important; }
+        .glow-red { background-color: #ef4444; color: white !important; }
+        .glow-green { background-color: #22c55e; color: white !important; }
+        
+        .priority-active-score { background-color: #ffffff !important; color: #000000 !important; box-shadow: 0 0 25px #ffffff !important; transform: scale(1.05); }
+        
+        .start-btn{width:100%;min-height:20vh;padding:20px 0;font-size:4rem;font-weight:bold;color:white;border:none;display:flex;align-items:center;justify-content:center;margin:5px 0;border-radius:4px}
+        .bg-start{background:#008800}.bg-stop{background:#cc0000}.bg-pause{background:#eab308;color:black}
+        .bottom-grid{display:grid;grid-template-columns:1fr 2fr 1fr;gap:4px;margin-bottom:15px}
+        .side-col{display:flex;flex-direction:column;gap:4px}.center-col{display:flex;flex-direction:column;gap:4px}
+        .card-btn{min-height:60px;border-radius:4px;border:1px solid #444;font-weight:bold;font-size:0.9rem;display:flex;align-items:center;justify-content:center;background:#222;box-shadow:0 1px 0 #111;color:#ccc}
+        .card-btn.active{border:2px solid white;color:white}
+        .bg-y{background:#554400;color:#ffd}.bg-r{background:#550000;color:#fdd}.bg-b{background:#111;color:#888}
+        .bg-p-active{background:#e65100;color:white;border:2px solid white}
+        details>summary{list-style:none;cursor:pointer;background:#222;padding:10px;text-align:center;border-radius:4px;font-weight:bold;border:1px solid #444;margin-bottom:2px;color:#ccc}
+        details>summary::-webkit-details-marker{display:none}
+        .sys-btn{background:#222;border:1px solid #444;width:100%;padding:10px;margin-bottom:2px;font-weight:bold;border-radius:4px;color:#ccc; transition: all 0.2s;}
+        .timer-text-break{color:#facc15}
+        .bottom-controls{ display:flex; justify-content:space-between; align-items:center; gap:8px; background:rgba(30,30,30,0.8); padding:8px 15px; border-radius:30px; border:1px solid #444; width:100%; max-width:400px; margin:auto auto 0 auto; }
+        .icon-btn { font-size: 1.4rem; text-decoration: none; filter: grayscale(100%) opacity(0.5); transition: 0.3s; display:flex; align-items:center; justify-content:center;}
+        .icon-ok { filter: grayscale(0%) opacity(1); }
+        .icon-error { filter: grayscale(0%) opacity(1) hue-rotate(150deg); }
+        .gear-btn{ background:transparent; border:none; font-size:1.6rem; color:#ccc; padding:0; display:flex; align-items:center; justify-content:center;}
+        .sensor-status { width: 38px; height: 38px; border-radius: 50%; background: #333; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; color: white; border: 2px solid #555; transition: all 0.3s; }
+        .sensor-active-red { background: #ef4444; box-shadow: 0 0 10px #ef4444; border-color: #fff; }
+        .sensor-active-green { background: #22c55e; box-shadow: 0 0 10px #22c55e; border-color: #fff; }
+        #toast-container{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:white;padding:20px 40px;border-radius:12px;font-size:1.5rem;text-align:center;z-index:9999;display:none;box-shadow:0 0 20px rgba(0,0,0,0.5);border:2px solid #555}
+        #timer-display{font-size:1.5rem;padding:15px}
     </style>
 </head>
-<body>
-    <div class="flex justify-between items-center p-4 mb-4 bg-gray-900 border-b border-gray-700 sticky top-0 z-50 shadow-lg">
-        <h1 class="text-2xl font-bold text-white flex items-center gap-2">⚙️ Impostazioni</h1>
-        <button onclick="window.location.href='/telecomando'" class="bg-gray-700 hover:bg-gray-600 px-5 py-2 rounded-lg font-bold text-white transition">Chiudi</button>
+<body class="flex flex-col min-h-screen p-2 overflow-y-auto overflow-x-hidden" onclick="unlockAudio()">
+    
+    <div id="toast-container"></div>
+    <div class="flex justify-between items-center mb-1 flex-shrink-0">
+        <details class="flex-grow accord">
+            <summary id="timer-display">Modifica Tempo (3:00)</summary>
+            <div class="grid grid-cols-4 gap-1 p-2 bg-gray-800 rounded"><button class="sys-btn" onclick="adjustTime(60)">+1m</button><button class="sys-btn" onclick="adjustTime(-60)">-1m</button><button class="sys-btn" onclick="adjustTime(1)">+1s</button><button class="sys-btn" onclick="adjustTime(-1)">-1s</button></div>
+        </details>
     </div>
 
-    <div class="px-3 max-w-2xl mx-auto">
-        
-        <!-- SELEZIONE ARMI VELOCE IN CIMA -->
-        <h2 class="text-gray-400 font-bold text-sm mb-2 uppercase tracking-wider">Arma Selezionata</h2>
-        <div class="mb-6 grid grid-cols-3 gap-2">
-            <button id="btn-wpn-spada" onclick="updateText('weapon', 'spada')" class="sys-btn bg-gray-800 text-gray-500 border border-gray-700 m-0 h-16 text-lg hover:bg-gray-700 transition">SPADA</button>
-            <button id="btn-wpn-fioretto" onclick="updateText('weapon', 'fioretto')" class="sys-btn bg-gray-800 text-gray-500 border border-gray-700 m-0 h-16 text-lg hover:bg-gray-700 transition">FIORETTO</button>
-            <button id="btn-wpn-sciabola" onclick="updateText('weapon', 'sciabola')" class="sys-btn bg-gray-800 text-gray-500 border border-gray-700 m-0 h-16 text-lg hover:bg-gray-700 transition">SCIABOLA</button>
+    <div class="flex justify-between gap-1 flex-shrink-0">
+        <button class="ctrl-btn text-red" onclick="scoreOptimistic('left',-1)">-</button>
+        <button class="ctrl-btn text-green" onclick="scoreOptimistic('left',1)">+</button>
+        <button class="ctrl-btn text-sm" style="width:22%" onclick="doubleHitOptimistic()">DOPPIO</button>
+        <button class="ctrl-btn text-green" onclick="scoreOptimistic('right',1)">+</button>
+        <button class="ctrl-btn text-red" onclick="scoreOptimistic('right',-1)">-</button>
+    </div>
+    
+    <div class="score-bar flex-shrink-0">
+        <div id="s-l" class="score-val text-red-500">0</div>
+        <div id="s-r" class="score-val text-green-500">0</div>
+    </div>
+    
+    <button id="btn-toggle" onclick="toggleTimerOptimistic()" class="start-btn bg-start flex-shrink-0">AVVIO</button>
+    
+    <div class="bottom-grid flex-grow">
+        <div class="side-col">
+            <button class="card-btn" id="btn-l-P" onclick="toggleP('left')">P</button>
+            <button class="card-btn bg-y" id="btn-l-Y" onclick="handleCardClick('left','Y')">G</button>
+            <button class="card-btn bg-r" id="btn-l-R" onclick="handleCardClick('left','R')">R</button>
+            <button class="card-btn bg-b" id="btn-l-B" onclick="handleCardClick('left','B')">N</button>
         </div>
-
-        <details>
-            <summary>Grafica Display & Font</summary>
-            <div class="details-content">
-                <div class="row-ctrl">
-                    <span class="lbl">Dimensione Timer</span>
-                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('font_timer',-0.5)">-</button><span class="val-display" id="val_font_timer">8.0</span><button class="adjust-btn btn-plus" onclick="adj('font_timer',0.5)">+</button></div>
-                </div>
-                <div class="row-ctrl">
-                    <span class="lbl">Dimensione Punteggio</span>
-                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('font_score',-0.5)">-</button><span class="val-display" id="val_font_score">15.0</span><button class="adjust-btn btn-plus" onclick="adj('font_score',0.5)">+</button></div>
-                </div>
-                <div class="row-ctrl">
-                    <span class="lbl">Dimensione Nomi</span>
-                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('font_name',-0.5)">-</button><span class="val-display" id="val_font_name">3.0</span><button class="adjust-btn btn-plus" onclick="adj('font_name',0.5)">+</button></div>
-                </div>
-                <div class="row-ctrl">
-                    <span class="lbl">Largh. Colonna Incontri (0=Nascondi)</span>
-                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('col_center_width',-0.2)">-</button><span class="val-display" id="val_col_center_width">1.2</span><button class="adjust-btn btn-plus" onclick="adj('col_center_width',0.2)">+</button></div>
-                </div>
-                <div class="row-ctrl">
-                    <span class="lbl">Dimensione Testo Incontri</span>
-                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('font_list',-0.2)">-</button><span class="val-display" id="val_font_list">1.5</span><button class="adjust-btn btn-plus" onclick="adj('font_list',0.2)">+</button></div>
-                </div>
-                <div class="row-ctrl border-b-0">
-                    <span class="lbl">Dimens. Foto (0=Nascondi)</span>
-                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('photo_size',-10)">-</button><span class="val-display" id="val_photo_size">150</span><button class="adjust-btn btn-plus" onclick="adj('photo_size',10)">+</button></div>
-                </div>
-                <div class="p-4 border-t border-gray-700 mt-2">
-                    <span class="lbl font-bold text-white block mb-3">Stile Font:</span>
-                    <div id="font-list" class="flex flex-wrap gap-2"></div>
-                </div>
+        <div class="center-col pb-1">
+            <div class="flex gap-1">
+                <button id="btn-priority" class="sys-btn bg-gray-800 border-2 border-gray-600 text-white flex-1 py-4" onclick="socket.emit('toggle_priority')">Priorità</button>
+                <button class="sys-btn bg-blue-900 border-2 border-blue-600 text-white flex-1 py-4" onclick="sendResult()">INVIA</button>
             </div>
-        </details>
-
-        <details>
-            <summary>Cronometro & Audio</summary>
-            <div class="details-content">
-                <div class="row-ctrl">
-                    <span class="lbl">Tempo Assalto (secondi)</span>
-                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('time_match',-10)">-</button><span class="val-display" id="val_time_match">180</span><button class="adjust-btn btn-plus" onclick="adj('time_match',10)">+</button></div>
-                </div>
-                <div class="row-ctrl">
-                    <span class="lbl">Tempo Pausa (secondi)</span>
-                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('time_break',-10)">-</button><span class="val-display" id="val_time_break">60</span><button class="adjust-btn btn-plus" onclick="adj('time_break',10)">+</button></div>
-                </div>
-                <div class="row-ctrl border-b-0">
-                    <span class="lbl">Vol. Cicalino (0 = Muto)</span>
-                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('buzzer_volume',-0.1)">-</button><span class="val-display" id="val_buzzer_volume">1.0</span><button class="adjust-btn btn-plus" onclick="adj('buzzer_volume',0.1)">+</button></div>
-                </div>
+            <div class="mt-1 mb-1">
+                <button class="sys-btn bg-red-900 text-red-200 border-2 border-red-700 w-full py-4" onclick="socket.emit('swap_fencers')">Swipe Atleti &lt;--&gt;</button>
             </div>
-        </details>
-
-        <details>
-            <summary>Sincronizzazione Google</summary>
-            <div class="details-content">
-                <div class="p-4">
-                    <label class="lbl font-bold block mb-1">📄 ID Foglio Google (Gironi):</label>
-                    <input type="text" id="google_sheet_id" placeholder="Es: 179tfN2PDrSTYtiAd..." onchange="updateText('google_sheet_id', this.value)">
+            <div class="flex flex-col mt-1">
+                <details id="reset-menu" class="accord">
+                    <summary>Menu Reset</summary>
+                    <div class="flex flex-col bg-gray-800 p-2 rounded">
+                        <button class="sys-btn text-blue-300" onclick="resetAction('reset_scores')">Reset Punti</button>
+                        <button class="sys-btn text-yellow-300" onclick="resetAction('reset_timer')">Reset Tempo</button>
+                        <button class="sys-btn text-red-300 bg-red-900" onclick="if(confirm('Reset TOTALE?'))resetAction('reset_all')">Reset TUTTO</button>
+                    </div>
+                </details>
+                <details class="mt-1 accord" id="girone-details">
+                    <summary id="girone-label">Girone: Rosso</summary>
+                    <div class="flex flex-col bg-gray-800 p-2 rounded">
+                        <button class="sys-btn text-red-400" onclick="changeGirone('rosso')">Rosso</button>
+                        <button class="sys-btn text-yellow-400" onclick="changeGirone('giallo')">Giallo</button>
+                        <button class="sys-btn text-blue-400" onclick="changeGirone('blu')">Blu</button>
+                        <button class="sys-btn text-green-400" onclick="changeGirone('verde')">Verde</button>
+                        <button class="sys-btn text-white" onclick="changeGirone('32')">Elim. 32</button>
+                    </div>
+                </details>
+                <div class="flex mt-1 gap-1 h-14">
+                    <select id="sel" class="flex-grow bg-gray-800 text-white border border-gray-600 rounded text-sm px-2" onchange="triggerMatchLoad()"></select>
+                    <button onclick="forceUpdate()" class="bg-green-700 text-white px-3 rounded text-sm border border-green-600 font-bold">AGG.</button>
                 </div>
-                <div class="p-4 border-t border-gray-700">
-                    <label class="lbl font-bold block mb-1">🔗 URL Apps Script (Invio Punti):</label>
-                    <input type="text" id="google_script_url" placeholder="https://script.google.com/macros/s/.../exec" onchange="updateText('google_script_url', this.value)">
-                </div>
-                <div class="row-ctrl border-t border-gray-700 mt-2">
-                    <span class="lbl font-bold">Aggiornamento Auto (sec)</span>
-                    <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('refresh_rate',-5)">-</button><span class="val-display" id="val_refresh_rate">30</span><button class="adjust-btn btn-plus" onclick="adj('refresh_rate',5)">+</button></div>
-                </div>
-                <div class="p-4"><button onclick="window.location.href='/riferimenti'" class="sys-btn bg-blue-800 hover:bg-blue-700 text-white transition">📐 Mappa Colonne Excel</button></div>
-            </div>
-        </details>
-
-        <details>
-            <summary>Menu Sistema Avanzato</summary>
-            <div class="details-content p-4">
-                <button onclick="window.location.href='/foto'" class="sys-btn bg-indigo-700 hover:bg-indigo-600 text-white transition">📸 Gestione Foto Atleti</button>
-                <button onclick="window.location.href='/download'" class="sys-btn bg-purple-700 hover:bg-purple-600 text-white transition">💾 Scarica Dati (Backup)</button>
-                <button onclick="window.location.href='/wifi'" class="sys-btn bg-yellow-700 hover:bg-yellow-600 text-white transition mt-4">📡 Impostazioni Wi-Fi Pi4</button>
-            </div>
-        </details>
-
-        <details>
-            <summary class="text-red-400">Monitor di Rete (DEBUG)</summary>
-            <div class="details-content p-4">
-                <p class="text-gray-400 text-sm mb-2">Qui vedi i pacchetti UDP in arrivo. Serve per controllare il corretto funzionamento hardware.</p>
-                <div id="debug-console">
-                    [SISTEMA] In attesa di pacchetti...<br>
-                </div>
-                <button onclick="document.getElementById('debug-console').innerHTML=''" class="mt-3 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm w-full font-bold transition">Pulisci Log</button>
-            </div>
-        </details>
-
-        <!-- TERMINALE AGGIORNAMENTO LIVE -->
-        <div id="update-terminal-container" style="display: none;" class="mt-8 mb-2">
-            <div class="bg-gray-800 p-2 rounded-t-lg border border-gray-600 border-b-0 flex justify-between items-center">
-                <span class="text-sm font-bold text-gray-300">🖥️ Terminale Raspberry Pi</span>
-                <span class="flex h-3 w-3 relative">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                </span>
-            </div>
-            <div id="update-terminal" class="rounded-t-none">
-                [SISTEMA] Inizializzazione aggiornamento...<br>
             </div>
         </div>
-
-        <!-- PULSANTI AGGIORNAMENTO POSTI IN FONDO -->
-        <div class="mt-10 mb-10 border-t border-gray-700 pt-6">
-            <h2 class="text-gray-400 font-bold text-sm mb-2 uppercase tracking-wider text-center">Zona Sviluppo & Aggiornamenti</h2>
-            
-            <button onclick="updateSystem()" id="btn-update" class="mt-2 sys-btn bg-green-700 hover:bg-green-600 text-white shadow-[0_0_15px_rgba(34,197,94,0.5)] border border-green-500">
-                🔄 Aggiorna App da GitHub
-            </button>
-            
-            <button onclick="forcePicoReboot()" id="btn-pico-update" class="mt-4 sys-btn bg-cyan-700 hover:bg-cyan-600 text-white border border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.4)]">
-                🔌 Forza Riavvio e Aggiornamento Sensori (Pico)
-            </button>
+        <div class="side-col">
+            <button class="card-btn" id="btn-r-P" onclick="toggleP('right')">P</button>
+            <button class="card-btn bg-y" id="btn-r-Y" onclick="handleCardClick('right','Y')">G</button>
+            <button class="card-btn bg-r" id="btn-r-R" onclick="handleCardClick('right','R')">R</button>
+            <button class="card-btn bg-b" id="btn-r-B" onclick="handleCardClick('right','B')">N</button>
         </div>
-        
+    </div>
+    
+    <div class="bottom-controls flex-shrink-0">
+        <span id="stat-wifi" class="icon-btn" title="Internet">📡</span>
+        <div id="stat-pico-r" class="sensor-status" title="Pico Rosso">--</div>
+        <button onclick="window.location.href='/settings'" class="gear-btn" title="Impostazioni">⚙️</button>
+        <div id="stat-pico-v" class="sensor-status" title="Pico Verde">--</div>
+        <span id="stat-google" class="icon-btn" title="Google Sheets">☁️</span>
     </div>
 
     <script>
-        const socket = io();
-        let settings = {};
+        const socket=io();
+        let matches=[];
+        let pMode={left:false,right:false};
+        let currentGirone='rosso';
+        let globalSettings = {}; 
+        let priorityAnimTimer = null;
         
-        function updateSystem() {
-            if(confirm("Vuoi scaricare gli aggiornamenti ed eseguire setup_fencing_kiosk.py?")) {
-                document.getElementById('btn-update').innerText = "⏳ Aggiornamento in corso...";
-                document.getElementById('btn-update').disabled = true;
-                
-                document.getElementById('update-terminal-container').style.display = 'block';
-                const term = document.getElementById('update-terminal');
-                term.innerHTML = '<span class="text-blue-400">[SISTEMA] Richiesta inviata alla Raspberry Pi... Avvio setup_fencing_kiosk.py</span><br>';
-                window.scrollTo(0, document.body.scrollHeight);
-                
-                fetch('/api/update_system', {method: 'POST'})
-                .then(response => {
-                    if(!response.ok) { term.innerHTML += '<span class="text-red-500">[ERRORE] Impossibile contattare il server!</span><br>'; }
-                })
-                .catch(err => { term.innerHTML += '<span class="text-red-500">[ERRORE] '+ err +'</span><br>'; });
-            }
-        }
+        setInterval(() => {
+            fetch(window.location.origin + '/api/pico_status')
+                .then(r => r.json())
+                .then(s => {
+                    const pr = document.getElementById('stat-pico-r');
+                    const pv = document.getElementById('stat-pico-v');
+                    if(s.rosso.active) { pr.className = 'sensor-status sensor-active-red'; pr.innerText = s.rosso.bat + '%'; } 
+                    else { pr.className = 'sensor-status'; pr.innerText = '--'; }
+                    if(s.verde.active) { pv.className = 'sensor-status sensor-active-green'; pv.innerText = s.verde.bat + '%'; } 
+                    else { pv.className = 'sensor-status'; pv.innerText = '--'; }
+                }).catch(e => {});
+        }, 1500);
 
-        function forcePicoReboot() {
-            if(confirm("Inviare segnale di riavvio alle Pico W? (Se c'è un aggiornamento lo scaricheranno prima di accendersi)")) {
-                document.getElementById('btn-pico-update').innerText = "⏳ Invio Segnale Radio...";
-                fetch('/api/reboot_picos', {method: 'POST'})
-                .then(() => {
-                    setTimeout(() => { 
-                        document.getElementById('btn-pico-update').innerHTML = "🔌 Forza Riavvio e Aggiornamento Sensori (Pico)";
-                        alert("Segnale inviato! Le Pico W si stanno riavviando.");
-                    }, 1500);
-                });
-            }
-        }
-
-        socket.on('update_log', function(data) {
-            const term = document.getElementById('update-terminal');
-            if(term) {
-                let msg = data.msg;
-                if(msg.includes("[STEP]")) { msg = `<span class="text-green-400 font-bold">\n${msg}</span>`; } 
-                else if(msg.includes("[ERRORE]")) { msg = `<span class="text-red-500 font-bold">${msg}</span>`; } 
-                else if(msg.includes("[SUCCESS]")) { msg = `<span class="text-blue-400 font-bold">${msg}</span>`; }
-                term.innerHTML += `${msg}<br>`;
-                term.scrollTop = term.scrollHeight;
-            }
-        });
-
-        socket.on('update_complete', function() {
-            const term = document.getElementById('update-terminal');
-            if(term) {
-                term.innerHTML += `<br><span class="text-yellow-400 font-bold">[SISTEMA] Aggiornamento completato. Riavvio applicazione in corso... Attendere!</span><br>`;
-                term.scrollTop = term.scrollHeight;
-            }
-            setTimeout(() => { alert("Aggiornamento completato! La pagina verrà ora ricaricata."); window.location.reload(); }, 4000);
-        });
-
-        socket.on('state_update', s => {
-            if(s.settings) {
-                settings = s.settings;
-                ['font_timer','font_score','font_name','photo_size','time_match','time_break','buzzer_volume','refresh_rate','col_center_width','font_list','list_padding'].forEach(k => { let e = document.getElementById('val_'+k); if(e) e.innerText = settings[k]; });
-                document.getElementById('google_sheet_id').value = settings.google_sheet_id || '';
-                document.getElementById('google_script_url').value = settings.google_script_url || '';
-                
-                // Aggiorna lo stile dei bottoni dell'arma (Verde se attivo, Grigio se inattivo)
-                if(settings.weapon) {
-                    ['spada','fioretto','sciabola'].forEach(w => {
-                        let b = document.getElementById('btn-wpn-' + w);
-                        if(b) {
-                            if(w === settings.weapon) {
-                                b.className = "sys-btn bg-green-600 text-white border-2 border-green-400 m-0 h-16 text-lg shadow-[0_0_15px_rgba(34,197,94,0.5)]";
-                            } else {
-                                b.className = "sys-btn bg-gray-800 text-gray-500 border border-gray-700 m-0 h-16 text-lg hover:bg-gray-700 transition";
-                            }
-                        }
-                    });
-                }
-                
-                loadFonts();
-            }
-        });
-
-        socket.on('debug_log', function(d) {
-            const c = document.getElementById('debug-console');
-            if(c) {
-                c.innerHTML += `[${d.time}] <span class="text-yellow-400">${d.ip}</span> -> ${d.msg}<br>`;
-                c.scrollTop = c.scrollHeight;
-            }
-        });
-
-        const detailsElements = document.querySelectorAll('details');
-        detailsElements.forEach(targetDetail => { targetDetail.addEventListener('click', () => { detailsElements.forEach(detail => { if (detail !== targetDetail) detail.removeAttribute('open'); }); }); });
-
-        function adj(k, d) {
-            let v = parseFloat(settings[k]||0) + d;
-            if(k === 'photo_size' || k.startsWith('time_') || k === 'refresh_rate') v = Math.round(v);
-            else v = Math.round(v*10)/10;
-            if(v < 0) v = 0; 
-            if(k === 'buzzer_volume' && v > 5) v = 5;
-            settings[k] = v; document.getElementById('val_'+k).innerText = v; socket.emit('update_settings', {[k]: v});
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function unlockAudio() { if (audioCtx.state === 'suspended') { audioCtx.resume(); } }
+        
+        function playBeep(hz, duration) {
+            if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+            const volume = parseFloat(globalSettings.buzzer_volume !== undefined ? globalSettings.buzzer_volume : 1.0);
+            if (volume <= 0) return;
+            const o = audioCtx.createOscillator(); 
+            const g = audioCtx.createGain();
+            o.type = 'square'; o.frequency.setValueAtTime(hz, audioCtx.currentTime); 
+            g.gain.setValueAtTime(volume, audioCtx.currentTime);
+            o.connect(g); g.connect(audioCtx.destination);
+            o.start(); o.stop(audioCtx.currentTime + duration); 
         }
         
-        function updateText(k, v) { socket.emit('update_settings', {[k]: v.trim()}); }
-        function selectFont(f) { socket.emit('update_settings', {font_family: f}); }
+        socket.on('hw_hit', data => { 
+            if (navigator.vibrate) navigator.vibrate(50); 
+            let durataSuono = data.is_manual ? 0.5 : 1.5;
+            playBeep(1200, durataSuono); 
 
-        function loadFonts() {
-            fetch('/api/get_fonts').then(r => r.json()).then(fonts => {
-                const c = document.getElementById('font-list'); c.innerHTML = '';
-                fonts.forEach(f => { let b = document.createElement('button'); b.className = 'font-btn' + (settings.font_family === f ? ' active' : ''); b.style.fontFamily = f; b.innerText = f; b.onclick = () => selectFont(f); c.appendChild(b); });
-            });
+            if (data.side === 'left' || data.is_double) {
+                const b = document.getElementById('s-l');
+                b.classList.add(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-red');
+                setTimeout(() => b.classList.remove(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-red'), 3000);
+            }
+            if (data.side === 'right' || data.is_double) {
+                const b = document.getElementById('s-r');
+                b.classList.add(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-green');
+                setTimeout(() => b.classList.remove(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-green'), 3000);
+            }
+        });
+
+        socket.on('hw_massa', data => { 
+            const b = document.getElementById(data.side === 'left' ? 's-l' : 's-r');
+            b.classList.add('glow-white');
+            setTimeout(() => b.classList.remove('glow-white'), 1500);
+        });
+        
+        socket.on('time_expired', () => { 
+            if (navigator.vibrate) navigator.vibrate(500);
+            playBeep(500, 1.0);
+            document.body.style.backgroundColor='#500'; 
+            setTimeout(()=>document.body.style.backgroundColor='#050515',500); 
+        });
+
+        socket.on('priority_animation', data => {
+            let duration = data.duration;
+            let startTime = Date.now();
+            let isLeft = true;
+            let delay = 250; 
+            
+            if(priorityAnimTimer) clearTimeout(priorityAnimTimer);
+            
+            function flash() {
+                let now = Date.now();
+                if (now - startTime > duration) return; 
+                
+                document.getElementById('s-l').classList.toggle('priority-active-score', isLeft);
+                document.getElementById('s-r').classList.toggle('priority-active-score', !isLeft);
+                
+                isLeft = !isLeft;
+                delay = Math.max(40, delay * 0.85); 
+                priorityAnimTimer = setTimeout(flash, delay);
+            }
+            flash();
+        });
+
+        const accords = document.querySelectorAll('.accord');
+        accords.forEach(acc => { acc.addEventListener('toggle', (e) => { if (acc.open) { accords.forEach(other => { if (other !== acc && other.open) other.removeAttribute('open'); }); setTimeout(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, 50); } }); });
+
+        function showToast(msg, duration = 3000) { const t = document.getElementById('toast-container'); t.innerText = msg; t.style.display = 'block'; if(window.toastTimeout) clearTimeout(window.toastTimeout); window.toastTimeout = setTimeout(() => { t.style.display = 'none'; }, duration); }
+        function forceTimerStopLocally() { const b = document.getElementById('btn-toggle'); b.innerText = "AVVIO"; b.className = "start-btn bg-start"; }
+        
+        function scoreOptimistic(side, delta) {
+            const el = document.getElementById(side === 'left' ? 's-l' : 's-r');
+            el.innerText = Math.max(0, parseInt(el.innerText) + delta);
+            forceTimerStopLocally();
+            if(delta > 0) playBeep(1200, 0.5); 
+            socket.emit('update_score',{side:side,delta:delta});
+            if(navigator.vibrate) navigator.vibrate(50);
         }
+        
+        function doubleHitOptimistic() {
+            document.getElementById('s-l').innerText = parseInt(document.getElementById('s-l').innerText) + 1;
+            document.getElementById('s-r').innerText = parseInt(document.getElementById('s-r').innerText) + 1;
+            forceTimerStopLocally();
+            playBeep(1200, 0.5); 
+            socket.emit('double_hit');
+            if(navigator.vibrate) navigator.vibrate(50);
+        }
+        
+        function toggleTimerOptimistic() {
+            const b = document.getElementById('btn-toggle');
+            if (b.innerText === "AVVIO" || b.innerText === "RIPRENDI PAUSA") { b.innerText = "STOP"; b.className = "start-btn bg-stop"; } 
+            else { b.innerText = "AVVIO"; b.className = "start-btn bg-start"; }
+            socket.emit('toggle_timer');
+            if(navigator.vibrate) navigator.vibrate(50);
+        }
+        
+        function adjustTime(d) { socket.emit('adjust_time',{delta:d}); forceTimerStopLocally(); }
+        function resetAction(a) { socket.emit(a); document.getElementById('reset-menu').removeAttribute('open'); forceTimerStopLocally(); }
+
+        function handleCardClick(s,c){
+            let cc=c;
+            if(pMode[s]){ cc=`P_${c}`; pMode[s]=false; updatePButton(s); socket.emit('card_action',{side:s,card:cc}); forceTimerStopLocally(); return; }
+            let cardName = c === 'Y' ? "GIALLO" : c === 'R' ? "ROSSO" : "NERO";
+            if (confirm("Assegnare cartellino " + cardName + " a " + (s==='left'?'SX':'DX') + "?")) { socket.emit('card_action',{side:s,card:cc}); forceTimerStopLocally(); }
+        }
+
+        socket.on('status_check', (s) => { document.getElementById('stat-wifi').className = 'icon-btn ' + (s.internet ? 'icon-ok' : 'icon-error'); document.getElementById('stat-google').className = 'icon-btn ' + (s.google === 'ok' ? 'icon-ok' : 'icon-error'); });
+        socket.on('action_feedback', (data) => { if (data.status === 'error') alert("ERRORE: " + data.msg); else showToast(data.msg, data.status === 'info' ? 5000 : 3000); });
+        
+        function changeGirone(g){ currentGirone = g; document.getElementById('girone-label').innerText="Girone: "+g.charAt(0).toUpperCase()+g.slice(1); socket.emit('fetch_sheet', {girone: g}); document.getElementById('girone-details').removeAttribute('open'); }
+        function triggerMatchLoad(){ const sel = document.getElementById('sel'); if(sel.value === "") return; if(confirm("Caricare l'assalto selezionato sul Display?")){ let matchData = matches[sel.value]; matchData.girone = currentGirone; socket.emit('load_match', matchData); forceTimerStopLocally(); } }
+        function forceUpdate(){ socket.emit('fetch_sheet', {girone: currentGirone}); showToast("Aggiornamento Google..."); }
+        function sendResult(){ if(confirm("Inviare punteggio a Google?")) socket.emit('send_result'); }
+        function toggleP(s){pMode[s]=!pMode[s];updatePButton(s)}
+        function updatePButton(s){ const b=document.getElementById(`btn-${s[0]}-P`); if(pMode[s]){b.classList.add('bg-p-active');b.innerText="P (ON)"} else{b.classList.remove('bg-p-active');b.innerText="P"} }
+        
+        const updateTimeUI=(t,p)=>{ const ts=`${Math.floor(t/60)}:${(Math.floor(t%60)<10?'0':'')+Math.floor(t%60)}`; const d=document.getElementById('timer-display'); if(p==='BREAK'){d.innerText=`PAUSA (${ts})`;d.classList.add('timer-text-break')} else{d.innerText=`Modifica Tempo (${ts})`;d.classList.remove('timer-text-break')} };
+        socket.on('timer_update',d=>updateTimeUI(d.time,d.phase));
+        
+        socket.on('state_update',s=>{
+            if(s.settings) { globalSettings = s.settings; }
+            document.getElementById('s-l').innerText=s.fencer_left.score;
+            document.getElementById('s-r').innerText=s.fencer_right.score;
+            updateTimeUI(s.timer,s.phase);
+            
+            const b=document.getElementById('btn-toggle');
+            if(s.phase==='BREAK'){ b.innerText=s.running?"IN PAUSA":"RIPRENDI PAUSA"; b.className=s.running?"start-btn bg-pause":"start-btn bg-start"; } 
+            else { b.innerText=s.running?"STOP":"AVVIO"; b.className=s.running?"start-btn bg-stop":"start-btn bg-start"; }
+            
+            const prioBtn = document.getElementById('btn-priority');
+            if(s.priority === 'left') {
+                prioBtn.innerText = "Annulla Priorità (SX)";
+                prioBtn.className = "sys-btn bg-white text-black border-2 border-gray-400 flex-1 py-4 font-bold";
+                document.getElementById('s-l').classList.add('priority-active-score');
+                document.getElementById('s-r').classList.remove('priority-active-score');
+            } else if(s.priority === 'right') {
+                prioBtn.innerText = "Annulla Priorità (DX)";
+                prioBtn.className = "sys-btn bg-white text-black border-2 border-gray-400 flex-1 py-4 font-bold";
+                document.getElementById('s-l').classList.remove('priority-active-score');
+                document.getElementById('s-r').classList.add('priority-active-score');
+            } else {
+                prioBtn.innerText = "Priorità";
+                prioBtn.className = "sys-btn bg-gray-800 border-2 border-gray-600 text-white flex-1 py-4";
+                document.getElementById('s-l').classList.remove('priority-active-score');
+                document.getElementById('s-r').classList.remove('priority-active-score');
+            }
+
+            const upC=(side,d)=>{
+                const sc=side[0];
+                ['Y','R','B'].forEach(c=>{let e=document.getElementById(`btn-${sc}-${c}`); if(e) e.classList.remove('active');});
+                if(d.cards.Y){let e=document.getElementById(`btn-${sc}-Y`); if(e) e.classList.add('active');}
+                if(d.cards.R){let e=document.getElementById(`btn-${sc}-R`); if(e) e.classList.add('active');}
+                if(d.cards.B){let e=document.getElementById(`btn-${sc}-B`); if(e) e.classList.add('active');}
+            };
+            upC('left',s.fencer_left); upC('right',s.fencer_right);
+            if (s.current_row_idx && matches.length > 0) { const idx = matches.findIndex(m => m.row === s.current_row_idx); const sel = document.getElementById('sel'); if (idx !== -1 && sel.value != idx) sel.value = idx; }
+        });
+        
+        socket.on('gironi_cache_update', (cache) => { matches = cache[currentGirone] || []; const sel = document.getElementById('sel'); const currentVal = sel.value; sel.innerHTML='<option value="">Seleziona Assalto...</option>'; matches.forEach((m,i)=>{ let o=document.createElement('option'); o.value=i; o.text=`${m.sx} (${m.p_sx}) - (${m.p_dx}) ${m.dx}`; sel.appendChild(o) }); if(currentVal && currentVal < matches.length) sel.value = currentVal; });
     </script>
 </body>
 </html>
