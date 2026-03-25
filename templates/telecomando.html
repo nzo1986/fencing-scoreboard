@@ -14,11 +14,10 @@
         .score-bar{background:black;color:white;display:flex;justify-content:space-between;padding:0 20px;font-size:3rem;font-weight:bold;line-height:1.2;margin:5px 0;border-radius:2px;position:relative;border:1px solid #333; transition: background 0.2s;}
         .score-val{width:45%;text-align:center; border-radius: 8px; padding: 5px; transition: all 0.1s;}
         
-        .glow-white { background-color: #e2e8f0; color: black !important; }
-        .glow-red { background-color: #ef4444; color: white !important; }
-        .glow-green { background-color: #22c55e; color: white !important; }
+        .glow-white { background-color: #e2e8f0 !important; color: black !important; }
+        .glow-red { background-color: #ef4444 !important; color: white !important; }
+        .glow-green { background-color: #22c55e !important; color: white !important; }
         
-        /* Illuminazione per l'atleta in priorità */
         .priority-active-score { background-color: #ffffff !important; color: #000000 !important; box-shadow: 0 0 25px #ffffff !important; transform: scale(1.05); }
         
         .start-btn{width:100%;min-height:20vh;padding:20px 0;font-size:4rem;font-weight:bold;color:white;border:none;display:flex;align-items:center;justify-content:center;margin:5px 0;border-radius:4px}
@@ -131,7 +130,7 @@
         let matches=[];
         let pMode={left:false,right:false};
         let currentGirone='rosso';
-        let globalSettings = {}; 
+        let globalState = {}; 
         let priorityAnimTimer = null;
         
         setInterval(() => {
@@ -152,7 +151,7 @@
         
         function playBeep(hz, duration) {
             if (audioCtx.state === 'suspended') { audioCtx.resume(); }
-            const volume = parseFloat(globalSettings.buzzer_volume !== undefined ? globalSettings.buzzer_volume : 1.0);
+            const volume = parseFloat(globalState.settings?.buzzer_volume !== undefined ? globalState.settings.buzzer_volume : 1.0);
             if (volume <= 0) return;
             const o = audioCtx.createOscillator(); 
             const g = audioCtx.createGain();
@@ -162,6 +161,7 @@
             o.start(); o.stop(audioCtx.currentTime + duration); 
         }
         
+        // Logica Colori Botte (Nasconde la priorità per mostrare la botta)
         socket.on('hw_hit', data => { 
             if (navigator.vibrate) navigator.vibrate(50); 
             let durataSuono = data.is_manual ? 0.5 : 1.5;
@@ -169,13 +169,25 @@
 
             if (data.side === 'left' || data.is_double) {
                 const b = document.getElementById('s-l');
+                b.setAttribute('data-hit', 'true');
+                b.classList.remove('priority-active-score');
                 b.classList.add(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-red');
-                setTimeout(() => b.classList.remove(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-red'), 3000);
+                setTimeout(() => { 
+                    b.removeAttribute('data-hit');
+                    b.classList.remove(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-red');
+                    if (globalState && globalState.priority === 'left') b.classList.add('priority-active-score');
+                }, 3000);
             }
             if (data.side === 'right' || data.is_double) {
                 const b = document.getElementById('s-r');
+                b.setAttribute('data-hit', 'true');
+                b.classList.remove('priority-active-score');
                 b.classList.add(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-green');
-                setTimeout(() => b.classList.remove(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-green'), 3000);
+                setTimeout(() => { 
+                    b.removeAttribute('data-hit');
+                    b.classList.remove(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-green');
+                    if (globalState && globalState.priority === 'right') b.classList.add('priority-active-score');
+                }, 3000);
             }
         });
 
@@ -192,7 +204,6 @@
             setTimeout(()=>document.body.style.backgroundColor='#050515',500); 
         });
 
-        // --- ANIMAZIONE DELLA PRIORITÀ SUI PUNTI ---
         socket.on('priority_animation', data => {
             let duration = data.duration;
             let startTime = Date.now();
@@ -271,7 +282,7 @@
         socket.on('timer_update',d=>updateTimeUI(d.time,d.phase));
         
         socket.on('state_update',s=>{
-            if(s.settings) { globalSettings = s.settings; }
+            globalState = s; 
             document.getElementById('s-l').innerText=s.fencer_left.score;
             document.getElementById('s-r').innerText=s.fencer_right.score;
             updateTimeUI(s.timer,s.phase);
@@ -280,19 +291,17 @@
             if(s.phase==='BREAK'){ b.innerText=s.running?"IN PAUSA":"RIPRENDI PAUSA"; b.className=s.running?"start-btn bg-pause":"start-btn bg-start"; } 
             else { b.innerText=s.running?"STOP":"AVVIO"; b.className=s.running?"start-btn bg-stop":"start-btn bg-start"; }
             
-            // AGGIORNAMENTO BOTTONE E PUNTI PRIORITÀ SUL TELECOMANDO
             const prioBtn = document.getElementById('btn-priority');
-            
             if(s.priority === 'left') {
                 prioBtn.innerText = "Annulla Priorità (SX)";
                 prioBtn.className = "sys-btn bg-white text-black border-2 border-gray-400 flex-1 py-4 font-bold";
-                document.getElementById('s-l').classList.add('priority-active-score');
+                if(!document.getElementById('s-l').hasAttribute('data-hit')) document.getElementById('s-l').classList.add('priority-active-score');
                 document.getElementById('s-r').classList.remove('priority-active-score');
             } else if(s.priority === 'right') {
                 prioBtn.innerText = "Annulla Priorità (DX)";
                 prioBtn.className = "sys-btn bg-white text-black border-2 border-gray-400 flex-1 py-4 font-bold";
                 document.getElementById('s-l').classList.remove('priority-active-score');
-                document.getElementById('s-r').classList.add('priority-active-score');
+                if(!document.getElementById('s-r').hasAttribute('data-hit')) document.getElementById('s-r').classList.add('priority-active-score');
             } else {
                 prioBtn.innerText = "Priorità";
                 prioBtn.className = "sys-btn bg-gray-800 border-2 border-gray-600 text-white flex-1 py-4";

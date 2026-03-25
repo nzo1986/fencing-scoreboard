@@ -16,7 +16,6 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'scherma_secret_key'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
-# --- ROTTE WEB ---
 @app.route('/')
 def index(): return render_template('index.html')
 @app.route('/telecomando')
@@ -32,7 +31,6 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-# --- ROTTE AGGIORNAMENTO DI SISTEMA E PICO ---
 @app.route('/api/update_system', methods=['POST'])
 def update_system():
     def run_update_process():
@@ -79,7 +77,6 @@ def ota_code(pico_name):
     file_path = os.path.join(BASE_DIR, "pico_code", f"pico_{pico_name}.py")
     return send_file(file_path, mimetype='text/plain')
 
-# --- ROTTE API STANDARD ---
 @app.route('/api/pico_status')
 def get_pico_status():
     now = time.time()
@@ -94,7 +91,6 @@ def api_scan(): return jsonify([])
 @app.route('/api/saved_wifi')
 def api_saved(): return jsonify([])
 
-# --- SOCKET IO EVENTS ---
 @socketio.on('connect')
 def handle_connect(): 
     emit('status_check', {'internet': check_internet(), 'google': check_google()})
@@ -219,7 +215,6 @@ def up_set(d):
                 except: pass
             else: current_state['settings'][k] = str(v)
             
-            # Se viene cambiata l'arma, forza l'invio immediato ai Pico
             if k == 'weapon':
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
