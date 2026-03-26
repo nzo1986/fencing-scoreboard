@@ -44,18 +44,11 @@ def get_battery_percentage():
     try:
         try: Pin(25, Pin.OUT).value(1)
         except: pass
-        try: Pin("WL_GPIO2", Pin.OUT).value(1)
-        except: pass
         time.sleep_ms(10)
-        try: raw = ADC(29).read_u16()
-        except: raw = ADC(3).read_u16()
-        if raw < 5000: raw = ADC(3).read_u16()
+        raw = ADC(29).read_u16()
         try: Pin(25, Pin.OUT).value(0)
         except: pass
-        try: Pin("WL_GPIO2", Pin.OUT).value(0)
-        except: pass
         voltage = raw * (3.3 / 65535) * 3.0
-        if voltage < 1.0: return 0
         pct = int(((voltage - 3.2) / (4.2 - 3.2)) * 100)
         return max(0, min(100, pct)) 
     except: return 0
@@ -77,12 +70,12 @@ def ping_server(ping_next_time, current_time):
     return ping_next_time
 
 # ==========================================
-# MOTORE 1: SPADA (MULTIPLEXING 2 FASI)
+# MOTORE 1: SPADA (Pin15=Coccia, Pin13/14=Poli)
 # ==========================================
 def run_spada():
-    PIN_13 = Pin(13, Pin.OUT); PIN_13.value(0)
-    PIN_14 = Pin(14, Pin.IN, Pin.PULL_UP)      
-    PIN_15 = Pin(15, Pin.IN, Pin.PULL_UP)      
+    PIN_COCCIA = Pin(15, Pin.OUT); PIN_COCCIA.value(0) # Coccia fissa a Massa (0V)
+    PIN_POLO1 = Pin(13, Pin.IN, Pin.PULL_UP)
+    PIN_POLO2 = Pin(14, Pin.IN, Pin.PULL_UP)
     
     b_was_pressed, c_was_pressed = False, False
     in_lockout, lockout_start_time = False, 0
@@ -96,20 +89,20 @@ def run_spada():
         if current_weapon != "spada": break
         ping_next_time = ping_server(ping_next_time, current_time)
 
-        # --- FASE 1: Lettura Massa (Coccia) ---
-        PIN_14.init(Pin.IN, Pin.PULL_UP)
-        PIN_15.init(Pin.IN, Pin.PULL_UP)
-        time.sleep_us(200)
-        touch_gnd = (PIN_14.value() == 0 or PIN_15.value() == 0)
+        # --- FASE 1: Lettura Massa (Sfiora Coccia) ---
+        PIN_POLO1.init(Pin.IN, Pin.PULL_UP)
+        PIN_POLO2.init(Pin.IN, Pin.PULL_UP)
+        time.sleep_us(500)
+        touch_gnd = (PIN_POLO1.value() == 0 or PIN_POLO2.value() == 0)
 
-        # --- FASE 2: Lettura Punta ---
+        # --- FASE 2: Lettura Punta (Chiusura Circuito) ---
         is_hit = False
         if not touch_gnd:
-            PIN_14.init(Pin.OUT); PIN_14.value(0) 
-            time.sleep_us(200)
-            is_hit = (PIN_15.value() == 0)        
-            PIN_14.init(Pin.IN, Pin.PULL_UP)     
-
+            PIN_POLO2.init(Pin.OUT); PIN_POLO2.value(0) # Manda corrente dal Polo 2
+            time.sleep_us(500)
+            is_hit = (PIN_POLO1.value() == 0)           # Legge dal Polo 1
+            PIN_POLO2.init(Pin.IN, Pin.PULL_UP)         # Ripristino
+            
         hit_val = 1 if is_hit else 0
         white_val = 1 if touch_gnd else 0
         
@@ -118,8 +111,9 @@ def run_spada():
         if state_str != last_state_str or (state_str != "0_0" and time.ticks_diff(current_time, state_send_next_time) >= 0):
             try: udp_socket.sendto(f"STATE_{PICO_NAME.upper()}_{state_str}".encode('utf-8'), (UDP_IP, UDP_PORT))
             except: pass
-            state_send_next_time = time.ticks_add(current_time, 50) 
+            state_send_next_time = time.ticks_add(current_time, 50) # Bombarda ogni 50ms se attivo
             
+            # Log testuale solo al cambio di stato
             if state_str != last_state_str:
                 try: udp_socket.sendto(f"DEBUG_{PICO_NAME.upper()}_WPN:SPADA Punta:{is_hit} Coccia:{touch_gnd}".encode('utf-8'), (UDP_IP, UDP_PORT))
                 except: pass
@@ -147,10 +141,13 @@ def run_spada():
         if in_lockout and time.ticks_diff(current_time, lockout_start_time) >= 800: 
             in_lockout = False
 
+# ==========================================
+# MOTORE 2: FIORETTO (NC)
+# ==========================================
 def run_fioretto():
-    pin_13 = Pin(13, Pin.OUT)
-    pin_14 = Pin(14, Pin.OUT)
-    pin_15 = Pin(15, Pin.IN, Pin.PULL_UP)
+    pin_14 = Pin(14, Pin.OUT); pin_14.value(0) # Giubbetto (Lamè) a GND
+    pin_13 = Pin(13, Pin.OUT)                  # Polo NC 1
+    pin_15 = Pin(15, Pin.IN, Pin.PULL_UP)      # Polo NC 2
     
     b_was_pressed, in_lockout, lockout_start_time = False, False, 0
     ping_next_time = time.ticks_ms()
@@ -162,13 +159,12 @@ def run_fioretto():
         if current_weapon != "fioretto": break
         ping_next_time = ping_server(ping_next_time, current_time)
 
-        pin_14.value(0)
         pin_13.value(0)
-        time.sleep_us(300)
+        time.sleep_us(500)
         read_phase1 = pin_15.value()
         
         pin_13.value(1)
-        time.sleep_us(300)
+        time.sleep_us(500)
         read_phase2 = pin_15.value()
         pin_13.value(0) 
         
@@ -204,9 +200,13 @@ def run_fioretto():
         if in_lockout and time.ticks_diff(current_time, lockout_start_time) >= 800: 
             in_lockout = False
 
+# ==========================================
+# MOTORE 3: SCIABOLA
+# ==========================================
 def run_sciabola():
-    Pin(13, Pin.OUT).value(0)
-    GP14 = Pin(14, Pin.IN, Pin.PULL_UP)
+    Pin(15, Pin.OUT).value(0) # In sciabola, coccia e corpo sono a GND (Pin 15/14)
+    Pin(14, Pin.OUT).value(0)
+    GP13 = Pin(13, Pin.IN, Pin.PULL_UP) # Lama sciabola
     
     b_was_pressed, in_lockout, lockout_start_time = False, False, 0
     ping_next_time = time.ticks_ms()
@@ -218,7 +218,7 @@ def run_sciabola():
         if current_weapon != "sciabola": break
         ping_next_time = ping_server(ping_next_time, current_time)
 
-        touching_opp = (GP14.value() == 0)
+        touching_opp = (GP13.value() == 0)
         
         hit_val = 1 if touching_opp else 0
         state_str = f"{hit_val}_0"
