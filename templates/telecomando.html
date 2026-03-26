@@ -83,13 +83,21 @@
             </div>
             <div class="flex flex-col mt-1">
                 
-                <!-- PANNELLO LAMPADINE LIVE E VERSIONI OTA -->
+                <!-- PANNELLO LAMPADINE E DIAGNOSTICA IN LINEA -->
                 <details class="accord mt-2 border border-gray-700 rounded mb-2">
-                    <summary class="bg-gray-900 !text-blue-400">Monitor Sensori & OTA (Debug)</summary>
+                    <summary class="bg-gray-900 !text-blue-400 flex justify-between px-4">
+                        <span>Monitor Sensori (OTA)</span>
+                        <span class="flex gap-2" id="mini-lamps">
+                            <span id="m-lr" class="w-3 h-3 rounded-full bg-red-900 mt-1"></span>
+                            <span id="m-lw1" class="w-3 h-3 rounded-full bg-gray-700 mt-1"></span>
+                            <span id="m-lw2" class="w-3 h-3 rounded-full bg-gray-700 mt-1 ml-2"></span>
+                            <span id="m-lv" class="w-3 h-3 rounded-full bg-green-900 mt-1"></span>
+                        </span>
+                    </summary>
                     <div class="bg-gray-800 p-2 rounded text-sm text-gray-300">
-                        <div class="flex justify-between mb-2 border-b border-gray-700 pb-2">
-                            <div>🔴 R: <span id="v-bat-r">--</span>% | <span id="v-text-r">Offline</span></div>
-                            <div>🟢 V: <span id="v-bat-v">--</span>% | <span id="v-text-v">Offline</span></div>
+                        <div class="flex justify-between mb-2 border-b border-gray-700 pb-2 text-xs">
+                            <div>🔴 R: <span id="v-text-r">Offline</span></div>
+                            <div>🟢 V: <span id="v-text-v">Offline</span></div>
                         </div>
                         <div class="flex justify-center items-center gap-4 py-2">
                             <div id="lamp-r-hit" class="w-8 h-8 rounded-full bg-red-900 border-2 border-red-900 transition-all duration-75"></div>
@@ -98,7 +106,6 @@
                             <div id="lamp-v-white" class="w-8 h-8 rounded-full bg-gray-700 border-2 border-gray-700 transition-all duration-75"></div>
                             <div id="lamp-v-hit" class="w-8 h-8 rounded-full bg-green-900 border-2 border-green-900 transition-all duration-75"></div>
                         </div>
-                        <div class="text-center text-xs mt-2 text-gray-500">I led si accendono alla pressione fisica.</div>
                     </div>
                 </details>
 
@@ -148,36 +155,35 @@
         let globalState = {}; 
         let priorityAnimTimer = null;
         
-        // Polling Diagnostica Sensori e Versioni
         setInterval(() => {
             fetch(window.location.origin + '/api/pico_status')
                 .then(r => r.json())
                 .then(s => {
                     const formatVer = (picoV, srvV) => {
                         if (!picoV || picoV === "0") return `<span class="text-red-400 font-bold">Offline</span>`;
-                        if (picoV === srvV) return `<span class="text-green-400 font-bold">v.${picoV.substring(0,5)} OK</span>`;
-                        return `<span class="text-red-400 font-bold">v.${picoV.substring(0,5)} (Srv: ${srvV.substring(0,5)})</span>`;
+                        if (picoV === srvV) return `<span class="text-green-400">v.${picoV.substring(0,4)} OK</span>`;
+                        return `<span class="text-red-400">v.${picoV.substring(0,4)} (Srv:${srvV.substring(0,4)})</span>`;
                     };
-                    document.getElementById('v-bat-r').innerText = s.rosso.active ? s.rosso.bat : '--';
                     document.getElementById('v-text-r').innerHTML = s.rosso.active ? formatVer(s.rosso.ver, s.server_v_rosso) : '<span class="text-red-400 font-bold">Offline</span>';
-                    
-                    document.getElementById('v-bat-v').innerText = s.verde.active ? s.verde.bat : '--';
                     document.getElementById('v-text-v').innerHTML = s.verde.active ? formatVer(s.verde.ver, s.server_v_verde) : '<span class="text-red-400 font-bold">Offline</span>';
                 }).catch(e => {});
-        }, 1500);
+        }, 2000);
 
-        // Lampadine in Tempo Reale
         socket.on('sensor_state', d => {
             if(d.side === 'left') {
-                const lr = document.getElementById('lamp-r-hit');
-                const lw = document.getElementById('lamp-r-white');
-                lr.className = d.hit ? "w-8 h-8 rounded-full bg-red-500 border-2 border-white shadow-[0_0_10px_#ef4444] transition-all duration-75" : "w-8 h-8 rounded-full bg-red-900 border-2 border-red-900 transition-all duration-75";
-                lw.className = d.white ? "w-8 h-8 rounded-full bg-white border-2 border-gray-300 shadow-[0_0_10px_#ffffff] transition-all duration-75" : "w-8 h-8 rounded-full bg-gray-700 border-2 border-gray-700 transition-all duration-75";
+                const lr = document.getElementById('lamp-r-hit'); const mlr = document.getElementById('m-lr');
+                const lw = document.getElementById('lamp-r-white'); const mlw = document.getElementById('m-lw1');
+                lr.className = d.hit ? "w-8 h-8 rounded-full bg-red-500 border-2 border-white shadow-[0_0_10px_#ef4444]" : "w-8 h-8 rounded-full bg-red-900 border-2 border-red-900";
+                mlr.className = d.hit ? "w-3 h-3 rounded-full bg-red-500 mt-1 shadow-[0_0_5px_#ef4444]" : "w-3 h-3 rounded-full bg-red-900 mt-1";
+                lw.className = d.white ? "w-8 h-8 rounded-full bg-white border-2 border-gray-300 shadow-[0_0_10px_#ffffff]" : "w-8 h-8 rounded-full bg-gray-700 border-2 border-gray-700";
+                mlw.className = d.white ? "w-3 h-3 rounded-full bg-white mt-1 shadow-[0_0_5px_#ffffff]" : "w-3 h-3 rounded-full bg-gray-700 mt-1";
             } else {
-                const lg = document.getElementById('lamp-v-hit');
-                const lw = document.getElementById('lamp-v-white');
-                lg.className = d.hit ? "w-8 h-8 rounded-full bg-green-500 border-2 border-white shadow-[0_0_10px_#22c55e] transition-all duration-75" : "w-8 h-8 rounded-full bg-green-900 border-2 border-green-900 transition-all duration-75";
-                lw.className = d.white ? "w-8 h-8 rounded-full bg-white border-2 border-gray-300 shadow-[0_0_10px_#ffffff] transition-all duration-75" : "w-8 h-8 rounded-full bg-gray-700 border-2 border-gray-700 transition-all duration-75";
+                const lg = document.getElementById('lamp-v-hit'); const mlg = document.getElementById('m-lv');
+                const lw = document.getElementById('lamp-v-white'); const mlw = document.getElementById('m-lw2');
+                lg.className = d.hit ? "w-8 h-8 rounded-full bg-green-500 border-2 border-white shadow-[0_0_10px_#22c55e]" : "w-8 h-8 rounded-full bg-green-900 border-2 border-green-900";
+                mlg.className = d.hit ? "w-3 h-3 rounded-full bg-green-500 mt-1 shadow-[0_0_5px_#22c55e]" : "w-3 h-3 rounded-full bg-green-900 mt-1";
+                lw.className = d.white ? "w-8 h-8 rounded-full bg-white border-2 border-gray-300 shadow-[0_0_10px_#ffffff]" : "w-8 h-8 rounded-full bg-gray-700 border-2 border-gray-700";
+                mlw.className = d.white ? "w-3 h-3 rounded-full bg-white mt-1 ml-2 shadow-[0_0_5px_#ffffff]" : "w-3 h-3 rounded-full bg-gray-700 mt-1 ml-2";
             }
         });
 

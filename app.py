@@ -60,7 +60,7 @@ def reboot_picos():
         s.sendto(b"REBOOT_PICO", ('<broadcast>', 7778))
         s.sendto(b"REBOOT_PICO", ('255.255.255.255', 7778)) 
         s.close()
-    except: pass
+    except Exception as e: print(e)
     return jsonify({"status": "ok"})
 
 @app.route('/api/ota/<pico_name>/version')
@@ -69,7 +69,7 @@ def ota_version(pico_name):
         file_path = os.path.join(BASE_DIR, "pico_code", f"pico_{pico_name}.py")
         if os.path.exists(file_path):
             return str(int(os.path.getmtime(file_path)))
-    except: pass
+    except Exception as e: print(e)
     return "0"
 
 @app.route('/api/ota/<pico_name>/code')
@@ -359,7 +359,6 @@ def udp_listener_thread():
             msg = data.decode('utf-8')
             now = time.time()
             
-            # RICEZIONE STATO LUCI LIVE
             if msg.startswith("STATE_"):
                 parts = msg.split('_')
                 if len(parts) >= 4:
@@ -374,7 +373,7 @@ def udp_listener_thread():
             
             elif not msg.startswith("PING_"):
                 if not (msg.startswith("HIT_") or msg.startswith("OFF_TARGET_")):
-                    pass # Evito messaggi sporchi nel log
+                    pass 
 
             if msg.startswith("HIT_"):
                 side = "left" if "ROSSO" in msg else "right"
