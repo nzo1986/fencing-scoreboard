@@ -351,9 +351,19 @@ def udp_listener_thread():
             msg = data.decode('utf-8')
             now = time.time()
             
-            if msg.startswith("DEBUG_"):
-                try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': f"🔍 {msg}"})
-                except: pass
+            # --- RICEZIONE NUOVO STATO LAMPADINE (NC/NO) ---
+            if msg.startswith("STATE_"):
+                parts = msg.split('_')
+                if len(parts) >= 4:
+                    side = "left" if parts[1] == "ROSSO" else "right"
+                    hit_on = (parts[2] == "1")
+                    white_on = (parts[3] == "1")
+                    socketio.emit('sensor_state', {'side': side, 'hit': hit_on, 'white': white_on})
+                    log_msg = f"Cambio di Stato: Punta={'CHIUSA' if hit_on else 'Aperta'} | Coccia/Bianca={'TOCCATA' if white_on else 'Libera'}"
+                    socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': f"[{parts[1]}] {log_msg}"})
+
+            elif msg.startswith("DEBUG_"):
+                pass 
             
             elif not msg.startswith("PING_"):
                 if not (msg.startswith("HIT_") or msg.startswith("OFF_TARGET_")):

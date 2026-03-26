@@ -82,109 +82,115 @@ def ping_server(ping_next_time, current_time):
         return time.ticks_add(current_time, 2000)
     return ping_next_time
 
-def log_debug(msg, debug_next_time, current_time):
-    if time.ticks_diff(current_time, debug_next_time) >= 0:
-        try: udp_socket.sendto(f"DEBUG_{PICO_NAME.upper()}_{msg}".encode('utf-8'), (UDP_IP, UDP_PORT))
-        except: pass
-        return time.ticks_add(current_time, 1000)
-    return debug_next_time
-
 # ==========================================
-# MOTORE 1: SPADA (VECCHIA LOGICA PERFETTA)
+# MOTORE 1: SPADA (LOGICA POLI EXACT)
 # ==========================================
 def run_spada():
     global current_weapon
-    PIN_A = Pin(13, Pin.OUT); PIN_A.value(0)
-    PIN_B = Pin(14, Pin.IN, Pin.PULL_UP)
-    PIN_C_NUM = 15
+    PIN_13 = Pin(13, Pin.OUT); PIN_13.value(0) # Coccia sempre a GND
+    PIN_14 = Pin(14, Pin.IN, Pin.PULL_UP)      # Polo 1
+    PIN_15 = Pin(15, Pin.IN, Pin.PULL_UP)      # Polo 2
     
     b_was_pressed = False
+    c_was_pressed = False
     in_lockout = False
     lockout_start_time = 0
     ping_next_time = time.ticks_ms()
-    last_coccia_send = 0
-    debug_next_time = 0
+    last_state_str = "0_0"
 
     while current_weapon == "spada":
         current_time = time.ticks_ms()
         check_udp_messages()
         if current_weapon != "spada": break
-        
         ping_next_time = ping_server(ping_next_time, current_time)
 
-        # --- MULTIPLEXING SPADA ORIGINALE ---
-        pin_c = Pin(PIN_C_NUM, Pin.OUT)
-        pin_c.value(0)
-        time.sleep_ms(3) 
+        # FASE 1: Lettura contatto con Coccia avversaria (Massa Esterna)
+        PIN_15.init(Pin.IN, Pin.PULL_UP)
+        PIN_14.init(Pin.IN, Pin.PULL_UP)
+        time.sleep_us(300)
+        touching_coccia = (PIN_14.value() == 0) or (PIN_15.value() == 0)
 
-        pin_c = Pin(PIN_C_NUM, Pin.IN, Pin.PULL_UP)
-        time.sleep_ms(1)
+        # FASE 2: Lettura chiusura Punta
+        PIN_15.init(Pin.OUT); PIN_15.value(0)
+        time.sleep_us(300)
+        tip_pressed = (PIN_14.value() == 0)
+        PIN_15.init(Pin.IN, Pin.PULL_UP) # Ripristino
+        
+        hit_val = 1 if (tip_pressed and not touching_coccia) else 0
+        white_val = 1 if touching_coccia else 0
+        
+        state_str = f"{hit_val}_{white_val}"
+        if state_str != last_state_str:
+            try: udp_socket.sendto(f"STATE_{PICO_NAME.upper()}_{state_str}".encode('utf-8'), (UDP_IP, UDP_PORT))
+            except: pass
+            last_state_str = state_str
 
-        b_pressed = (PIN_B.value() == 0)
-        c_pressed = (pin_c.value() == 0)
+        # Logica invio stoccate al tabellone
+        if white_val:
+            if not c_was_pressed:
+                try: udp_socket.sendto(f"MASSA_MIA_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
+                except: pass
+            c_was_pressed = True
+        else:
+            c_was_pressed = False
 
-        debug_next_time = log_debug(f"WPN:SPADA Punta:{b_pressed} Coccia:{c_pressed}", debug_next_time, current_time)
-
-        if b_pressed and not b_was_pressed and not in_lockout:
-            if not c_pressed:
+        if hit_val:
+            if not b_was_pressed and not in_lockout:
                 try: udp_socket.sendto(f"HIT_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
                 except: pass
                 in_lockout = True
                 lockout_start_time = current_time
-
-        if c_pressed and not b_pressed:
-            if time.ticks_diff(current_time, last_coccia_send) > 80:
-                try: udp_socket.sendto(f"COCCIA_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
-                except: pass
-                last_coccia_send = current_time
+            b_was_pressed = True
+        else:
+            b_was_pressed = False
 
         if in_lockout and time.ticks_diff(current_time, lockout_start_time) >= 800: 
             in_lockout = False
-            
-        b_was_pressed = b_pressed
 
 # ==========================================
 # MOTORE 2: FIORETTO (LOGICA NC)
 # ==========================================
 def run_fioretto():
     global current_weapon
-    PIN_B_NUM = 14 # Lamè
-    PIN_C_NUM = 15 # Ritorno Punta
+    pin_13 = Pin(13, Pin.OUT)
+    pin_14 = Pin(14, Pin.OUT)
+    pin_15 = Pin(15, Pin.IN, Pin.PULL_UP)
     
     b_was_pressed = False
     in_lockout = False
     lockout_start_time = 0
     ping_next_time = time.ticks_ms()
-    debug_next_time = 0
+    last_state_str = "0_0"
 
     while current_weapon == "fioretto":
         current_time = time.ticks_ms()
         check_udp_messages()
         if current_weapon != "fioretto": break
-        
         ping_next_time = ping_server(ping_next_time, current_time)
 
-        pin_13 = Pin(13, Pin.OUT)
-        pin_14 = Pin(PIN_B_NUM, Pin.OUT); pin_14.value(0) # Mette a Massa il proprio Giubbetto (Lamè) per l'avversario
-        pin_15 = Pin(PIN_C_NUM, Pin.IN, Pin.PULL_UP)      # Ritorno del pulsante Normalmente Chiuso
-        
-        # Fase 1: Controllo se si è aperto
+        pin_14.value(0)
         pin_13.value(0)
         time.sleep_us(500)
         read_phase1 = pin_15.value()
         
-        # Fase 2: Controllo se tocca il bersaglio avversario (che è a GND)
         pin_13.value(1)
         time.sleep_us(500)
         read_phase2 = pin_15.value()
         
-        pin_13.value(0) # Ripristino sicurezza
+        pin_13.value(0) 
         
         is_off_target = (read_phase1 == 1)
         is_valid_hit = (read_phase1 == 0 and read_phase2 == 0)
         is_not_pressed = (read_phase1 == 0 and read_phase2 == 1)
+        
+        hit_val = 1 if is_valid_hit else 0
+        white_val = 1 if is_off_target else 0
 
-        debug_next_time = log_debug(f"WPN:FIORETTO P1:{read_phase1} P2:{read_phase2}", debug_next_time, current_time)
+        state_str = f"{hit_val}_{white_val}"
+        if state_str != last_state_str:
+            try: udp_socket.sendto(f"STATE_{PICO_NAME.upper()}_{state_str}".encode('utf-8'), (UDP_IP, UDP_PORT))
+            except: pass
+            last_state_str = state_str
 
         if (is_valid_hit or is_off_target) and not b_was_pressed and not in_lockout:
             if is_valid_hit:
@@ -215,18 +221,22 @@ def run_sciabola():
     in_lockout = False
     lockout_start_time = 0
     ping_next_time = time.ticks_ms()
-    debug_next_time = 0
+    last_state_str = "0_0"
 
     while current_weapon == "sciabola":
         current_time = time.ticks_ms()
         check_udp_messages()
         if current_weapon != "sciabola": break
-        
         ping_next_time = ping_server(ping_next_time, current_time)
 
         touching_opp = (GP14.value() == 0)
         
-        debug_next_time = log_debug(f"WPN:SCIABOLA Bersaglio:{touching_opp}", debug_next_time, current_time)
+        hit_val = 1 if touching_opp else 0
+        state_str = f"{hit_val}_0"
+        if state_str != last_state_str:
+            try: udp_socket.sendto(f"STATE_{PICO_NAME.upper()}_{state_str}".encode('utf-8'), (UDP_IP, UDP_PORT))
+            except: pass
+            last_state_str = state_str
             
         if touching_opp and not b_was_pressed and not in_lockout:
             try: udp_socket.sendto(f"HIT_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
@@ -240,9 +250,6 @@ def run_sciabola():
         if in_lockout and time.ticks_diff(current_time, lockout_start_time) >= 800: 
             in_lockout = False
 
-# ==========================================
-# LOOP PRINCIPALE
-# ==========================================
 def loop():
     global udp_socket
     connect_wifi_and_ota()
