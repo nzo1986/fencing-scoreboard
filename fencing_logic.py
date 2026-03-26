@@ -20,22 +20,12 @@ def emit_massa_visual(side, socketio):
         last_massa_emit[side] = now
 
 def handle_hit_request(side, hit_timestamp, socketio, hit_type="HIT"):
-    opp_side = 'right' if side == 'left' else 'left'
-    weapon = current_state['settings'].get('weapon', 'spada')
-    
-    if weapon == 'spada' and hit_type == 'HIT':
-        eventlet.sleep(0.08)
-        if abs(last_coccia_time[opp_side] - hit_timestamp) < 0.3:
-            emit_massa_visual(side, socketio)
-            return
-
     evaluate_valid_hit(side, hit_timestamp, socketio, hit_type)
 
 def evaluate_valid_hit(side, hit_timestamp, socketio, hit_type):
     global last_hit_timestamp, hit_sides_in_window, first_hit_side
     
-    if current_state.get('phase') != 'MATCH': 
-        return
+    if current_state.get('phase') != 'MATCH': return
         
     weapon = current_state['settings'].get('weapon', 'spada')
     

@@ -39,8 +39,7 @@ def update_system():
         try:
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=BASE_DIR)
             for line in iter(process.stdout.readline, ''):
-                if line:
-                    socketio.emit('update_log', {'msg': line.strip()})
+                if line: socketio.emit('update_log', {'msg': line.strip()})
             process.stdout.close()
             process.wait()
             socketio.emit('update_complete')
@@ -60,16 +59,15 @@ def reboot_picos():
         s.sendto(b"REBOOT_PICO", ('<broadcast>', 7778))
         s.sendto(b"REBOOT_PICO", ('255.255.255.255', 7778)) 
         s.close()
-    except Exception as e: print(e)
+    except: pass
     return jsonify({"status": "ok"})
 
 @app.route('/api/ota/<pico_name>/version')
 def ota_version(pico_name):
     try:
         file_path = os.path.join(BASE_DIR, "pico_code", f"pico_{pico_name}.py")
-        if os.path.exists(file_path):
-            return str(int(os.path.getmtime(file_path)))
-    except Exception as e: print(e)
+        if os.path.exists(file_path): return str(int(os.path.getmtime(file_path)))
+    except: pass
     return "0"
 
 @app.route('/api/ota/<pico_name>/code')
@@ -230,7 +228,7 @@ def up_set(d):
                     s.sendto(f"SET_WEAPON_{str(v).upper()}".encode('utf-8'), ('<broadcast>', 7778))
                     s.sendto(f"SET_WEAPON_{str(v).upper()}".encode('utf-8'), ('255.255.255.255', 7778))
                     s.close()
-                except Exception as e: print("Errore broadcast:", e)
+                except: pass
                 
     socketio.emit('state_update', current_state)
     eventlet.spawn(save_state)

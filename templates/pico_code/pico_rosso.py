@@ -70,16 +70,12 @@ def ping_server(ping_next_time, current_time):
     return ping_next_time
 
 # ==========================================
-# MOTORE 1: SPADA (Frequenze Codificate - 2kHz)
+# MOTORE 1: SPADA (Logica a Pacchetti)
 # ==========================================
 def run_spada():
-    PIN_13 = Pin(13)
-    pwm13 = machine.PWM(PIN_13)
-    pwm13.freq(2000) # PACCHETTO IDENTIFICATIVO ROSSO = 2000 Hz
-    pwm13.duty_u16(32768)
-    
-    PIN_14 = Pin(14, Pin.IN, Pin.PULL_DOWN) # Polo 2 (Ascolta Punta)
-    PIN_15 = Pin(15, Pin.IN, Pin.PULL_DOWN) # Coccia (Ascolta Avversario)
+    pin13 = Pin(13, Pin.IN, Pin.PULL_DOWN) # Coccia R
+    pin14 = Pin(14, Pin.IN, Pin.PULL_DOWN) # Polo 1 R
+    pin15 = Pin(15, Pin.IN, Pin.PULL_DOWN) # Polo 2 R
     
     b_was_pressed, c_was_pressed = False, False
     in_lockout, lockout_start_time = False, 0
@@ -92,34 +88,51 @@ def run_spada():
         if current_weapon != "spada": break
         ping_next_time = ping_server(ping_next_time, current_time)
 
-        # LETTURA FREQUENZE (10 millisecondi)
-        e14, e15 = 0, 0
-        v14, v15 = PIN_14.value(), PIN_15.value()
-        end_t = time.ticks_add(time.ticks_us(), 10000)
-        while time.ticks_diff(end_t, time.ticks_us()) > 0:
-            nv14, nv15 = PIN_14.value(), PIN_15.value()
-            if nv14 != v14: e14 += 1; v14 = nv14
-            if nv15 != v15: e15 += 1; v15 = nv15
+        is_hit = False
+        is_coccia = False
 
-        # 2kHz = ~40 edges, 4kHz (Verde) = ~80 edges
-        is_hit = (15 < e14 < 65)   # Legge il proprio segnale
-        touch_gnd = (e15 > 15)     # La coccia legge QUALSIASI segnale
+        # --- Manda Pacchetto D (Polo 1) ---
+        pin14.init(Pin.OUT); pin14.value(1)
+        time.sleep_us(200)
+        if pin13.value() == 1: is_coccia = True
+        if pin15.value() == 1: is_hit = True
+        pin14.value(0); pin14.init(Pin.IN, Pin.PULL_DOWN)
+
+        # --- Manda Pacchetto E (Polo 2) ---
+        pin15.init(Pin.OUT); pin15.value(1)
+        time.sleep_us(200)
+        if pin13.value() == 1: is_coccia = True
+        if pin14.value() == 1: is_hit = True
+        pin15.value(0); pin15.init(Pin.IN, Pin.PULL_DOWN)
+
+        # --- Manda Pacchetto F (Coccia) ---
+        pin13.init(Pin.OUT); pin13.value(1)
+        time.sleep_us(200)
+        if pin14.value() == 1: is_coccia = True
+        if pin15.value() == 1: is_coccia = True
+        pin13.value(0); pin13.init(Pin.IN, Pin.PULL_DOWN)
+
+        # --- Ascolto Pacchetti Avversario (A,B,C) ---
+        time.sleep_us(200)
+        if pin13.value() == 1: is_coccia = True 
+
+        hit_val = 1 if (is_hit and not is_coccia) else 0
+        white_val = 1 if is_coccia else 0
         
-        hit_val = 1 if is_hit else 0
-        white_val = 1 if touch_gnd else 0
-        
+        # --- INVIO STATO LAMPADINE (Aggiorna se cambia o se attivo) ---
         state_str = f"{hit_val}_{white_val}"
         if state_str != last_state_str or (state_str != "0_0" and time.ticks_diff(current_time, state_send_next_time) >= 0):
             try: udp_socket.sendto(f"STATE_{PICO_NAME.upper()}_{state_str}".encode('utf-8'), (UDP_IP, UDP_PORT))
             except: pass
             state_send_next_time = time.ticks_add(current_time, 50) 
             
-            if state_str != last_state_str: # Log solo al cambio
-                try: udp_socket.sendto(f"DEBUG_{PICO_NAME.upper()}_WPN:SPADA Punta:{is_hit} Coccia:{touch_gnd}".encode('utf-8'), (UDP_IP, UDP_PORT))
+            if state_str != last_state_str:
+                try: udp_socket.sendto(f"DEBUG_{PICO_NAME.upper()}_WPN:SPADA Punta:{is_hit} Coccia:{is_coccia}".encode('utf-8'), (UDP_IP, UDP_PORT))
                 except: pass
             last_state_str = state_str
 
-        if touch_gnd:
+        # --- INVIO COMANDI TABELLONE ---
+        if white_val:
             if not c_was_pressed:
                 try: udp_socket.sendto(f"MASSA_MIA_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
                 except: pass
@@ -127,7 +140,7 @@ def run_spada():
         else:
             c_was_pressed = False
 
-        if is_hit and not touch_gnd: # Se tocca la coccia, annulla la punta!
+        if hit_val:
             if not b_was_pressed and not in_lockout:
                 try: udp_socket.sendto(f"HIT_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
                 except: pass
@@ -139,8 +152,6 @@ def run_spada():
 
         if in_lockout and time.ticks_diff(current_time, lockout_start_time) >= 800: 
             in_lockout = False
-            
-    pwm13.deinit() # Spegne la frequenza se si cambia arma
 
 # ==========================================
 # MOTORE 2: FIORETTO (NC)
