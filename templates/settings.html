@@ -30,6 +30,10 @@
         input[type="text"]:focus { border-color: #3b82f6; outline: none; }
         #debug-console, #update-terminal { font-family: monospace; font-size: 0.85rem; color: #0f0; background: #000; padding: 10px; height: 250px; overflow-y: auto; border: 1px solid #444; border-radius: 5px; line-height: 1.4; word-wrap: break-word;}
         #update-terminal { height: 300px; color: #cbd5e1; }
+        
+        .version-box { background: #1f2937; border-radius: 8px; padding: 10px; margin-bottom: 15px; font-family: monospace; font-size: 0.9rem; color: #9ca3af; border: 1px solid #374151;}
+        .v-match { color: #4ade80; }
+        .v-mismatch { color: #f87171; }
     </style>
 </head>
 <body>
@@ -40,6 +44,19 @@
 
     <div class="px-3 max-w-2xl mx-auto">
         
+        <!-- PANNELLO VERSIONI E DIAGNOSTICA -->
+        <div class="version-box">
+            <div class="font-bold text-white mb-2 pb-1 border-b border-gray-700">📡 Diagnostica Sensori (Pico)</div>
+            <div class="flex justify-between mb-1">
+                <span>🔴 Rosso: <span id="v-bat-r">--</span>%</span>
+                <span id="v-text-r">Attesa dati...</span>
+            </div>
+            <div class="flex justify-between">
+                <span>🟢 Verde: <span id="v-bat-v">--</span>%</span>
+                <span id="v-text-v">Attesa dati...</span>
+            </div>
+        </div>
+
         <h2 class="text-gray-400 font-bold text-sm mb-2 uppercase tracking-wider">Arma Selezionata</h2>
         <div class="mb-6 grid grid-cols-3 gap-2">
             <button id="btn-wpn-spada" onclick="updateText('weapon', 'spada')" class="sys-btn bg-gray-800 text-gray-500 border border-gray-700 m-0 h-16 text-lg hover:bg-gray-700 transition">SPADA</button>
@@ -141,12 +158,13 @@
                 </div>
 
                 <div id="debug-console">
-                    [SISTEMA] In attesa di log hardware...<br>
+                    [SISTEMA] In attesa di log hardware (solo modifiche)...<br>
                 </div>
                 <button onclick="document.getElementById('debug-console').innerHTML=''" class="mt-3 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm w-full font-bold transition">Pulisci Log</button>
             </div>
         </details>
 
+        <!-- TERMINALE AGGIORNAMENTO LIVE -->
         <div id="update-terminal-container" style="display: none;" class="mt-8 mb-2">
             <div class="bg-gray-800 p-2 rounded-t-lg border border-gray-600 border-b-0 flex justify-between items-center">
                 <span class="text-sm font-bold text-gray-300">🖥️ Terminale Raspberry Pi</span>
@@ -178,6 +196,25 @@
         const socket = io();
         let settings = {};
         
+        // Loop Diagnostica Versioni
+        setInterval(() => {
+            fetch('/api/pico_status')
+                .then(r => r.json())
+                .then(s => {
+                    const formatVer = (picoV, srvV) => {
+                        if (!picoV || picoV === "0") return `<span class="v-mismatch">Offline</span>`;
+                        if (picoV === srvV) return `v.${picoV.substring(0,6)} <span class="v-match">(Aggiornata)</span>`;
+                        return `v.${picoV.substring(0,6)} <span class="v-mismatch">(Server: v.${srvV.substring(0,6)})</span>`;
+                    };
+                    
+                    document.getElementById('v-bat-r').innerText = s.rosso.active ? s.rosso.bat : '--';
+                    document.getElementById('v-text-r').innerHTML = s.rosso.active ? formatVer(s.rosso.ver, s.server_v_rosso) : '<span class="v-mismatch">Offline</span>';
+                    
+                    document.getElementById('v-bat-v').innerText = s.verde.active ? s.verde.bat : '--';
+                    document.getElementById('v-text-v').innerHTML = s.verde.active ? formatVer(s.verde.ver, s.server_v_verde) : '<span class="v-mismatch">Offline</span>';
+                }).catch(e => {});
+        }, 2000);
+
         function updateSystem() {
             if(confirm("Vuoi scaricare gli aggiornamenti ed eseguire setup_fencing_kiosk.py?")) {
                 document.getElementById('btn-update').innerText = "⏳ Aggiornamento in corso...";
@@ -209,7 +246,6 @@
             }
         }
 
-        // Animazione in tempo reale delle 4 Lampadine
         socket.on('sensor_state', d => {
             if(d.side === 'left') {
                 const lr = document.getElementById('lamp-r-hit');

@@ -60,7 +60,7 @@ def reboot_picos():
         s.sendto(b"REBOOT_PICO", ('<broadcast>', 7778))
         s.sendto(b"REBOOT_PICO", ('255.255.255.255', 7778)) 
         s.close()
-    except Exception as e: print(e)
+    except: pass
     return jsonify({"status": "ok"})
 
 @app.route('/api/ota/<pico_name>/version')
@@ -69,7 +69,7 @@ def ota_version(pico_name):
         file_path = os.path.join(BASE_DIR, "pico_code", f"pico_{pico_name}.py")
         if os.path.exists(file_path):
             return str(int(os.path.getmtime(file_path)))
-    except Exception as e: print(e)
+    except: pass
     return "0"
 
 @app.route('/api/ota/<pico_name>/code')
@@ -80,10 +80,18 @@ def ota_code(pico_name):
 @app.route('/api/pico_status')
 def get_pico_status():
     now = time.time()
+    try: v_rosso = str(int(os.path.getmtime(os.path.join(BASE_DIR, "pico_code", "pico_rosso.py"))))
+    except: v_rosso = "0"
+    try: v_verde = str(int(os.path.getmtime(os.path.join(BASE_DIR, "pico_code", "pico_verde.py"))))
+    except: v_verde = "0"
+    
     return jsonify({
-        'rosso': {'active': (now - pico_last_seen['rosso']['time']) < 5, 'bat': pico_last_seen['rosso']['bat']},
-        'verde': {'active': (now - pico_last_seen['verde']['time']) < 5, 'bat': pico_last_seen['verde']['bat']}
+        'server_v_rosso': v_rosso,
+        'server_v_verde': v_verde,
+        'rosso': {'active': (now - pico_last_seen['rosso']['time']) < 5, 'bat': pico_last_seen['rosso']['bat'], 'ver': pico_last_seen['rosso'].get('ver', '0')},
+        'verde': {'active': (now - pico_last_seen['verde']['time']) < 5, 'bat': pico_last_seen['verde']['bat'], 'ver': pico_last_seen['verde'].get('ver', '0')}
     })
+
 @app.route('/api/get_fonts')
 def api_get_fonts(): return jsonify(get_system_fonts())
 @app.route('/api/scan_wifi')
@@ -351,7 +359,7 @@ def udp_listener_thread():
             msg = data.decode('utf-8')
             now = time.time()
             
-            # --- RICEZIONE NUOVO STATO LAMPADINE (NC/NO) ---
+            # RICEZIONE STATO LUCI LIVE
             if msg.startswith("STATE_"):
                 parts = msg.split('_')
                 if len(parts) >= 4:
@@ -359,16 +367,14 @@ def udp_listener_thread():
                     hit_on = (parts[2] == "1")
                     white_on = (parts[3] == "1")
                     socketio.emit('sensor_state', {'side': side, 'hit': hit_on, 'white': white_on})
-                    log_msg = f"Cambio di Stato: Punta={'CHIUSA' if hit_on else 'Aperta'} | Coccia/Bianca={'TOCCATA' if white_on else 'Libera'}"
-                    socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': f"[{parts[1]}] {log_msg}"})
 
             elif msg.startswith("DEBUG_"):
-                pass 
+                try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': f"🔍 {msg}"})
+                except: pass
             
             elif not msg.startswith("PING_"):
                 if not (msg.startswith("HIT_") or msg.startswith("OFF_TARGET_")):
-                    try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': msg})
-                    except: pass
+                    pass # Evito messaggi sporchi nel log
 
             if msg.startswith("HIT_"):
                 side = "left" if "ROSSO" in msg else "right"
@@ -386,7 +392,8 @@ def udp_listener_thread():
                 side = "rosso" if "ROSSO" in msg else "verde"
                 parts = msg.split('_')
                 bat = parts[2] if len(parts) > 2 else 100
-                pico_last_seen[side] = {'time': now, 'bat': bat}
+                ver = parts[3] if len(parts) > 3 else "0"
+                pico_last_seen[side] = {'time': now, 'bat': bat, 'ver': ver}
                 
                 try:
                     weapon = current_state['settings'].get('weapon', 'spada')

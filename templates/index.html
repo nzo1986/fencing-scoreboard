@@ -29,9 +29,10 @@
         .hit-glow-left { background-color: rgba(255, 0, 0, 0.25) !important; border-color: #ff0000 !important; box-shadow: 0 0 80px rgba(255, 0, 0, 0.8), inset 0 0 50px rgba(255, 0, 0, 0.5) !important; }
         .hit-glow-right { background-color: rgba(0, 255, 0, 0.25) !important; border-color: #00ff00 !important; box-shadow: 0 0 80px rgba(0, 255, 0, 0.8), inset 0 0 50px rgba(0, 255, 0, 0.5) !important; }
         .hit-glow-offtarget { background-color: rgba(255, 255, 255, 0.3) !important; border-color: #ffffff !important; box-shadow: 0 0 100px rgba(255, 255, 255, 1), inset 0 0 50px rgba(255, 255, 255, 0.8) !important; }
-        .hit-glow-white { background-color: rgba(255, 255, 255, 0.15) !important; border-color: #ffffff !important; box-shadow: 0 0 60px rgba(255, 255, 255, 0.6), inset 0 0 30px rgba(255, 255, 255, 0.4) !important; }
         
-        /* Bordo bianco per chi ha la priorità (solo sulla foto) */
+        /* Luce Bianca Spada (Coccia) più intensa e veloce */
+        .hit-glow-white { background-color: rgba(255, 255, 255, 0.2) !important; border-color: #ffffff !important; box-shadow: 0 0 80px rgba(255, 255, 255, 0.8), inset 0 0 40px rgba(255, 255, 255, 0.5) !important; }
+        
         .priority-active { border-color: #ffffff !important; box-shadow: 0 0 35px #ffffff !important; transform: scale(1.05); }
         
         #audio-unlocker { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.95); display: flex; justify-content: center; align-items: center; cursor: pointer; flex-direction: column; transition: opacity 0.5s; }
@@ -76,7 +77,7 @@
                     audioUnlocked = true;
                     document.getElementById('audio-unlocker').style.opacity = '0';
                     setTimeout(() => document.getElementById('audio-unlocker').style.display = 'none', 500);
-                }).catch(e => {});
+                }).catch(e => { console.log("Attesa sblocco..."); });
             } else {
                 audioUnlocked = true;
                 document.getElementById('audio-unlocker').style.opacity = '0';
@@ -120,7 +121,7 @@
         socket.on('hw_massa', data => {
             const col = document.getElementById(data.side === 'left' ? 'col-l' : 'col-r');
             col.classList.add('hit-glow-white');
-            setTimeout(() => col.classList.remove('hit-glow-white'), 1000); 
+            setTimeout(() => col.classList.remove('hit-glow-white'), 500); // DURATA LUCE BIANCA: 500ms
         });
 
         socket.on('time_expired', () => { playBeep(500, 1.0); });
@@ -172,7 +173,6 @@
                 else { centerCol.style.display = 'flex'; }
             }
             
-            // Applica il bordo bianco solo sulla FOTO
             if (s.priority === 'left') { 
                 document.getElementById('ph-l').classList.add('priority-active'); 
                 document.getElementById('ph-r').classList.remove('priority-active'); 

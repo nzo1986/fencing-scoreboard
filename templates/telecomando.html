@@ -161,7 +161,6 @@
             o.start(); o.stop(audioCtx.currentTime + duration); 
         }
         
-        // Logica Colori Botte (Nasconde la priorità per mostrare la botta)
         socket.on('hw_hit', data => { 
             if (navigator.vibrate) navigator.vibrate(50); 
             let durataSuono = data.is_manual ? 0.5 : 1.5;
@@ -194,7 +193,7 @@
         socket.on('hw_massa', data => { 
             const b = document.getElementById(data.side === 'left' ? 's-l' : 's-r');
             b.classList.add('glow-white');
-            setTimeout(() => b.classList.remove('glow-white'), 1500);
+            setTimeout(() => b.classList.remove('glow-white'), 500); // 500ms
         });
         
         socket.on('time_expired', () => { 
