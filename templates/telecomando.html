@@ -14,10 +14,8 @@
         .score-bar{background:black;color:white;display:flex;justify-content:space-between;padding:0 20px;font-size:3rem;font-weight:bold;line-height:1.2;margin:5px 0;border-radius:2px;position:relative;border:1px solid #333; transition: background 0.2s;}
         .score-val{width:45%;text-align:center; border-radius: 8px; padding: 5px; transition: all 0.1s;}
         
-        .glow-white { background-color: #e2e8f0 !important; color: black !important; }
         .glow-red { background-color: #ef4444 !important; color: white !important; }
         .glow-green { background-color: #22c55e !important; color: white !important; }
-        
         .priority-active-score { background-color: #ffffff !important; color: #000000 !important; box-shadow: 0 0 25px #ffffff !important; transform: scale(1.05); }
         
         .start-btn{width:100%;min-height:20vh;padding:20px 0;font-size:4rem;font-weight:bold;color:white;border:none;display:flex;align-items:center;justify-content:center;margin:5px 0;border-radius:4px}
@@ -135,7 +133,7 @@
         let priorityAnimTimer = null;
         
         setInterval(() => {
-            fetch(window.location.origin + '/api/pico_status')
+            fetch('/api/pico_status')
                 .then(r => r.json())
                 .then(s => {
                     const pr = document.getElementById('stat-pico-r');
@@ -171,10 +169,10 @@
                 const b = document.getElementById('s-l');
                 b.setAttribute('data-hit', 'true');
                 b.classList.remove('priority-active-score');
-                b.classList.add(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-red');
+                b.classList.add('glow-red');
                 setTimeout(() => { 
                     b.removeAttribute('data-hit');
-                    b.classList.remove(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-red');
+                    b.classList.remove('glow-red');
                     if (globalState && globalState.priority === 'left') b.classList.add('priority-active-score');
                 }, 3000);
             }
@@ -182,21 +180,15 @@
                 const b = document.getElementById('s-r');
                 b.setAttribute('data-hit', 'true');
                 b.classList.remove('priority-active-score');
-                b.classList.add(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-green');
+                b.classList.add('glow-green');
                 setTimeout(() => { 
                     b.removeAttribute('data-hit');
-                    b.classList.remove(data.hit_type === 'OFF_TARGET' ? 'glow-white' : 'glow-green');
+                    b.classList.remove('glow-green');
                     if (globalState && globalState.priority === 'right') b.classList.add('priority-active-score');
                 }, 3000);
             }
         });
 
-        socket.on('hw_massa', data => { 
-            const b = document.getElementById(data.side === 'left' ? 's-l' : 's-r');
-            b.classList.add('glow-white');
-            setTimeout(() => b.classList.remove('glow-white'), 500);
-        });
-        
         socket.on('time_expired', () => { 
             if (navigator.vibrate) navigator.vibrate(500);
             playBeep(500, 1.0);

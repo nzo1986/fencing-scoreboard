@@ -9,7 +9,7 @@ import os, time, random
 from eventlet.green import socket
 
 from config_state import current_state, load_state, save_state, push_history, pico_last_seen, gironi_cache, get_photo_url, clean_fencer_name, PHOTOS_DIR, get_system_fonts, letter_to_sheet_col, default_columns, BASE_DIR
-from fencing_logic import handle_hit_request, emit_massa_visual, register_coccia, apply_card
+from fencing_logic import handle_hit_request, apply_card
 from google_api import update_all_gironi_data, process_background_upload, check_internet, check_google
 
 app = Flask(__name__)
@@ -31,6 +31,69 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
+# --- ROTTE FOTO E AGGIORNAMENTO LIVE ---
+@app.route('/api/get_fencers')
+def get_fencers():
+    # Raccoglie tutti i nomi univoci dai gironi scaricati da Google
+    names = set()
+    for g, matches in gironi_cache.items():
+        for m in matches:
+            if m.get('sx'): names.add(m['sx'])
+            if m.get('dx'): names.add(m['dx'])
+    
+    # Aggiunge anche i nomi attualmente sul display (se modificati a mano)
+    names.add(current_state['fencer_left']['name'])
+    names.add(current_state['fencer_right']['name'])
+    
+    fencers = []
+    for n in sorted(list(names)):
+        if n and len(n.strip()) > 1:
+            fencers.append({'name': n, 'photo': get_photo_url(n)})
+    return jsonify(fencers)
+
+@app.route('/api/upload_photo', methods=['POST'])
+def upload_photo():
+    if 'photo' not in request.files or 'name' not in request.form:
+        return jsonify({"status": "error", "msg": "Dati mancanti"})
+    
+    file = request.files['photo']
+    name = request.form['name']
+    if file.filename == '':
+        return jsonify({"status": "error", "msg": "Nessun file selezionato"})
+    
+    clean_name = clean_fencer_name(name)
+    ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'png'
+    filename = f"{clean_name}.{ext}"
+    filepath = os.path.join(PHOTOS_DIR, filename)
+    
+    # Rimuovi vecchie foto per evitare conflitti di estensione
+    for e in ['jpg', 'png', 'jpeg', 'JPG', 'PNG']:
+        old_path = os.path.join(PHOTOS_DIR, f"{clean_name}.{e}")
+        if os.path.exists(old_path):
+            try: os.remove(old_path)
+            except: pass
+            
+    file.save(filepath)
+    
+    new_url = f"/static/photos/{filename}?v={int(time.time())}"
+    
+    # AGGIORNAMENTO LIVE SUL DISPLAY SE L'ATLETA E' IN PEDANA
+    updated = False
+    if current_state['fencer_left']['name'] == name:
+        current_state['fencer_left']['photo'] = new_url
+        updated = True
+    if current_state['fencer_right']['name'] == name:
+        current_state['fencer_right']['photo'] = new_url
+        updated = True
+        
+    if updated:
+        socketio.emit('state_update', current_state)
+        eventlet.spawn(save_state)
+        
+    return jsonify({"status": "success", "url": new_url})
+
+
+# --- ROTTE AGGIORNAMENTO DI SISTEMA E PICO ---
 @app.route('/api/update_system', methods=['POST'])
 def update_system():
     def run_update_process():
@@ -39,7 +102,8 @@ def update_system():
         try:
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=BASE_DIR)
             for line in iter(process.stdout.readline, ''):
-                if line: socketio.emit('update_log', {'msg': line.strip()})
+                if line:
+                    socketio.emit('update_log', {'msg': line.strip()})
             process.stdout.close()
             process.wait()
             socketio.emit('update_complete')
@@ -165,7 +229,6 @@ def handle_priority():
             socketio.emit('state_update', current_state)
             socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
             save_state()
-            socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': 'SYS', 'msg': f"🎲 Priorità assegnata a: {'ROSSO (SX)' if winner == 'left' else 'VERDE (DX)'}"})
         eventlet.spawn(apply_priority)
 
 @socketio.on('reset_scores')
@@ -220,16 +283,6 @@ def up_set(d):
                 try: current_state['settings'][k] = float(v)
                 except: pass
             else: current_state['settings'][k] = str(v)
-            
-            if k == 'weapon':
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-                    s.sendto(f"SET_WEAPON_{str(v).upper()}".encode('utf-8'), ('<broadcast>', 7778))
-                    s.sendto(f"SET_WEAPON_{str(v).upper()}".encode('utf-8'), ('255.255.255.255', 7778))
-                    s.close()
-                except: pass
-                
     socketio.emit('state_update', current_state)
     eventlet.spawn(save_state)
 
@@ -356,46 +409,16 @@ def udp_listener_thread():
             data, addr = udp_sock.recvfrom(1024)
             msg = data.decode('utf-8')
             now = time.time()
-            
-            if msg.startswith("STATE_"):
-                parts = msg.split('_')
-                if len(parts) >= 4:
-                    side = "left" if parts[1] == "ROSSO" else "right"
-                    hit_on = (parts[2] == "1")
-                    white_on = (parts[3] == "1")
-                    socketio.emit('sensor_state', {'side': side, 'hit': hit_on, 'white': white_on})
-
-            elif msg.startswith("DEBUG_"):
-                try: socketio.emit('debug_log', {'time': time.strftime('%H:%M:%S'), 'ip': addr[0], 'msg': f"🔍 {msg}"})
-                except: pass
-            
-            elif not msg.startswith("PING_"):
-                if not (msg.startswith("HIT_") or msg.startswith("OFF_TARGET_")):
-                    pass 
 
             if msg.startswith("HIT_"):
                 side = "left" if "ROSSO" in msg else "right"
                 eventlet.spawn(handle_hit_request, side, now, socketio, "HIT")
-            elif msg.startswith("OFF_TARGET_"):
-                side = "left" if "ROSSO" in msg else "right"
-                eventlet.spawn(handle_hit_request, side, now, socketio, "OFF_TARGET")
-            elif msg.startswith("COCCIA_"):
-                side = "left" if "ROSSO" in msg else "right"
-                register_coccia(side)
-            elif msg.startswith("MASSA_MIA_"):
-                side = "left" if "ROSSO" in msg else "right"
-                emit_massa_visual(side, socketio)
             elif msg.startswith("PING_"):
                 side = "rosso" if "ROSSO" in msg else "verde"
                 parts = msg.split('_')
                 bat = parts[2] if len(parts) > 2 else 100
                 ver = parts[3] if len(parts) > 3 else "0"
                 pico_last_seen[side] = {'time': now, 'bat': bat, 'ver': ver}
-                
-                try:
-                    weapon = current_state['settings'].get('weapon', 'spada')
-                    udp_sock.sendto(f"SET_WEAPON_{weapon.upper()}".encode('utf-8'), (addr[0], 7778))
-                except: pass
 
         except: pass
         eventlet.sleep(0.005)

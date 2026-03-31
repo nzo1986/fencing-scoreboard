@@ -2,81 +2,177 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Gestione Foto</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestione Foto Atleti</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body{background:#111;color:white;padding:20px;font-family:sans-serif}
-        .photo-card{background:#222;padding:10px;border-radius:8px;text-align:center;cursor:pointer;border:2px solid transparent}
-        .photo-card:hover{border-color:#666}
-        .has-photo{border-color:#00aa00}
+        body { background: #0f172a; color: white; font-family: sans-serif; padding-bottom: 40px; }
+        .photo-card { 
+            aspect-ratio: 3/4; 
+            position: relative; 
+            overflow: hidden; 
+            border-radius: 0.75rem; 
+            border: 2px solid #334155; 
+            cursor: pointer; 
+            transition: all 0.2s ease-in-out; 
+            background-color: #1e293b; 
+            background-size: cover; 
+            background-position: center; 
+        }
+        .photo-card:hover { 
+            border-color: #3b82f6; 
+            transform: translateY(-4px); 
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.5); 
+        }
+        .name-overlay { 
+            position: absolute; 
+            bottom: 0; 
+            left: 0; 
+            width: 100%; 
+            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.4) 60%, transparent 100%); 
+            padding: 16px 8px 8px 8px; 
+            text-align: center; 
+            font-weight: bold; 
+            font-size: 0.9rem; 
+            text-transform: uppercase; 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            text-shadow: 0px 2px 4px rgba(0,0,0,1);
+        }
+        .uploading::after {
+            content: "CARICAMENTO...";
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #3b82f6;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
     </style>
 </head>
-<body>
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold text-blue-400">Gestione Foto Atleti</h1>
-        <button onclick="window.location.href='/telecomando'" class="bg-gray-600 px-4 py-2 rounded font-bold">Indietro</button>
+<body class="p-4 sm:p-6">
+    <div class="max-w-7xl mx-auto">
+        
+        <div class="flex flex-col sm:flex-row justify-between items-center mb-6 pb-4 border-b border-slate-700 gap-4">
+            <h1 class="text-2xl sm:text-3xl font-bold text-slate-100 flex items-center gap-3">
+                📸 Fotografie Atleti
+            </h1>
+            <div class="flex gap-3 w-full sm:w-auto">
+                <button onclick="loadFencers()" class="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-lg font-bold shadow-lg transition">Aggiorna Lista</button>
+                <button onclick="window.location.href='/settings'" class="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 border border-slate-600 px-5 py-2.5 rounded-lg font-bold shadow-lg transition">Indietro</button>
+            </div>
+        </div>
+        
+        <div class="bg-slate-800/50 p-4 rounded-xl mb-8 border border-slate-700 text-slate-300 text-sm sm:text-base">
+            <span class="text-blue-400 font-bold">Istruzioni:</span> Clicca sul riquadro rettangolare di un atleta per caricare o sostituire la sua fotografia dalla memoria del telefono o PC. Se l'atleta sta attualmente tirando sul display principale, la sua foto <strong>si aggiornerà istantaneamente da sola</strong> senza bisogno di ricaricare nulla!
+        </div>
+
+        <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+            <!-- Le foto verranno inserite qui dal Javascript -->
+        </div>
+        
     </div>
-    
-    <div class="bg-gray-800 p-6 rounded-lg mb-8 text-center border-2 border-dashed border-gray-500" id="drop-zone">
-        <h2 class="text-2xl font-bold mb-2">Maxi Upload (Trascina qui)</h2>
-        <p class="text-gray-400 mb-4">Carica file tipo "Cognome_Nome.jpg" o "Nome Cognome.png".<br>Il sistema li collegherà automaticamente.</p>
-        <input type="file" id="maxi-input" multiple class="hidden" accept="image/*">
-        <button onclick="document.getElementById('maxi-input').click()" class="bg-blue-600 px-6 py-3 rounded font-bold text-lg">Seleziona Cartella / File</button>
-        <p id="upload-status" class="mt-4 text-yellow-400 font-bold"></p>
-    </div>
-    
-    <h2 class="text-xl mb-4">Lista Atleti (da G-Sheets)</h2>
-    <div id="athletes-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
-    <input type="file" id="single-input" class="hidden" accept="image/*">
-    
+
+    <!-- Input nascosto per caricare i file -->
+    <input type="file" id="file-input" accept="image/*" class="hidden">
+
     <script>
-        let currentAthlete=null;
-        function loadAthletes(){
-            fetch('/api/get_athletes').then(r=>r.json()).then(d=>{
-                const g=document.getElementById('athletes-grid'); g.innerHTML='';
-                
-                // Card Default
-                const dd=document.createElement('div'); dd.className='photo-card border-blue-500';
-                dd.innerHTML='<img src="/static/photos/default.png?v='+Date.now()+'" class="w-24 h-24 rounded-full mx-auto object-cover mb-2"><p class="font-bold">DEFAULT</p>';
-                dd.onclick=()=>triggerUpload('DEFAULT',true);
-                g.appendChild(dd);
-                
-                // Lista Atleti
-                d.forEach(a=>{
-                    const b=document.createElement('div'); 
-                    b.className='photo-card group';
-                    
-                    let content = '';
-                    if(a.has_photo) {
-                        // Anteprima Foto (Bordo Verde)
-                        content = `<img src="${a.photo_url}" class="w-24 h-24 rounded-full mx-auto object-cover mb-2 border-4 border-green-500">`;
-                    } else {
-                        // Placeholder Grigio con ?
-                        content = `<div class="w-24 h-24 rounded-full mx-auto bg-gray-700 flex items-center justify-center overflow-hidden mb-2 border-4 border-gray-600"><span class="text-gray-500 text-4xl font-bold">?</span></div>`;
+        let currentFencer = '';
+
+        function loadFencers() {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '<div class="col-span-full text-center py-20 text-slate-400 text-lg animate-pulse">Ricerca atleti in corso...</div>';
+            
+            fetch('/api/get_fencers')
+                .then(r => r.json())
+                .then(data => {
+                    grid.innerHTML = '';
+                    if(data.length === 0) {
+                        grid.innerHTML = '<div class="col-span-full text-center py-20 text-slate-400 text-lg">Nessun atleta trovato. Assicurati che i gironi siano caricati in Impostazioni.</div>';
+                        return;
                     }
                     
-                    b.innerHTML = content + `<p class="text-sm font-bold truncate">${a.name}</p>`;
-                    b.onclick=()=>triggerUpload(a.name,false);
-                    g.appendChild(b)
+                    data.forEach(f => {
+                        const card = document.createElement('div');
+                        card.className = 'photo-card shadow-lg';
+                        // Usa l'URL dell'immagine restituito dall'API come sfondo
+                        card.style.backgroundImage = `url('${f.photo}')`;
+                        card.onclick = () => openPicker(f.name);
+                        
+                        const overlay = document.createElement('div');
+                        overlay.className = 'name-overlay';
+                        overlay.innerText = f.name;
+                        
+                        card.appendChild(overlay);
+                        grid.appendChild(card);
+                    });
                 })
+                .catch(e => {
+                    grid.innerHTML = '<div class="col-span-full text-center py-20 text-red-400 text-lg">Errore di rete durante la lettura degli atleti.</div>';
+                });
+        }
+
+        function openPicker(name) {
+            currentFencer = name;
+            document.getElementById('file-input').click();
+        }
+
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            if(this.files.length === 0) return;
+            const file = this.files[0];
+            
+            const formData = new FormData();
+            formData.append('photo', file);
+            formData.append('name', currentFencer);
+
+            // Trova la card cliccata e aggiungi l'effetto di caricamento
+            const cards = document.querySelectorAll('.photo-card');
+            let targetCard = null;
+            cards.forEach(c => { 
+                if(c.querySelector('.name-overlay').innerText === currentFencer) {
+                    targetCard = c;
+                }
+            });
+            
+            if(targetCard) targetCard.classList.add('uploading');
+
+            // Manda l'immagine al server
+            fetch('/api/upload_photo', {
+                method: 'POST',
+                body: formData
             })
-        }
-        function triggerUpload(n,d){currentAthlete={name:n,isDefault:d};document.getElementById('single-input').click()}
-        document.getElementById('single-input').onchange=(e)=>{
-            if(!e.target.files[0])return;
-            const f=new FormData(); f.append('file',e.target.files[0]); f.append('name',currentAthlete.name); f.append('is_default',currentAthlete.isDefault);
-            fetch('/api/upload_photo',{method:'POST',body:f}).then(r=>r.json()).then(r=>{if(r.success){alert('Foto caricata!');loadAthletes()}})
-        };
-        const mi=document.getElementById('maxi-input');
-        mi.onchange=hF;
-        function hF(e){const f=e.target.files;if(!f.length)return;uF(f)}
-        function uF(fs){
-            const s=document.getElementById('upload-status'); s.innerText=`Caricamento di ${fs.length} file...`;
-            const f=new FormData(); for(let i=0;i<fs.length;i++){f.append('files[]',fs[i])}
-            fetch('/api/maxi_upload',{method:'POST',body:f}).then(r=>r.json()).then(r=>{s.innerText=`Completato! ${r.processed} foto abbinate.`;loadAthletes()}).catch(e=>{s.innerText="Errore upload.";console.error(e)})
-        }
-        loadAthletes()
+            .then(r => r.json())
+            .then(res => {
+                if(res.status === 'success') {
+                    // Aggiorna l'immagine visualizzata
+                    if(targetCard) {
+                        targetCard.style.backgroundImage = `url('${res.url}')`;
+                        targetCard.classList.remove('uploading');
+                    }
+                } else {
+                    alert("Errore caricamento: " + res.msg);
+                    if(targetCard) targetCard.classList.remove('uploading');
+                }
+            })
+            .catch(err => {
+                alert("Errore di connessione col server.");
+                if(targetCard) targetCard.classList.remove('uploading');
+            })
+            .finally(() => {
+                this.value = ''; // Reset dell'input file per permettere di ricaricare la stessa immagine se necessario
+            });
+        });
+
+        // Carica la griglia automaticamente all'apertura della pagina
+        window.onload = loadFencers;
     </script>
 </body>
 </html>
