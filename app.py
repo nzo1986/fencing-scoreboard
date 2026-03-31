@@ -34,17 +34,13 @@ def download_page(): return render_template('download.html')
 # --- ROTTE FOTO E AGGIORNAMENTO LIVE ---
 @app.route('/api/get_fencers')
 def get_fencers():
-    # Raccoglie tutti i nomi univoci dai gironi scaricati da Google
     names = set()
     for g, matches in gironi_cache.items():
         for m in matches:
             if m.get('sx'): names.add(m['sx'])
             if m.get('dx'): names.add(m['dx'])
-    
-    # Aggiunge anche i nomi attualmente sul display (se modificati a mano)
     names.add(current_state['fencer_left']['name'])
     names.add(current_state['fencer_right']['name'])
-    
     fencers = []
     for n in sorted(list(names)):
         if n and len(n.strip()) > 1:
@@ -55,29 +51,21 @@ def get_fencers():
 def upload_photo():
     if 'photo' not in request.files or 'name' not in request.form:
         return jsonify({"status": "error", "msg": "Dati mancanti"})
-    
     file = request.files['photo']
     name = request.form['name']
     if file.filename == '':
         return jsonify({"status": "error", "msg": "Nessun file selezionato"})
-    
     clean_name = clean_fencer_name(name)
     ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'png'
     filename = f"{clean_name}.{ext}"
     filepath = os.path.join(PHOTOS_DIR, filename)
-    
-    # Rimuovi vecchie foto per evitare conflitti di estensione
     for e in ['jpg', 'png', 'jpeg', 'JPG', 'PNG']:
         old_path = os.path.join(PHOTOS_DIR, f"{clean_name}.{e}")
         if os.path.exists(old_path):
             try: os.remove(old_path)
             except: pass
-            
     file.save(filepath)
-    
     new_url = f"/static/photos/{filename}?v={int(time.time())}"
-    
-    # AGGIORNAMENTO LIVE SUL DISPLAY SE L'ATLETA E' IN PEDANA
     updated = False
     if current_state['fencer_left']['name'] == name:
         current_state['fencer_left']['photo'] = new_url
@@ -85,13 +73,10 @@ def upload_photo():
     if current_state['fencer_right']['name'] == name:
         current_state['fencer_right']['photo'] = new_url
         updated = True
-        
     if updated:
         socketio.emit('state_update', current_state)
         eventlet.spawn(save_state)
-        
     return jsonify({"status": "success", "url": new_url})
-
 
 # --- ROTTE AGGIORNAMENTO DI SISTEMA E PICO ---
 @app.route('/api/update_system', methods=['POST'])
@@ -102,8 +87,7 @@ def update_system():
         try:
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=BASE_DIR)
             for line in iter(process.stdout.readline, ''):
-                if line:
-                    socketio.emit('update_log', {'msg': line.strip()})
+                if line: socketio.emit('update_log', {'msg': line.strip()})
             process.stdout.close()
             process.wait()
             socketio.emit('update_complete')
@@ -111,7 +95,6 @@ def update_system():
         except Exception as e:
             socketio.emit('update_log', {'msg': f"[ERRORE FATALE] {str(e)}"})
             socketio.emit('update_complete')
-
     eventlet.spawn(run_update_process)
     return jsonify({"status": "updating"})
 
@@ -146,7 +129,6 @@ def get_pico_status():
     except: v_rosso = "0"
     try: v_verde = str(int(os.path.getmtime(os.path.join(BASE_DIR, "pico_code", "pico_verde.py"))))
     except: v_verde = "0"
-    
     return jsonify({
         'server_v_rosso': v_rosso,
         'server_v_verde': v_verde,
@@ -409,7 +391,7 @@ def udp_listener_thread():
             data, addr = udp_sock.recvfrom(1024)
             msg = data.decode('utf-8')
             now = time.time()
-
+            
             if msg.startswith("HIT_"):
                 side = "left" if "ROSSO" in msg else "right"
                 eventlet.spawn(handle_hit_request, side, now, socketio, "HIT")
