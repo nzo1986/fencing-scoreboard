@@ -9,7 +9,7 @@ import os, time, random
 from eventlet.green import socket
 
 from config_state import current_state, load_state, save_state, push_history, pico_last_seen, gironi_cache, get_photo_url, clean_fencer_name, PHOTOS_DIR, get_system_fonts, letter_to_sheet_col, default_columns, BASE_DIR
-from fencing_logic import handle_hit_request, apply_card
+from fencing_logic import handle_hit_request, emit_massa_visual, apply_card
 from google_api import update_all_gironi_data, process_background_upload, check_internet, check_google
 
 app = Flask(__name__)
@@ -380,7 +380,6 @@ def udp_listener_thread():
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     udp_sock.bind(('0.0.0.0', 7777))
-    print("[UDP] Server in ascolto su 0.0.0.0:7777")
     while True:
         try:
             data, addr = udp_sock.recvfrom(1024)
@@ -390,6 +389,11 @@ def udp_listener_thread():
             if msg.startswith("HIT_"):
                 side = "left" if "ROSSO" in msg else "right"
                 eventlet.spawn(handle_hit_request, side, now, socketio)
+                
+            elif msg.startswith("MASSA_MIA_"):
+                side = "left" if "ROSSO" in msg else "right"
+                emit_massa_visual(side, socketio)
+                
             elif msg.startswith("PING_"):
                 side = "rosso" if "ROSSO" in msg else "verde"
                 parts = msg.split('_')

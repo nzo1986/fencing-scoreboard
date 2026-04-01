@@ -4,6 +4,14 @@ from config_state import current_state, save_state
 
 last_hit_timestamp = 0
 hit_sides_in_window = {}
+last_massa_emit = {'left': 0, 'right': 0}
+
+def emit_massa_visual(side, socketio):
+    global last_massa_emit
+    now = time.time()
+    if now - last_massa_emit[side] > 0.5: # 500ms debounce come la durata della luce
+        socketio.emit('hw_massa', {'side': side})
+        last_massa_emit[side] = now
 
 def handle_hit_request(side, hit_timestamp, socketio):
     global last_hit_timestamp, hit_sides_in_window
@@ -22,7 +30,7 @@ def handle_hit_request(side, hit_timestamp, socketio):
         
         current_state[f'fencer_{side}']['score'] += 1
             
-        socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True, 'is_manual': False, 'hit_type': 'HIT'})
+        socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True, 'is_manual': False})
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
         eventlet.spawn(save_state)
@@ -33,15 +41,15 @@ def handle_hit_request(side, hit_timestamp, socketio):
         
         current_state[f'fencer_{side}']['score'] += 1
             
-        socketio.emit('hw_hit', {'side': side, 'is_double': True, 'score_added': True, 'is_manual': False, 'hit_type': 'HIT'})
+        socketio.emit('hw_hit', {'side': side, 'is_double': True, 'score_added': True, 'is_manual': False})
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
         eventlet.spawn(save_state)
 
     elif not current_state['running']:
-        # Test armi (dopo 1.5s dall'ultimo colpo)
+        # Test armi (dopo 1.5s dall'ultimo colpo fa solo la luce)
         if (hit_timestamp - last_hit_timestamp) > 1.5:
-            socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': False, 'is_manual': False, 'hit_type': 'HIT'})
+            socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': False, 'is_manual': False})
             last_hit_timestamp = hit_timestamp
 
 def apply_card(side, card_type, socketio):
