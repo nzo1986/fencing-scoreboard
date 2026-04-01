@@ -31,7 +31,6 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
-# --- ROTTE FOTO E AGGIORNAMENTO LIVE ---
 @app.route('/api/get_fencers')
 def get_fencers():
     names = set()
@@ -49,12 +48,10 @@ def get_fencers():
 
 @app.route('/api/upload_photo', methods=['POST'])
 def upload_photo():
-    if 'photo' not in request.files or 'name' not in request.form:
-        return jsonify({"status": "error", "msg": "Dati mancanti"})
+    if 'photo' not in request.files or 'name' not in request.form: return jsonify({"status": "error", "msg": "Dati mancanti"})
     file = request.files['photo']
     name = request.form['name']
-    if file.filename == '':
-        return jsonify({"status": "error", "msg": "Nessun file selezionato"})
+    if file.filename == '': return jsonify({"status": "error", "msg": "Nessun file selezionato"})
     clean_name = clean_fencer_name(name)
     ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'png'
     filename = f"{clean_name}.{ext}"
@@ -68,17 +65,14 @@ def upload_photo():
     new_url = f"/static/photos/{filename}?v={int(time.time())}"
     updated = False
     if current_state['fencer_left']['name'] == name:
-        current_state['fencer_left']['photo'] = new_url
-        updated = True
+        current_state['fencer_left']['photo'] = new_url; updated = True
     if current_state['fencer_right']['name'] == name:
-        current_state['fencer_right']['photo'] = new_url
-        updated = True
+        current_state['fencer_right']['photo'] = new_url; updated = True
     if updated:
         socketio.emit('state_update', current_state)
         eventlet.spawn(save_state)
     return jsonify({"status": "success", "url": new_url})
 
-# --- ROTTE AGGIORNAMENTO DI SISTEMA E PICO ---
 @app.route('/api/update_system', methods=['POST'])
 def update_system():
     def run_update_process():
@@ -129,6 +123,7 @@ def get_pico_status():
     except: v_rosso = "0"
     try: v_verde = str(int(os.path.getmtime(os.path.join(BASE_DIR, "pico_code", "pico_verde.py"))))
     except: v_verde = "0"
+    
     return jsonify({
         'server_v_rosso': v_rosso,
         'server_v_verde': v_verde,
@@ -394,7 +389,7 @@ def udp_listener_thread():
             
             if msg.startswith("HIT_"):
                 side = "left" if "ROSSO" in msg else "right"
-                eventlet.spawn(handle_hit_request, side, now, socketio, "HIT")
+                eventlet.spawn(handle_hit_request, side, now, socketio)
             elif msg.startswith("PING_"):
                 side = "rosso" if "ROSSO" in msg else "verde"
                 parts = msg.split('_')
