@@ -4,14 +4,21 @@ from config_state import current_state, save_state
 
 last_hit_timestamp = 0
 hit_sides_in_window = {}
+
 last_massa_emit = {'left': 0, 'right': 0}
+last_coccia_time = {'left': 0, 'right': 0}
 
 def emit_massa_visual(side, socketio):
     global last_massa_emit
     now = time.time()
-    if now - last_massa_emit[side] > 0.5: # 500ms debounce
+    if now - last_massa_emit[side] > 0.5: 
         socketio.emit('hw_massa', {'side': side})
         last_massa_emit[side] = now
+
+def register_coccia(side, socketio):
+    global last_coccia_time
+    last_coccia_time[side] = time.time()
+    emit_massa_visual(side, socketio)
 
 def handle_hit_request(side, hit_timestamp, socketio):
     global last_hit_timestamp, hit_sides_in_window
@@ -19,6 +26,19 @@ def handle_hit_request(side, hit_timestamp, socketio):
     if current_state.get('phase') != 'MATCH': 
         return
         
+    opp_side = 'right' if side == 'left' else 'left'
+
+    # INCROCIO FONDAMENTALE: 
+    # Se il ROSSO invia "HIT", ma la coccia del VERDE (opp_side) è stata toccata di recente,
+    # significa che il ROSSO è sulla coccia del VERDE. IL PUNTO DEVE ESSERE ANNULLATO!
+    if abs(hit_timestamp - last_coccia_time[opp_side]) < 0.25:
+        return
+
+    # INCROCIO 2: Corto circuito sull'arma stessa (Lama su propria coccia)
+    if abs(hit_timestamp - last_coccia_time[side]) < 0.25:
+        return
+
+    # Se passa i controlli coccia, valutiamo il punto/doppio
     lockout_ms = 0.045 # Spada: 45ms per doppio
     is_within_lockout = (hit_timestamp - last_hit_timestamp <= lockout_ms)
 
@@ -30,26 +50,26 @@ def handle_hit_request(side, hit_timestamp, socketio):
         
         current_state[f'fencer_{side}']['score'] += 1
             
-        socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True, 'is_manual': False, 'hit_type': 'HIT'})
+        socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True, 'is_manual': False})
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
         eventlet.spawn(save_state)
         
     elif side not in hit_sides_in_window and is_within_lockout:
-        # Secondo colpo (Doppio)
+        # Secondo colpo (Doppio) entro 45ms
         hit_sides_in_window[side] = hit_timestamp
         
         current_state[f'fencer_{side}']['score'] += 1
             
-        socketio.emit('hw_hit', {'side': side, 'is_double': True, 'score_added': True, 'is_manual': False, 'hit_type': 'HIT'})
+        socketio.emit('hw_hit', {'side': side, 'is_double': True, 'score_added': True, 'is_manual': False})
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
         eventlet.spawn(save_state)
 
     elif not current_state['running']:
-        # Test armi a tempo fermo (dopo 1.5s dall'ultimo colpo non da punto, fa solo luce/suono)
+        # Test armi (dopo 1.5s dall'ultimo colpo non da punto, fa solo luce)
         if (hit_timestamp - last_hit_timestamp) > 1.5:
-            socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': False, 'is_manual': False, 'hit_type': 'HIT'})
+            socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': False, 'is_manual': False})
             last_hit_timestamp = hit_timestamp
 
 def apply_card(side, card_type, socketio):
