@@ -28,11 +28,11 @@
         .sys-btn { width: 100%; padding: 15px; font-size: 1.2rem; font-weight: bold; border-radius: 8px; border: none; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all 0.2s;}
         input[type="text"] { width: 100%; padding: 12px; background: #111; color: white; border: 1px solid #555; border-radius: 6px; margin-top: 8px; font-family: monospace; font-size: 1rem; }
         input[type="text"]:focus { border-color: #3b82f6; outline: none; }
-        #update-terminal { font-family: monospace; font-size: 0.85rem; color: #cbd5e1; background: #000; padding: 10px; height: 300px; overflow-y: auto; border: 1px solid #444; border-radius: 5px; line-height: 1.4; word-wrap: break-word;}
         
         .version-box { background: #1f2937; border-radius: 8px; padding: 15px; margin-bottom: 20px; font-family: monospace; font-size: 0.95rem; color: #d1d5db; border: 2px solid #374151; box-shadow: inset 0 0 10px rgba(0,0,0,0.5);}
-        .v-match { color: #4ade80; font-weight: bold;}
-        .v-mismatch { color: #f87171; font-weight: bold;}
+        .term-col { background: #000; border: 1px solid #444; border-radius: 4px; padding: 8px; height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; }
+        
+        .progress-bar-anim { transition: width 10s linear; }
     </style>
 </head>
 <body>
@@ -48,13 +48,20 @@
                 <span>📡 Diagnostica Sensori (Pico)</span>
                 <span class="text-gray-400 text-xs" id="v-server-ver">Server v.--</span>
             </div>
-            <div class="flex justify-between mb-2">
-                <span>🔴 Rosso: <span id="v-bat-r">--</span>%</span>
-                <span id="v-text-r">Attesa dati...</span>
-            </div>
-            <div class="flex justify-between">
-                <span>🟢 Verde: <span id="v-bat-v">--</span>%</span>
-                <span id="v-text-v">Attesa dati...</span>
+            
+            <div class="grid grid-cols-3 gap-2 mt-4">
+                <div class="flex flex-col">
+                    <span class="text-xs text-blue-400 text-center font-bold mb-1 border-b border-blue-800 pb-1">PING (KEEP-ALIVE)</span>
+                    <div id="term-ping" class="term-col text-blue-300"></div>
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-xs text-green-500 text-center font-bold mb-1 border-b border-green-800 pb-1">STATO VERDE</span>
+                    <div id="term-verde" class="term-col text-green-400"></div>
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-xs text-red-500 text-center font-bold mb-1 border-b border-red-800 pb-1">STATO ROSSO</span>
+                    <div id="term-rosso" class="term-col text-red-400"></div>
+                </div>
             </div>
         </div>
 
@@ -138,19 +145,6 @@
             </div>
         </details>
 
-        <div id="update-terminal-container" style="display: none;" class="mt-8 mb-2">
-            <div class="bg-gray-800 p-2 rounded-t-lg border border-gray-600 border-b-0 flex justify-between items-center">
-                <span class="text-sm font-bold text-gray-300">🖥️ Terminale Raspberry Pi</span>
-                <span class="flex h-3 w-3 relative">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                </span>
-            </div>
-            <div id="update-terminal" class="rounded-t-none">
-                [SISTEMA] Inizializzazione aggiornamento...<br>
-            </div>
-        </div>
-
         <div class="mt-10 mb-10 border-t border-gray-700 pt-6">
             <h2 class="text-gray-400 font-bold text-sm mb-2 uppercase tracking-wider text-center">Zona Sviluppo & Aggiornamenti</h2>
             
@@ -158,9 +152,22 @@
                 🔄 Aggiorna App da GitHub
             </button>
             
-            <button onclick="forcePicoReboot()" id="btn-pico-update" class="mt-4 sys-btn bg-cyan-700 hover:bg-cyan-600 text-white border border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.4)]">
-                🔌 Forza Riavvio Sensori (Pico OTA)
-            </button>
+            <!-- PANNELLO AGGIORNAMENTO PICO CON BARRA DI PROGRESSO -->
+            <div class="bg-gray-800 border border-gray-600 rounded-lg p-4 mt-4 shadow-lg" id="pico-update-container">
+                <button onclick="forcePicoReboot()" id="btn-pico-update" class="w-full bg-cyan-700 hover:bg-cyan-600 text-white font-bold py-3 rounded-lg border border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.4)] transition">
+                    🔌 Forza Riavvio Sensori (Pico OTA)
+                </button>
+                <div id="pico-progress-area" style="display: none;" class="mt-4">
+                    <div class="flex justify-between text-xs font-bold text-gray-300 mb-1">
+                        <span id="prog-curr-v">Pico v.--</span>
+                        <span id="prog-new-v">Nuova v.--</span>
+                    </div>
+                    <div class="w-full bg-gray-900 rounded-full h-3 border border-gray-700 overflow-hidden">
+                        <div id="pico-progress-bar" class="bg-cyan-500 h-full w-0 progress-bar-anim"></div>
+                    </div>
+                    <div class="text-center text-xs text-gray-400 mt-2">Le Pico si stanno riavviando e scaricando l'aggiornamento...</div>
+                </div>
+            </div>
         </div>
         
     </div>
@@ -168,79 +175,69 @@
     <script>
         const socket = io();
         let settings = {};
+        let currentPicoVer = "0.0";
+        let serverVer = "0.0";
         
-        // Loop Diagnostica Versioni
         setInterval(() => {
             fetch('/api/pico_status')
                 .then(r => r.json())
                 .then(s => {
-                    const formatVer = (picoV, srvV) => {
-                        if (!picoV || picoV === "0") return `<span class="v-mismatch">Offline</span>`;
-                        if (picoV === srvV) return `<span class="v-match">v.${picoV.substring(0,5)} (OK)</span>`;
-                        return `<span class="v-mismatch">v.${picoV.substring(0,5)} (Srv: v.${srvV.substring(0,5)})</span>`;
-                    };
+                    serverVer = s.server_v_rosso ? s.server_v_rosso.substring(0,5) : '--';
+                    document.getElementById('v-server-ver').innerText = `Server v.${serverVer}`;
                     
-                    document.getElementById('v-server-ver').innerText = `Server v.${s.server_v_rosso ? s.server_v_rosso.substring(0,5) : '--'}`;
-                    
-                    document.getElementById('v-bat-r').innerText = s.rosso.active ? s.rosso.bat : '--';
-                    document.getElementById('v-text-r').innerHTML = s.rosso.active ? formatVer(s.rosso.ver, s.server_v_rosso) : '<span class="v-mismatch">Offline</span>';
-                    
-                    document.getElementById('v-bat-v').innerText = s.verde.active ? s.verde.bat : '--';
-                    document.getElementById('v-text-v').innerHTML = s.verde.active ? formatVer(s.verde.ver, s.server_v_verde) : '<span class="v-mismatch">Offline</span>';
+                    // Prendi la versione della prima pico attiva per la progress bar
+                    if(s.rosso.active && s.rosso.ver !== "0") currentPicoVer = s.rosso.ver.substring(0,5);
+                    else if(s.verde.active && s.verde.ver !== "0") currentPicoVer = s.verde.ver.substring(0,5);
                 }).catch(e => {});
         }, 2000);
+
+        function logToColumn(id, msg) {
+            const el = document.getElementById(id);
+            el.innerHTML += msg + '<br>';
+            if (el.innerHTML.length > 2000) el.innerHTML = el.innerHTML.substring(el.innerHTML.length - 2000);
+            el.scrollTop = el.scrollHeight;
+        }
+
+        socket.on('terminal_ping', d => {
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            logToColumn('term-ping', `[${time}] ${d.side === 'rosso' ? 'R' : 'V'}: Bat ${d.bat}%`);
+        });
+
+        socket.on('terminal_state', d => {
+            const hitIcon = d.hit === "1" ? "PUNTA" : "--";
+            const whiteIcon = d.white === "1" ? "COCCIA" : "--";
+            if (d.hit === "1" || d.white === "1") {
+                logToColumn(d.side === 'rosso' ? 'term-rosso' : 'term-verde', `[TOCCO] ${hitIcon} ${whiteIcon}`);
+            }
+        });
 
         function updateSystem() {
             if(confirm("Vuoi scaricare gli aggiornamenti ed eseguire setup_fencing_kiosk.py?")) {
                 document.getElementById('btn-update').innerText = "⏳ Aggiornamento in corso...";
                 document.getElementById('btn-update').disabled = true;
-                
-                document.getElementById('update-terminal-container').style.display = 'block';
-                const term = document.getElementById('update-terminal');
-                term.innerHTML = '<span class="text-blue-400">[SISTEMA] Richiesta inviata alla Raspberry Pi... Avvio setup_fencing_kiosk.py</span><br>';
-                window.scrollTo(0, document.body.scrollHeight);
-                
                 fetch('/api/update_system', {method: 'POST'})
-                .then(response => {
-                    if(!response.ok) { term.innerHTML += '<span class="text-red-500">[ERRORE] Impossibile contattare il server!</span><br>'; }
-                })
-                .catch(err => { term.innerHTML += '<span class="text-red-500">[ERRORE] '+ err +'</span><br>'; });
             }
         }
 
         function forcePicoReboot() {
-            if(confirm("Inviare segnale di riavvio alle Pico W? (Se c'è un aggiornamento lo scaricheranno prima di accendersi)")) {
-                document.getElementById('btn-pico-update').innerText = "⏳ Invio Segnale Radio...";
-                fetch('/api/reboot_picos', {method: 'POST'})
-                .then(() => {
-                    setTimeout(() => { 
-                        document.getElementById('btn-pico-update').innerHTML = "🔌 Forza Riavvio Sensori (Pico OTA)";
-                        alert("Segnale inviato! Le Pico W si stanno riavviando.");
-                    }, 1500);
-                });
-            }
+            document.getElementById('btn-pico-update').style.display = 'none';
+            document.getElementById('pico-progress-area').style.display = 'block';
+            document.getElementById('prog-curr-v').innerText = `Pico v.${currentPicoVer}`;
+            document.getElementById('prog-new-v').innerText = `Nuova v.${serverVer}`;
+            
+            // Animazione barra 10 secondi
+            setTimeout(() => { document.getElementById('pico-progress-bar').style.width = '100%'; }, 100);
+            
+            fetch('/api/reboot_picos', {method: 'POST'})
+            .then(() => {
+                setTimeout(() => { 
+                    document.getElementById('btn-pico-update').style.display = 'block';
+                    document.getElementById('btn-pico-update').innerHTML = "🔌 Riavvio Completato (Nascondi)";
+                    document.getElementById('pico-progress-area').style.display = 'none';
+                    document.getElementById('pico-progress-bar').style.width = '0%';
+                }, 10000);
+            });
         }
-
-        socket.on('update_log', function(data) {
-            const term = document.getElementById('update-terminal');
-            if(term) {
-                let msg = data.msg;
-                if(msg.includes("[STEP]")) { msg = `<span class="text-green-400 font-bold">\n${msg}</span>`; } 
-                else if(msg.includes("[ERRORE]")) { msg = `<span class="text-red-500 font-bold">${msg}</span>`; } 
-                else if(msg.includes("[SUCCESS]")) { msg = `<span class="text-blue-400 font-bold">${msg}</span>`; }
-                term.innerHTML += `${msg}<br>`;
-                term.scrollTop = term.scrollHeight;
-            }
-        });
-
-        socket.on('update_complete', function() {
-            const term = document.getElementById('update-terminal');
-            if(term) {
-                term.innerHTML += `<br><span class="text-yellow-400 font-bold">[SISTEMA] Aggiornamento completato. Riavvio applicazione in corso... Attendere!</span><br>`;
-                term.scrollTop = term.scrollHeight;
-            }
-            setTimeout(() => { alert("Aggiornamento completato! La pagina verrà ora ricaricata."); window.location.reload(); }, 4000);
-        });
 
         socket.on('state_update', s => {
             if(s.settings) {
@@ -263,10 +260,8 @@
             if(k === 'buzzer_volume' && v > 5) v = 5;
             settings[k] = v; document.getElementById('val_'+k).innerText = v; socket.emit('update_settings', {[k]: v});
         }
-        
         function updateText(k, v) { socket.emit('update_settings', {[k]: v.trim()}); }
         function selectFont(f) { socket.emit('update_settings', {font_family: f}); }
-
         function loadFonts() {
             fetch('/api/get_fonts').then(r => r.json()).then(fonts => {
                 const c = document.getElementById('font-list'); c.innerHTML = '';

@@ -380,13 +380,20 @@ def udp_listener_thread():
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     udp_sock.bind(('0.0.0.0', 7777))
+    print("[UDP] Server in ascolto su 0.0.0.0:7777")
     while True:
         try:
             data, addr = udp_sock.recvfrom(1024)
             msg = data.decode('utf-8')
             now = time.time()
             
-            if msg.startswith("HIT_"):
+            if msg.startswith("STATE_"):
+                parts = msg.split('_')
+                if len(parts) >= 4:
+                    side = "rosso" if parts[1] == "ROSSO" else "verde"
+                    socketio.emit('terminal_state', {'side': side, 'hit': parts[2], 'white': parts[3]})
+
+            elif msg.startswith("HIT_"):
                 side = "left" if "ROSSO" in msg else "right"
                 eventlet.spawn(handle_hit_request, side, now, socketio)
                 
@@ -400,6 +407,7 @@ def udp_listener_thread():
                 bat = parts[2] if len(parts) > 2 else 100
                 ver = parts[3] if len(parts) > 3 else "0"
                 pico_last_seen[side] = {'time': now, 'bat': bat, 'ver': ver}
+                socketio.emit('terminal_ping', {'side': side, 'bat': bat, 'ver': ver})
 
         except: pass
         eventlet.sleep(0.005)
