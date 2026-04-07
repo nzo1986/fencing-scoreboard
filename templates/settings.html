@@ -63,6 +63,7 @@
                     <div id="term-rosso" class="term-col text-red-400"></div>
                 </div>
             </div>
+            <button onclick="document.getElementById('term-ping').innerHTML=''; document.getElementById('term-verde').innerHTML=''; document.getElementById('term-rosso').innerHTML='';" class="mt-2 w-full text-xs text-gray-400 hover:text-white border border-gray-600 p-1 rounded">Pulisci Log</button>
         </div>
 
         <details>
@@ -185,7 +186,6 @@
                     serverVer = s.server_v_rosso ? s.server_v_rosso.substring(0,5) : '--';
                     document.getElementById('v-server-ver').innerText = `Server v.${serverVer}`;
                     
-                    // Prendi la versione della prima pico attiva per la progress bar
                     if(s.rosso.active && s.rosso.ver !== "0") currentPicoVer = s.rosso.ver.substring(0,5);
                     else if(s.verde.active && s.verde.ver !== "0") currentPicoVer = s.verde.ver.substring(0,5);
                 }).catch(e => {});
@@ -200,14 +200,14 @@
 
         socket.on('terminal_ping', d => {
             const time = new Date().toLocaleTimeString().split(' ')[0];
-            logToColumn('term-ping', `[${time}] ${d.side === 'rosso' ? 'R' : 'V'}: Bat ${d.bat}%`);
+            logToColumn('term-ping', `[${time}] ${d.side === 'rosso' ? 'R' : 'V'} | v.${d.ver} | Bat ${d.bat}%`);
         });
 
         socket.on('terminal_state', d => {
-            const hitIcon = d.hit === "1" ? "PUNTA" : "--";
-            const whiteIcon = d.white === "1" ? "COCCIA" : "--";
+            const hitIcon = d.hit === "1" ? "CHIUSO" : "--";
+            const whiteIcon = d.white === "1" ? "CHIUSO" : "--";
             if (d.hit === "1" || d.white === "1") {
-                logToColumn(d.side === 'rosso' ? 'term-rosso' : 'term-verde', `[TOCCO] ${hitIcon} ${whiteIcon}`);
+                logToColumn(d.side === 'rosso' ? 'term-rosso' : 'term-verde', `<strong class="text-white">[TOCCO]</strong> Punta:${hitIcon} Coccia:${whiteIcon}<br><span class="text-xs text-yellow-400">Link: ${d.debug}</span><br>---`);
             }
         });
 
@@ -225,7 +225,6 @@
             document.getElementById('prog-curr-v').innerText = `Pico v.${currentPicoVer}`;
             document.getElementById('prog-new-v').innerText = `Nuova v.${serverVer}`;
             
-            // Animazione barra 10 secondi
             setTimeout(() => { document.getElementById('pico-progress-bar').style.width = '100%'; }, 100);
             
             fetch('/api/reboot_picos', {method: 'POST'})
