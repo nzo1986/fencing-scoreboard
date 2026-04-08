@@ -4,7 +4,7 @@ from config_state import current_state, save_state
 
 last_hit_timestamp = 0
 hit_sides_in_window = {}
-exchange_can_score = False  # Variabile di sicurezza per i colpi doppi a tempo fermo
+exchange_can_score = False 
 
 last_massa_emit = {'left': 0, 'right': 0}
 last_coccia_time = {'left': 0, 'right': 0}
@@ -20,7 +20,7 @@ def register_coccia(side, socketio):
     global last_coccia_time
     last_coccia_time[side] = time.time()
     
-    # Se la coccia di 'side' è stata toccata, la luce bianca va a chi ha toccato (l'avversario)
+    # Segnala visivamente che la coccia è stata toccata
     opp_side = 'right' if side == 'left' else 'left'
     emit_massa_visual(opp_side, socketio)
 
@@ -30,30 +30,29 @@ def handle_hit_request(side, hit_timestamp, socketio):
     if current_state.get('phase') != 'MATCH': 
         return
         
-    # Buffer di latenza per permettere l'arrivo dell'eventuale pacchetto "COCCIA"
+    # BUFFER DI LATENZA: Attende 60ms per permettere ai pacchetti 'COCCIA' di arrivare
     eventlet.sleep(0.06)
         
     opp_side = 'right' if side == 'left' else 'left'
 
-    # INCROCIO 1: Lama mia su Coccia sua -> ANNULLA PUNTO
+    # Se c'è un tocco sulla coccia avvenuto quasi in contemporanea, ANNULLA PUNTO
     if abs(hit_timestamp - last_coccia_time[opp_side]) < 0.25:
         emit_massa_visual(side, socketio)
         return
 
-    # INCROCIO 2: Corto circuito anomalo sull'arma stessa -> ANNULLA PUNTO
     if abs(hit_timestamp - last_coccia_time[side]) < 0.25:
         return
 
-    # Tolleranza FIE per colpo doppio nella Spada: 40-50 millisecondi
+    # Tolleranza per colpo doppio: 50ms
     lockout_ms = 0.050 
     is_within_lockout = (hit_timestamp - last_hit_timestamp <= lockout_ms)
 
     if current_state['running']:
-        # --- 1. PRIMO COLPO A TEMPO AVVIATO ---
-        current_state['running'] = False # Ferma il tempo istantaneamente
+        # PRIMO COLPO
+        current_state['running'] = False 
         last_hit_timestamp = hit_timestamp
         hit_sides_in_window = {side: hit_timestamp}
-        exchange_can_score = True # Abilita l'assegnazione punti per l'eventuale doppio
+        exchange_can_score = True 
         
         current_state[f'fencer_{side}']['score'] += 1
             
@@ -63,24 +62,23 @@ def handle_hit_request(side, hit_timestamp, socketio):
         eventlet.spawn(save_state)
         
     elif side not in hit_sides_in_window and is_within_lockout:
-        # --- 2. SECONDO COLPO (DOPPIO) ---
+        # DOPPIO (entro 50ms)
         hit_sides_in_window[side] = hit_timestamp
         
         if exchange_can_score:
-            # Il primo colpo era a tempo avviato, quindi questo doppio è VALIDO
             current_state[f'fencer_{side}']['score'] += 1
             socketio.emit('hw_hit', {'side': side, 'is_double': True, 'score_added': True, 'is_manual': False})
             socketio.emit('state_update', current_state)
             socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
             eventlet.spawn(save_state)
         else:
-            # Il primo colpo era a tempo fermo, quindi questo è solo un TEST DEL DOPPIO (Non fa punti)
+            # Doppio a tempo fermo (test armi, nessun punto)
             socketio.emit('hw_hit', {'side': side, 'is_double': True, 'score_added': False, 'is_manual': False})
 
     elif not current_state['running']:
-        # --- 3. TEST ARMI A TEMPO FERMO (Singolo tocco) ---
+        # TEST ARMI (tempo fermo, nessun punto)
         if (hit_timestamp - last_hit_timestamp) > 1.5:
-            exchange_can_score = False # Disabilita i punti per i doppi successivi
+            exchange_can_score = False 
             last_hit_timestamp = hit_timestamp
             hit_sides_in_window = {side: hit_timestamp}
             

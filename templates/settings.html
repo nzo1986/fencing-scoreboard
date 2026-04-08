@@ -33,6 +33,9 @@
         .term-col { background: #000; border: 1px solid #444; border-radius: 4px; padding: 8px; height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; }
         
         .progress-bar-anim { transition: width 10s linear; }
+        
+        .v-match { color: #4ade80; font-weight: bold; font-size: 0.8rem; }
+        .v-mismatch { color: #f87171; font-weight: bold; font-size: 0.8rem; }
     </style>
 </head>
 <body>
@@ -44,9 +47,18 @@
     <div class="px-3 max-w-2xl mx-auto">
         
         <div class="version-box">
-            <div class="font-bold text-white mb-3 pb-2 border-b border-gray-600 flex justify-between">
+            <div class="font-bold text-white mb-3 pb-2 border-b border-gray-600 flex justify-between items-end">
                 <span>📡 Diagnostica Sensori (Pico)</span>
-                <span class="text-gray-400 text-xs" id="v-server-ver">Server v.--</span>
+                <span class="text-gray-400 text-xs" id="v-server-ver">Codice Server: --</span>
+            </div>
+            
+            <div class="flex justify-between mb-3 items-center">
+                <span>🔴 Rosso: <span id="v-bat-r" class="font-bold">--</span>%</span>
+                <span id="v-text-r">Attesa dati...</span>
+            </div>
+            <div class="flex justify-between border-b border-gray-700 pb-3 mb-3 items-center">
+                <span>🟢 Verde: <span id="v-bat-v" class="font-bold">--</span>%</span>
+                <span id="v-text-v">Attesa dati...</span>
             </div>
             
             <div class="grid grid-cols-3 gap-2 mt-4">
@@ -150,23 +162,18 @@
             <h2 class="text-gray-400 font-bold text-sm mb-2 uppercase tracking-wider text-center">Zona Sviluppo & Aggiornamenti</h2>
             
             <button onclick="updateSystem()" id="btn-update" class="mt-2 sys-btn bg-green-700 hover:bg-green-600 text-white shadow-[0_0_15px_rgba(34,197,94,0.5)] border border-green-500">
-                🔄 Aggiorna App da GitHub
+                🔄 1. Aggiorna App da GitHub
             </button>
             
-            <!-- PANNELLO AGGIORNAMENTO PICO CON BARRA DI PROGRESSO -->
             <div class="bg-gray-800 border border-gray-600 rounded-lg p-4 mt-4 shadow-lg" id="pico-update-container">
                 <button onclick="forcePicoReboot()" id="btn-pico-update" class="w-full bg-cyan-700 hover:bg-cyan-600 text-white font-bold py-3 rounded-lg border border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.4)] transition">
-                    🔌 Forza Riavvio Sensori (Pico OTA)
+                    🔌 2. Forza Riavvio Sensori (Pico OTA)
                 </button>
                 <div id="pico-progress-area" style="display: none;" class="mt-4">
-                    <div class="flex justify-between text-xs font-bold text-gray-300 mb-1">
-                        <span id="prog-curr-v">Pico v.--</span>
-                        <span id="prog-new-v">Nuova v.--</span>
-                    </div>
                     <div class="w-full bg-gray-900 rounded-full h-3 border border-gray-700 overflow-hidden">
                         <div id="pico-progress-bar" class="bg-cyan-500 h-full w-0 progress-bar-anim"></div>
                     </div>
-                    <div class="text-center text-xs text-gray-400 mt-2">Le Pico si stanno riavviando e scaricando l'aggiornamento...</div>
+                    <div class="text-center text-xs text-gray-400 mt-2">Le Pico si stanno riavviando per controllare le modifiche...</div>
                 </div>
             </div>
         </div>
@@ -176,18 +183,33 @@
     <script>
         const socket = io();
         let settings = {};
-        let currentPicoVer = "0.0";
-        let serverVer = "0.0";
+        
+        const unixToTime = (ts) => {
+            if (!ts || ts === "0" || ts === "--") return null;
+            return new Date(parseInt(ts) * 1000).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        };
         
         setInterval(() => {
             fetch('/api/pico_status')
                 .then(r => r.json())
                 .then(s => {
-                    serverVer = s.server_v_rosso ? s.server_v_rosso.substring(0,5) : '--';
-                    document.getElementById('v-server-ver').innerText = `Server v.${serverVer}`;
+                    const serverVer = s.server_v_rosso ? s.server_v_rosso : '--';
+                    const srvTime = unixToTime(serverVer);
+                    document.getElementById('v-server-ver').innerText = `File su Server modificati alle: ${srvTime || '--'}`;
                     
-                    if(s.rosso.active && s.rosso.ver !== "0") currentPicoVer = s.rosso.ver.substring(0,5);
-                    else if(s.verde.active && s.verde.ver !== "0") currentPicoVer = s.verde.ver.substring(0,5);
+                    const formatVer = (picoV, srvV) => {
+                        if (!picoV || picoV === "0") return `<span class="v-mismatch">Offline (Non connesso)</span>`;
+                        const pTime = unixToTime(picoV);
+                        const sTime = unixToTime(srvV);
+                        if (picoV === srvV) return `<span class="v-match">Allineato (${pTime})</span>`;
+                        return `<span class="v-mismatch">Obsoleto (Pico: ${pTime} / Srv: ${sTime})</span>`;
+                    };
+                    
+                    document.getElementById('v-bat-r').innerText = s.rosso.active ? s.rosso.bat : '--';
+                    document.getElementById('v-text-r').innerHTML = s.rosso.active ? formatVer(s.rosso.ver, serverVer) : '<span class="v-mismatch">Offline</span>';
+                    
+                    document.getElementById('v-bat-v').innerText = s.verde.active ? s.verde.bat : '--';
+                    document.getElementById('v-text-v').innerHTML = s.verde.active ? formatVer(s.verde.ver, s.server_v_verde) : '<span class="v-mismatch">Offline</span>';
                 }).catch(e => {});
         }, 2000);
 
@@ -200,7 +222,7 @@
 
         socket.on('terminal_ping', d => {
             const time = new Date().toLocaleTimeString().split(' ')[0];
-            logToColumn('term-ping', `[${time}] ${d.side === 'rosso' ? 'R' : 'V'} | v.${d.ver} | Bat ${d.bat}%`);
+            logToColumn('term-ping', `[${time}] ${d.side === 'rosso' ? 'R' : 'V'} | Bat ${d.bat}%`);
         });
 
         socket.on('terminal_state', d => {
@@ -222,8 +244,6 @@
         function forcePicoReboot() {
             document.getElementById('btn-pico-update').style.display = 'none';
             document.getElementById('pico-progress-area').style.display = 'block';
-            document.getElementById('prog-curr-v').innerText = `Pico v.${currentPicoVer}`;
-            document.getElementById('prog-new-v').innerText = `Nuova v.${serverVer}`;
             
             setTimeout(() => { document.getElementById('pico-progress-bar').style.width = '100%'; }, 100);
             
