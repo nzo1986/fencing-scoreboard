@@ -34,6 +34,12 @@
         .priority-active { border-color: #ffffff !important; box-shadow: 0 0 35px #ffffff !important; transform: scale(1.05); }
         
         #audio-unlocker { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.95); display: flex; justify-content: center; align-items: center; cursor: pointer; flex-direction: column; transition: opacity 0.5s; }
+        
+        /* Stili per i cartellini */
+        .card-indicator { width: 45px; height: 60px; border-radius: 6px; display: none; border: 2px solid rgba(255,255,255,0.8); font-weight: bold; align-items: center; justify-content: center; font-size: 1.8rem; box-shadow: 0 4px 10px rgba(0,0,0,0.8); text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+        .card-y { background-color: #facc15; color: #000; }
+        .card-r { background-color: #ef4444; color: #fff; }
+        .card-b { background-color: #111111; color: #fff; }
     </style>
 </head>
 <body class="cursor-none">
@@ -49,6 +55,15 @@
                 <img id="ph-l" src="" class="fencer-photo border-red-800" onerror="this.src='/static/photos/default.png'">
                 <span id="s-l" class="score-box stroked text-red-600 font-bold">0</span>
             </div>
+            <!-- Box Cartellini SX -->
+            <div class="flex gap-3 mt-4 h-16 items-center justify-center w-full">
+                <div id="card-l-p-y" class="card-indicator card-y">P</div>
+                <div id="card-l-p-r" class="card-indicator card-r">P</div>
+                <div id="card-l-p-b" class="card-indicator card-b">P</div>
+                <div id="card-l-y" class="card-indicator card-y"></div>
+                <div id="card-l-r" class="card-indicator card-r"></div>
+                <div id="card-l-b" class="card-indicator card-b"></div>
+            </div>
         </div>
         <div class="center-col" id="center-col-container">
             <div class="list-title">Prossimi Incontri</div>
@@ -59,6 +74,15 @@
             <div class="score-container">
                 <img id="ph-r" src="" class="fencer-photo border-green-800" onerror="this.src='/static/photos/default.png'">
                 <span id="s-r" class="score-box stroked text-green-600 font-bold">0</span>
+            </div>
+            <!-- Box Cartellini DX -->
+            <div class="flex gap-3 mt-4 h-16 items-center justify-center w-full">
+                <div id="card-r-p-y" class="card-indicator card-y">P</div>
+                <div id="card-r-p-r" class="card-indicator card-r">P</div>
+                <div id="card-r-p-b" class="card-indicator card-b">P</div>
+                <div id="card-r-y" class="card-indicator card-y"></div>
+                <div id="card-r-r" class="card-indicator card-r"></div>
+                <div id="card-r-b" class="card-indicator card-b"></div>
             </div>
         </div>
     </div>
@@ -119,7 +143,7 @@
         socket.on('hw_massa', data => {
             const col = document.getElementById(data.side === 'left' ? 'col-l' : 'col-r');
             col.classList.add('hit-glow-white');
-            setTimeout(() => col.classList.remove('hit-glow-white'), 500); // DURATA ESATTA 500ms
+            setTimeout(() => col.classList.remove('hit-glow-white'), 500);
         });
 
         socket.on('time_expired', () => { playBeep(500, 1.0); });
@@ -149,6 +173,16 @@
         socket.on('timer_update', d => { 
             document.getElementById('timer').innerText = d.time > 10 ? `${Math.floor(d.time/60)}:${(Math.floor(d.time%60)<10?'0':'')+Math.floor(d.time%60)}` : d.time.toFixed(1); 
         });
+
+        const updateCardsUI = (side, fencer) => {
+            const sc = side === 'left' ? 'l' : 'r';
+            document.getElementById(`card-${sc}-y`).style.display = fencer.cards.Y ? 'flex' : 'none';
+            document.getElementById(`card-${sc}-r`).style.display = fencer.cards.R ? 'flex' : 'none';
+            document.getElementById(`card-${sc}-b`).style.display = fencer.cards.B ? 'flex' : 'none';
+            document.getElementById(`card-${sc}-p-y`).style.display = fencer.p_cards.Y ? 'flex' : 'none';
+            document.getElementById(`card-${sc}-p-r`).style.display = fencer.p_cards.R ? 'flex' : 'none';
+            document.getElementById(`card-${sc}-p-b`).style.display = fencer.p_cards.B ? 'flex' : 'none';
+        };
 
         socket.on('state_update', s => {
             if(s.settings) { 
@@ -191,6 +225,10 @@
             document.getElementById('s-r').innerText=s.fencer_right.score;
             if (s.fencer_left.photo) document.getElementById('ph-l').src = s.fencer_left.photo;
             if (s.fencer_right.photo) document.getElementById('ph-r').src = s.fencer_right.photo;
+
+            // Aggiorna la visibilità dei cartellini
+            updateCardsUI('left', s.fencer_left);
+            updateCardsUI('right', s.fencer_right);
 
             const listC = document.getElementById('match-list-container');
             if (s.match_list && s.match_list.length > 0) {
