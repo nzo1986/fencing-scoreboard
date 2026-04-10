@@ -21,6 +21,7 @@ def register_coccia(side, socketio):
     last_coccia_time[side] = time.time()
     
     # Segnala visivamente che la coccia è stata toccata
+    # La luce bianca va all'avversario (chi ha toccato)
     opp_side = 'right' if side == 'left' else 'left'
     emit_massa_visual(opp_side, socketio)
 
@@ -30,7 +31,7 @@ def handle_hit_request(side, hit_timestamp, socketio):
     if current_state.get('phase') != 'MATCH': 
         return
         
-    # BUFFER DI LATENZA: Attende 60ms per permettere ai pacchetti 'COCCIA' di arrivare
+    # BUFFER DI LATENZA: Attende 60ms per permettere ai pacchetti 'COCCIA' di arrivare via Wi-Fi
     eventlet.sleep(0.06)
         
     opp_side = 'right' if side == 'left' else 'left'
@@ -40,10 +41,11 @@ def handle_hit_request(side, hit_timestamp, socketio):
         emit_massa_visual(side, socketio)
         return
 
+    # Corto circuito lama propria su coccia propria
     if abs(hit_timestamp - last_coccia_time[side]) < 0.25:
         return
 
-    # Tolleranza per colpo doppio: 50ms
+    # Tolleranza per colpo doppio FIE Spada: 45-50ms
     lockout_ms = 0.050 
     is_within_lockout = (hit_timestamp - last_hit_timestamp <= lockout_ms)
 
