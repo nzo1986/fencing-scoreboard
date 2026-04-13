@@ -1,12 +1,12 @@
 import network, time, machine, socket, os
 try: import urequests as requests
 except: pass
-from machine import Pin, ADC, PWM, time_pulse_us
+from machine import Pin, ADC
 
 WIFI_SSID, WIFI_PASS = "RouterEnzoM", "Aurorapad5"
 PICO_NAME, UDP_IP, UDP_PORT = "verde", "192.168.1.110", 7777
 
-LOCAL_VERSION = "8.0"
+LOCAL_VERSION = "9.0"
 
 def connect_wifi_and_ota():
     global LOCAL_VERSION
@@ -33,7 +33,6 @@ def connect_wifi_and_ota():
                 r = requests.get(f"http://{UDP_IP}:5000/api/ota/{PICO_NAME}/code", timeout=5)
                 codice_nuovo = r.text
                 r.close()
-                
                 if len(codice_nuovo) > 1000:
                     with open("temp.py", "w") as f: f.write(codice_nuovo)
                     try: os.remove("main.py")
@@ -64,25 +63,17 @@ def loop():
     udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     
     # ----------------------------------------------------
-    # FIRMA ELETTRICA VERDE: PWM a 250 Hz
-    # L'impulso HIGH durerà esattamente ~2000 microsecondi
+    # TEST ESTREMO "RADAR" (Senza Massa Comune)
     # ----------------------------------------------------
-    pwm13 = PWM(Pin(13))
-    pwm13.freq(250)
-    pwm13.duty_u16(32768) # Duty cycle 50%
-
+    pin13 = Pin(13, Pin.OUT)
     pin14 = Pin(14, Pin.IN, Pin.PULL_DOWN)
-    pin15 = Pin(15, Pin.IN, Pin.PULL_DOWN) 
     
-    b_was_pressed = False
-    c_was_pressed = False
-    in_lockout = False
-    lockout_start_time = 0
+    # Rimuoviamo la resistenza di Pull-Down per rendere il pin "FLOTTANTE"
+    # Si comporterà come un'antenna estremamente sensibile
+    pin15 = Pin(15, Pin.IN) 
+    
     ping_next_time = time.ticks_ms()
     last_state_str = ""
-
-    led_active = False
-    led_turn_off_time = 0
 
     while True:
         try:
@@ -94,78 +85,48 @@ def loop():
                 except: pass
                 ping_next_time = time.ticks_add(current_time, 2000)
 
-            is_hit = False
+            # 1. EMISSIONE COSTANTE 3.3V SULLA LAMA
+            pin13.value(1)
+            
+            # 2. LETTURA PUNTA PROPRIA
+            is_hit = (pin14.value() == 1)
+
+            # 3. ASCOLTO RADAR COCCIA (Scansione ultra-rapida)
+            noise_count = 0
+            for _ in range(1000): # 1000 letture alla massima velocità del processore
+                if pin15.value() == 1:
+                    noise_count += 1
+            
             is_coccia = False
-            debug_msg = "Nessuno"
+            debug_msg = "SILENZIO"
 
-            # --- 1. LETTURA PUNTA (Aspetto la MIA firma: ~2000us) ---
-            # La punta della spada chiude il circuito tra 13 e 14.
-            pw_14 = -1
-            try: pw_14 = time_pulse_us(pin14, 1, 6000)
-            except: pass
-            
-            if 1000 < pw_14 < 3000:
-                is_hit = True
-                debug_msg = "PUNTA_VERDE_CHIUSA"
-
-            # --- 2. LETTURA COCCIA (Aspetto la MIA firma ~2000us o la ROSSA ~400us) ---
-            pw_15 = -1
-            try: pw_15 = time_pulse_us(pin15, 1, 6000)
-            except: pass
-            
-            if 1000 < pw_15 < 3000:
+            # Se capta anche solo 2 microscopici picchi di tensione, li segnala!
+            if noise_count > 2:
                 is_coccia = True
-                debug_msg = "MIA_LAMA_SU_MIA_COCCIA"
-            elif 150 < pw_15 < 650:
-                is_coccia = True
-                debug_msg = "LAMA_ROSSA_SU_MIA_COCCIA"
+                debug_msg = f"RUMORE_CAPTATO:_{noise_count}_PICCHI"
 
-            hit_val = 1 if (is_hit and not is_coccia) else 0
+            if is_hit and not is_coccia: debug_msg = "PUNTA_MIA_CHIUSA"
+
+            # --- TRASMISSIONE DATI AL RASPBERRY PER DEBUG VISIVO ---
+            hit_val = 1 if is_hit else 0
             white_val = 1 if is_coccia else 0
             
-            # --- FEEDBACK DISPLAY E LED ---
             state_str = f"{hit_val}_{white_val}"
-            if state_str != last_state_str:
-                if hit_val == 1 or white_val == 1: 
-                    onboard_led.value(1)
-                    led_active = True
-                    led_turn_off_time = time.ticks_add(time.ticks_ms(), 500)
+            
+            # Invia lo stato al terminale solo se cambia, OPPURE se c'è rumore
+            if state_str != last_state_str or is_coccia:
+                if hit_val == 1 or white_val == 1: onboard_led.value(1)
+                else: onboard_led.value(0)
                 
                 try: udp_socket.sendto(f"STATE_{PICO_NAME.upper()}_{state_str}_{debug_msg}".encode('utf-8'), (UDP_IP, UDP_PORT))
                 except: pass
                 last_state_str = state_str
-
-            if led_active and time.ticks_diff(time.ticks_ms(), led_turn_off_time) > 0:
-                onboard_led.value(0)
-                if hit_val == 0 and white_val == 0:
-                    led_active = False
-
-            # --- INVIO DATI AL RASPBERRY ---
-            if white_val:
-                if not c_was_pressed:
-                    for _ in range(3):
-                        try: udp_socket.sendto(f"COCCIA_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
-                        except: pass
-                        time.sleep_ms(2)
-                c_was_pressed = True
-            else:
-                c_was_pressed = False
-
-            if hit_val:
-                if not b_was_pressed and not in_lockout:
-                    for _ in range(3):
-                        try: udp_socket.sendto(f"HIT_{PICO_NAME.upper()}".encode('utf-8'), (UDP_IP, UDP_PORT))
-                        except: pass
-                        time.sleep_ms(2)
-                    in_lockout = True
-                    lockout_start_time = current_time
-                b_was_pressed = True
-            else:
-                b_was_pressed = False
-
-            if in_lockout and time.ticks_diff(current_time, lockout_start_time) >= 800: 
-                in_lockout = False
                 
+                # Se abbiamo stampato un rumore, dormiamo un attimo per non floodare il terminale
+                if is_coccia: time.sleep_ms(100)
+
+            time.sleep_ms(2) 
+
         except Exception as e:
             time.sleep_ms(100)
 
