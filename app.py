@@ -3,13 +3,12 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 import eventlet
 eventlet.monkey_patch()
 
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit
 import os, time, random
-from eventlet.green import socket
 
-from config_state import current_state, load_state, save_state, push_history, pico_last_seen, gironi_cache, get_photo_url, clean_fencer_name, PHOTOS_DIR, get_system_fonts, letter_to_sheet_col, default_columns, BASE_DIR
-from fencing_logic import handle_hit_request, register_coccia, apply_card
+from config_state import current_state, load_state, save_state, push_history, gironi_cache, get_photo_url, clean_fencer_name, PHOTOS_DIR, get_system_fonts, letter_to_sheet_col, default_columns, BASE_DIR
+from fencing_logic import apply_card
 from google_api import update_all_gironi_data, process_background_upload, check_internet, check_google
 
 app = Flask(__name__)
@@ -24,6 +23,8 @@ def telecomando(): return render_template('telecomando.html')
 def settings(): return render_template('settings.html')
 @app.route('/riferimenti')
 def riferimenti(): return render_template('riferimenti.html')
+@app.route('/inserisci_punti')
+def inserisci_punti(): return render_template('inserisci_punti.html')
 @app.route('/wifi')
 def wifi_page(): return render_template('wifi.html')
 @app.route('/foto')
@@ -92,51 +93,8 @@ def update_system():
     eventlet.spawn(run_update_process)
     return jsonify({"status": "updating"})
 
-@app.route('/api/reboot_picos', methods=['POST'])
-def reboot_picos():
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        s.sendto(b"REBOOT_PICO", ('<broadcast>', 7778))
-        s.sendto(b"REBOOT_PICO", ('255.255.255.255', 7778)) 
-        s.close()
-    except: pass
-    return jsonify({"status": "ok"})
-
-@app.route('/api/ota/<pico_name>/version')
-def ota_version(pico_name):
-    try:
-        file_path = os.path.join(BASE_DIR, "pico_code", f"pico_{pico_name}.py")
-        if os.path.exists(file_path): return str(int(os.path.getmtime(file_path)))
-    except: pass
-    return "0"
-
-@app.route('/api/ota/<pico_name>/code')
-def ota_code(pico_name):
-    file_path = os.path.join(BASE_DIR, "pico_code", f"pico_{pico_name}.py")
-    return send_file(file_path, mimetype='text/plain')
-
-@app.route('/api/pico_status')
-def get_pico_status():
-    now = time.time()
-    try: v_rosso = str(int(os.path.getmtime(os.path.join(BASE_DIR, "pico_code", "pico_rosso.py"))))
-    except: v_rosso = "0"
-    try: v_verde = str(int(os.path.getmtime(os.path.join(BASE_DIR, "pico_code", "pico_verde.py"))))
-    except: v_verde = "0"
-    
-    return jsonify({
-        'server_v_rosso': v_rosso,
-        'server_v_verde': v_verde,
-        'rosso': {'active': (now - pico_last_seen['rosso']['time']) < 5, 'bat': pico_last_seen['rosso']['bat'], 'ver': pico_last_seen['rosso'].get('ver', '0')},
-        'verde': {'active': (now - pico_last_seen['verde']['time']) < 5, 'bat': pico_last_seen['verde']['bat'], 'ver': pico_last_seen['verde'].get('ver', '0')}
-    })
-
 @app.route('/api/get_fonts')
 def api_get_fonts(): return jsonify(get_system_fonts())
-@app.route('/api/scan_wifi')
-def api_scan(): return jsonify([])
-@app.route('/api/saved_wifi')
-def api_saved(): return jsonify([])
 
 @socketio.on('connect')
 def handle_connect(): 
@@ -171,6 +129,15 @@ def db_hit():
 def handle_card(d):
     push_history()
     apply_card(d['side'], d['card'], socketio)
+
+@socketio.on('reset_cards')
+def handle_reset_cards(data):
+    push_history()
+    side = data['side']
+    current_state[f'fencer_{side}']['cards'] = {"Y": False, "R": False, "B": False, "R_count": 0}
+    current_state[f'fencer_{side}']['p_cards'] = {"Y": False, "R": False, "B": False}
+    socketio.emit('state_update', current_state)
+    eventlet.spawn(save_state)
 
 @socketio.on('toggle_timer')
 def handle_toggle():
@@ -348,6 +315,25 @@ def handle_send_result():
     else:
         socketio.emit('action_feedback', {'status': 'info', 'msg': 'Nessun altro assalto a 0 nel girone!'})
 
+@socketio.on('send_background_result')
+def handle_send_background_result(data):
+    if not current_state['settings'].get('google_script_url'):
+        socketio.emit('action_feedback', {'status': 'error', 'msg': 'Errore: URL Google Script mancante nelle impostazioni.'})
+        return
+    g = data['girone']
+    cols_map = current_state['settings'].get('columns', default_columns)
+    cols = cols_map.get(g, default_columns['rosso']) 
+    payload = { 
+        "sheet_name": "display3gir", 
+        "row": data['row'], 
+        "col_sx": letter_to_sheet_col(cols['psx']), 
+        "val_sx": data['val_sx'], 
+        "col_dx": letter_to_sheet_col(cols['pdx']), 
+        "val_dx": data['val_dx'] 
+    }
+    socketio.emit('action_feedback', {'status': 'info', 'msg': f"Invio risultato {data['sx']} vs {data['dx']} in background..."})
+    eventlet.spawn(process_background_upload, payload, g, socketio)
+
 @socketio.on('fetch_sheet')
 def f_sheet(d=None):
     if d and 'girone' in d:
@@ -376,43 +362,7 @@ def timer_thread():
                 eventlet.spawn(save_state)
         eventlet.sleep(0.1)
 
-def udp_listener_thread():
-    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    udp_sock.bind(('0.0.0.0', 7777))
-    while True:
-        try:
-            data, addr = udp_sock.recvfrom(1024)
-            msg = data.decode('utf-8')
-            now = time.time()
-            
-            if msg.startswith("STATE_"):
-                parts = msg.split('_', 4) 
-                if len(parts) >= 5:
-                    side = "rosso" if parts[1] == "ROSSO" else "verde"
-                    socketio.emit('terminal_state', {'side': side, 'hit': parts[2], 'white': parts[3], 'debug': parts[4]})
-
-            elif msg.startswith("HIT_"):
-                side = "left" if "ROSSO" in msg else "right"
-                eventlet.spawn(handle_hit_request, side, now, socketio)
-                
-            elif msg.startswith("COCCIA_"):
-                side = "left" if "ROSSO" in msg else "right"
-                eventlet.spawn(register_coccia, side, socketio)
-                
-            elif msg.startswith("PING_"):
-                side = "rosso" if "ROSSO" in msg else "verde"
-                parts = msg.split('_')
-                bat = parts[2] if len(parts) > 2 else 100
-                ver = parts[3] if len(parts) > 3 else "0"
-                pico_last_seen[side] = {'time': now, 'bat': bat, 'ver': ver}
-                socketio.emit('terminal_ping', {'side': side, 'bat': bat, 'ver': ver})
-
-        except: pass
-        eventlet.sleep(0.005)
-
 eventlet.spawn(timer_thread)
-eventlet.spawn(udp_listener_thread) 
 
 if __name__ == '__main__':
     load_state()

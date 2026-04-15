@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Inserimento Punti Gironi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { background: #0f172a; color: white; font-family: sans-serif; touch-action: manipulation; padding-bottom: 30px; }
+        .match-row { display: flex; align-items: center; justify-content: space-between; background: #1e293b; padding: 12px; margin-bottom: 8px; border-radius: 8px; border: 1px solid #334155; }
+        .score-input { width: 50px; text-align: center; background: #0f172a; color: white; border: 1px solid #475569; border-radius: 6px; padding: 8px; font-size: 1.2rem; font-weight: bold; appearance: textfield; }
+        .score-input::-webkit-outer-spin-button, .score-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .fencer-name { flex: 1; font-size: 1rem; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    </style>
+</head>
+<body class="p-3">
+
+    <div class="flex justify-between items-center mb-6 pb-3 border-b border-slate-700">
+        <h1 class="text-xl font-bold text-slate-100">📝 Inserimento Rapido Punti</h1>
+        <button onclick="window.location.href='/telecomando'" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg font-bold shadow transition text-sm">Indietro</button>
+    </div>
+
+    <div class="mb-4">
+        <select id="girone-select" class="w-full bg-slate-800 text-white border border-slate-600 p-3 rounded-lg font-bold text-lg text-center" onchange="renderMatches()">
+            <option value="rosso">Girone Rosso</option>
+            <option value="giallo">Girone Giallo</option>
+            <option value="blu">Girone Blu</option>
+            <option value="verde">Girone Verde</option>
+            <option value="32">Tabellone 32</option>
+        </select>
+    </div>
+
+    <div class="flex justify-between mb-4">
+        <button onclick="socket.emit('fetch_sheet')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded w-full shadow border border-indigo-400">🔄 Sincronizza con Google Sheets</button>
+    </div>
+
+    <div id="match-list" class="flex flex-col">
+        <div class="text-center py-10 text-slate-400">In attesa dei dati dal server...</div>
+    </div>
+
+    <script>
+        const socket = io();
+        let allGironi = {};
+
+        // Appena connessi chiediamo di aggiornare i dati
+        socket.on('connect', () => {
+            socket.emit('fetch_sheet');
+        });
+
+        socket.on('gironi_cache_update', cache => {
+            allGironi = cache;
+            renderMatches();
+        });
+
+        socket.on('action_feedback', d => {
+            alert(d.msg);
+        });
+
+        function renderMatches() {
+            const girone = document.getElementById('girone-select').value;
+            const matches = allGironi[girone] || [];
+            const container = document.getElementById('match-list');
+            
+            container.innerHTML = '';
+            
+            let count = 0;
+            matches.forEach(m => {
+                // Mostra solo gli assalti che hanno effettivamente dei nomi
+                if (!m.sx || !m.dx || m.sx.trim() === '' || m.dx.trim() === '') return;
+                
+                count++;
+                const html = `
+                <div class="match-row">
+                    <div class="fencer-name text-right pr-2 text-red-400">${m.sx}</div>
+                    <div class="flex items-center gap-1">
+                        <input type="number" id="sx_${m.row}" value="${m.p_sx}" class="score-input">
+                        <span class="text-slate-500 font-bold">-</span>
+                        <input type="number" id="dx_${m.row}" value="${m.p_dx}" class="score-input">
+                    </div>
+                    <div class="fencer-name text-left pl-2 text-green-400">${m.dx}</div>
+                    <button onclick="sendScore('${girone}', ${m.row}, '${m.sx.replace(/'/g, "\\'")}', '${m.dx.replace(/'/g, "\\'")}')" class="ml-3 bg-blue-600 active:bg-blue-500 p-3 rounded-lg shadow font-bold border border-blue-400">Invia</button>
+                </div>
+                `;
+                container.insertAdjacentHTML('beforeend', html);
+            });
+
+            if(count === 0) {
+                container.innerHTML = '<div class="text-center py-10 text-slate-400">Nessun assalto valido in questo girone.</div>';
+            }
+        }
+
+        function sendScore(girone, row, sxName, dxName) {
+            const val_sx = document.getElementById(`sx_${row}`).value;
+            const val_dx = document.getElementById(`dx_${row}`).value;
+            
+            if(val_sx === '' || val_dx === '') {
+                alert("Inserisci entrambi i punteggi prima di inviare!");
+                return;
+            }
+
+            if(confirm(`Vuoi inviare il risultato: \n\n${sxName} [${val_sx}] - [${val_dx}] ${dxName}?`)) {
+                socket.emit('send_background_result', {
+                    girone: girone,
+                    row: row,
+                    sx: sxName,
+                    dx: dxName,
+                    val_sx: val_sx,
+                    val_dx: val_dx
+                });
+            }
+        }
+    </script>
+</body>
+</html>

@@ -2,317 +2,191 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-    <title>Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Telecomando</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        body{user-select:none;-webkit-user-select:none;background:#050515;color:#eee;touch-action:manipulation;font-family:sans-serif;min-height:100vh;overflow-y:auto;overflow-x:hidden;padding-bottom:10px}
-        button:active{transform:scale(0.97);filter:brightness(0.9)}
-        .ctrl-btn{width:18%;height:50px;background:#222;border:1px solid #444;border-radius:4px;font-weight:bold;font-size:1.5rem;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 0 #111;color:white}
-        .text-red{color:#f55}.text-green{color:#5f5}
-        .score-bar{background:black;color:white;display:flex;justify-content:space-between;padding:0 20px;font-size:3rem;font-weight:bold;line-height:1.2;margin:5px 0;border-radius:2px;position:relative;border:1px solid #333; transition: background 0.2s;}
-        .score-val{width:45%;text-align:center; border-radius: 8px; padding: 5px; transition: all 0.1s;}
-        
-        .glow-red { background-color: #ef4444 !important; color: white !important; }
-        .glow-green { background-color: #22c55e !important; color: white !important; }
-        .priority-active-score { background-color: #ffffff !important; color: #000000 !important; box-shadow: 0 0 25px #ffffff !important; transform: scale(1.05); }
-        
-        .start-btn{width:100%;min-height:20vh;padding:20px 0;font-size:4rem;font-weight:bold;color:white;border:none;display:flex;align-items:center;justify-content:center;margin:5px 0;border-radius:4px}
-        .bg-start{background:#008800}.bg-stop{background:#cc0000}.bg-pause{background:#eab308;color:black}
-        .bottom-grid{display:grid;grid-template-columns:1fr 2fr 1fr;gap:4px;margin-bottom:15px}
-        .side-col{display:flex;flex-direction:column;gap:4px}.center-col{display:flex;flex-direction:column;gap:4px}
-        .card-btn{min-height:60px;border-radius:4px;border:1px solid #444;font-weight:bold;font-size:0.9rem;display:flex;align-items:center;justify-content:center;background:#222;box-shadow:0 1px 0 #111;color:#ccc}
-        .card-btn.active{border:2px solid white;color:white}
-        .bg-y{background:#554400;color:#ffd}.bg-r{background:#550000;color:#fdd}.bg-b{background:#111;color:#888}
-        .bg-p-active{background:#e65100;color:white;border:2px solid white}
-        details>summary{list-style:none;cursor:pointer;background:#222;padding:10px;text-align:center;border-radius:4px;font-weight:bold;border:1px solid #444;margin-bottom:2px;color:#ccc}
-        details>summary::-webkit-details-marker{display:none}
-        .sys-btn{background:#222;border:1px solid #444;width:100%;padding:10px;margin-bottom:2px;font-weight:bold;border-radius:4px;color:#ccc; transition: all 0.2s;}
-        .timer-text-break{color:#facc15}
-        .bottom-controls{ display:flex; justify-content:space-between; align-items:center; gap:8px; background:rgba(30,30,30,0.8); padding:8px 15px; border-radius:30px; border:1px solid #444; width:100%; max-width:400px; margin:auto auto 0 auto; }
-        .icon-btn { font-size: 1.4rem; text-decoration: none; filter: grayscale(100%) opacity(0.5); transition: 0.3s; display:flex; align-items:center; justify-content:center;}
-        .icon-ok { filter: grayscale(0%) opacity(1); }
-        .icon-error { filter: grayscale(0%) opacity(1) hue-rotate(150deg); }
-        .gear-btn{ background:transparent; border:none; font-size:1.6rem; color:#ccc; padding:0; display:flex; align-items:center; justify-content:center;}
-        .sensor-status { width: 10px; height: 10px; border-radius: 50%; background: #333; display: flex; align-items: center; justify-content: center; font-size: 0; color: transparent; border: none; transition: all 0.3s; margin-top:5px; }
-        .sensor-active-red { background: #ef4444; box-shadow: 0 0 5px #ef4444; }
-        .sensor-active-green { background: #22c55e; box-shadow: 0 0 5px #22c55e; }
-        #toast-container{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.9);color:white;padding:20px 40px;border-radius:12px;font-size:1.5rem;text-align:center;z-index:9999;display:none;box-shadow:0 0 20px rgba(0,0,0,0.5);border:2px solid #555}
-        #timer-display{font-size:1.5rem;padding:15px}
+        body { background: #0a0a0a; color: #fff; touch-action: manipulation; user-select: none; font-family: sans-serif; overflow: hidden; }
+        .border-custom { border: 1px solid #333; }
+        select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
     </style>
 </head>
-<body class="flex flex-col min-h-screen p-2 overflow-y-auto overflow-x-hidden" onclick="unlockAudio()">
-    
-    <div id="toast-container"></div>
-    <div class="flex justify-between items-center mb-1 flex-shrink-0">
-        <details class="flex-grow accord">
-            <summary id="timer-display">Modifica Tempo (3:00)</summary>
-            <div class="grid grid-cols-4 gap-1 p-2 bg-gray-800 rounded"><button class="sys-btn" onclick="adjustTime(60)">+1m</button><button class="sys-btn" onclick="adjustTime(-60)">-1m</button><button class="sys-btn" onclick="adjustTime(1)">+1s</button><button class="sys-btn" onclick="adjustTime(-1)">-1s</button></div>
-        </details>
+<body class="h-screen flex flex-col">
+
+    <!-- Top Bar -->
+    <div class="bg-[#1f1f1f] py-3 text-center border-b border-[#333]" onclick="promptTime()">
+        <span class="text-white font-bold text-lg">Modifica Tempo (<span id="timer-display-top">3:00</span>)</span>
     </div>
 
-    <div class="flex justify-between gap-1 flex-shrink-0">
-        <button class="ctrl-btn text-red" onclick="scoreOptimistic('left',-1)">-</button>
-        <button class="ctrl-btn text-green" onclick="scoreOptimistic('left',1)">+</button>
-        <button class="ctrl-btn text-sm" style="width:22%" onclick="doubleHitOptimistic()">DOPPIO</button>
-        <button class="ctrl-btn text-green" onclick="scoreOptimistic('right',1)">+</button>
-        <button class="ctrl-btn text-red" onclick="scoreOptimistic('right',-1)">-</button>
+    <!-- +/- Row -->
+    <div class="flex w-full bg-[#111] border-b border-[#333]">
+        <button class="flex-1 py-4 text-red-500 font-bold border-r border-[#333] active:bg-[#222]" onclick="socket.emit('update_score', {side:'left', delta:-1})">-</button>
+        <button class="flex-1 py-4 text-green-500 font-bold border-r border-[#333] active:bg-[#222]" onclick="socket.emit('update_score', {side:'left', delta:1})">+</button>
+        <button class="flex-[2] py-4 text-gray-300 font-bold border-r border-[#333] active:bg-[#222]" onclick="socket.emit('double_hit')">DOPPIO</button>
+        <button class="flex-1 py-4 text-green-500 font-bold border-r border-[#333] active:bg-[#222]" onclick="socket.emit('update_score', {side:'right', delta:1})">+</button>
+        <button class="flex-1 py-4 text-red-500 font-bold active:bg-[#222]" onclick="socket.emit('update_score', {side:'right', delta:-1})">-</button>
     </div>
-    
-    <div class="score-bar flex-shrink-0">
-        <div id="s-l" class="score-val text-red-500">0</div>
-        <div id="s-r" class="score-val text-green-500">0</div>
+
+    <!-- Scores -->
+    <div class="flex w-full bg-[#050505] py-6">
+        <div class="flex-1 text-center text-red-500 text-6xl font-bold" id="score-left">0</div>
+        <div class="flex-1 text-center text-green-500 text-6xl font-bold" id="score-right">0</div>
     </div>
-    
-    <button id="btn-toggle" onclick="toggleTimerOptimistic()" class="start-btn bg-start flex-shrink-0">AVVIO</button>
-    
-    <div class="bottom-grid flex-grow">
-        <div class="side-col">
-            <button class="card-btn" id="btn-l-P" onclick="toggleP('left')">P</button>
-            <button class="card-btn bg-y" id="btn-l-Y" onclick="handleCardClick('left','Y')">G</button>
-            <button class="card-btn bg-r" id="btn-l-R" onclick="handleCardClick('left','R')">R</button>
-            <button class="card-btn bg-b" id="btn-l-B" onclick="handleCardClick('left','B')">N</button>
-        </div>
-        <div class="center-col pb-1">
-            <div class="flex gap-1">
-                <button id="btn-priority" class="sys-btn bg-gray-800 border-2 border-gray-600 text-white flex-1 py-4" onclick="socket.emit('toggle_priority')">Priorità</button>
-                <button class="sys-btn bg-blue-900 border-2 border-blue-600 text-white flex-1 py-4" onclick="sendResult()">INVIA</button>
-            </div>
-            <div class="mt-1 mb-1">
-                <button class="sys-btn bg-red-900 text-red-200 border-2 border-red-700 w-full py-4" onclick="socket.emit('swap_fencers')">Swipe Atleti &lt;--&gt;</button>
-            </div>
-            <div class="flex flex-col mt-1">
-                <details id="reset-menu" class="accord">
-                    <summary>Menu Reset</summary>
-                    <div class="flex flex-col bg-gray-800 p-2 rounded">
-                        <button class="sys-btn text-blue-300" onclick="resetAction('reset_scores')">Reset Punti</button>
-                        <button class="sys-btn text-yellow-300" onclick="resetAction('reset_timer')">Reset Tempo</button>
-                        <button class="sys-btn text-red-300 bg-red-900" onclick="if(confirm('Reset TOTALE?'))resetAction('reset_all')">Reset TUTTO</button>
-                    </div>
-                </details>
-                <details class="mt-1 accord" id="girone-details">
-                    <summary id="girone-label">Girone: Rosso</summary>
-                    <div class="flex flex-col bg-gray-800 p-2 rounded">
-                        <button class="sys-btn text-red-400" onclick="changeGirone('rosso')">Rosso</button>
-                        <button class="sys-btn text-yellow-400" onclick="changeGirone('giallo')">Giallo</button>
-                        <button class="sys-btn text-blue-400" onclick="changeGirone('blu')">Blu</button>
-                        <button class="sys-btn text-green-400" onclick="changeGirone('verde')">Verde</button>
-                        <button class="sys-btn text-white" onclick="changeGirone('32')">Elim. 32</button>
-                    </div>
-                </details>
-                <div class="flex mt-1 gap-1 h-14">
-                    <select id="sel" class="flex-grow bg-gray-800 text-white border border-gray-600 rounded text-sm px-2" onchange="triggerMatchLoad()"></select>
-                    <button onclick="forceUpdate()" class="bg-green-700 text-white px-3 rounded text-sm border border-green-600 font-bold">AGG.</button>
-                </div>
-            </div>
-        </div>
-        <div class="side-col">
-            <button class="card-btn" id="btn-r-P" onclick="toggleP('right')">P</button>
-            <button class="card-btn bg-y" id="btn-r-Y" onclick="handleCardClick('right','Y')">G</button>
-            <button class="card-btn bg-r" id="btn-r-R" onclick="handleCardClick('right','R')">R</button>
-            <button class="card-btn bg-b" id="btn-r-B" onclick="handleCardClick('right','B')">N</button>
-        </div>
+
+    <!-- AVVIO Button -->
+    <div class="w-full px-2 py-2">
+        <button id="btn-avvio" class="w-full bg-[#16a34a] text-white text-5xl font-bold py-8 rounded shadow-lg active:opacity-75 transition-colors" onclick="socket.emit('toggle_timer')">AVVIO</button>
     </div>
-    
-    <div class="bottom-controls flex-shrink-0">
-        <span id="stat-wifi" class="icon-btn" title="Internet">📡</span>
+
+    <!-- Grid Controls -->
+    <div class="w-full px-2 pb-2 flex-1 flex flex-col gap-2 justify-center">
+        
+        <!-- Row P / Priorità / INVIA / P -->
         <div class="flex gap-2">
-            <div id="stat-pico-r" class="sensor-status" title="Pico Rosso"></div>
-            <div id="stat-pico-v" class="sensor-status" title="Pico Verde"></div>
+            <button class="flex-1 bg-[#333] text-gray-300 font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('card_action', {side:'left', card:'P_Y'})">P</button>
+            <button class="flex-[2] bg-[#1e3a8a] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('toggle_priority')">Priorità</button>
+            <button class="flex-[2] bg-[#1d4ed8] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('send_result')">INVIA</button>
+            <button class="flex-1 bg-[#333] text-gray-300 font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('card_action', {side:'right', card:'P_Y'})">P</button>
         </div>
-        <button onclick="window.location.href='/settings'" class="gear-btn" title="Impostazioni">⚙️</button>
+
+        <!-- Row G / Swipe / G -->
+        <div class="flex gap-2">
+            <button class="flex-1 bg-[#ca8a04] text-black font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('card_action', {side:'left', card:'Y'})">G</button>
+            <button class="flex-[4] bg-[#7f1d1d] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('swap_fencers')">Swipe Atleti &lt;--&gt;</button>
+            <button class="flex-1 bg-[#ca8a04] text-black font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('card_action', {side:'right', card:'Y'})">G</button>
+        </div>
+
+        <!-- Row R / Menu Reset / R -->
+        <div class="flex gap-2">
+            <button class="flex-1 bg-[#dc2626] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('card_action', {side:'left', card:'R'})">R</button>
+            <button class="flex-[4] bg-[#27272a] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="document.getElementById('menu-reset').classList.toggle('hidden')">Menu Reset</button>
+            <button class="flex-1 bg-[#dc2626] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('card_action', {side:'right', card:'R'})">R</button>
+        </div>
+
+        <!-- Hidden Reset Menu (COL RESET DEI CARTELLINI) -->
+        <div id="menu-reset" class="hidden grid grid-cols-2 gap-2 bg-[#18181b] p-3 rounded border border-[#444] shadow-inner mb-1">
+            <button class="bg-[#333] text-white py-3 rounded font-bold active:bg-[#555]" onclick="socket.emit('reset_scores')">Azzera Punti</button>
+            <button class="bg-[#333] text-white py-3 rounded font-bold active:bg-[#555]" onclick="socket.emit('reset_timer')">Azzera Tempo</button>
+            <button class="bg-[#222] text-white py-3 rounded font-bold col-span-2 border border-[#444] active:bg-[#444]" onclick="socket.emit('reset_all')">Reset Totale</button>
+            <button class="bg-[#3f1f1f] text-red-300 py-3 rounded font-bold text-sm border border-[#5c2b2b] active:bg-[#5c2b2b]" onclick="socket.emit('reset_cards', {side:'left'})">Reset Cart. SX</button>
+            <button class="bg-[#1b3b22] text-green-300 py-3 rounded font-bold text-sm border border-[#2b5c35] active:bg-[#2b5c35]" onclick="socket.emit('reset_cards', {side:'right'})">Reset Cart. DX</button>
+        </div>
+
+        <!-- Row N / Girone / N -->
+        <div class="flex gap-2">
+            <button class="flex-1 bg-[#000] text-white font-bold py-4 rounded border-custom active:bg-[#222]" onclick="socket.emit('card_action', {side:'left', card:'B'})">N</button>
+            <button class="flex-[4] bg-[#27272a] text-white font-bold py-4 rounded border-custom active:opacity-70" id="btn-girone" onclick="cycleGirone()">Girone: Rosso</button>
+            <button class="flex-1 bg-[#000] text-white font-bold py-4 rounded border-custom active:bg-[#222]" onclick="socket.emit('card_action', {side:'right', card:'B'})">N</button>
+        </div>
+
+        <!-- Row Select / AGG -->
+        <div class="flex gap-2">
+            <select id="match-select" class="flex-[4] bg-[#18181b] text-white border-custom rounded px-3 py-4 outline-none text-center font-bold text-lg">
+                <option value="">Seleziona Assalto...</option>
+            </select>
+            <button class="flex-[1] bg-[#15803d] text-white font-bold py-4 rounded border border-[#166534] active:opacity-70" onclick="loadSelectedMatch()">AGG.</button>
+        </div>
+
+    </div>
+
+    <!-- Bottom Nav Bar -->
+    <div class="flex justify-around items-center bg-[#111] py-4 border-t border-[#333] mt-auto">
+        <button class="text-white text-2xl px-6 active:opacity-50" onclick="window.location.href='/inserisci_punti'">📡</button>
+        <div class="flex gap-2">
+            <div class="w-2 h-2 rounded-full bg-gray-500"></div>
+            <div class="w-2 h-2 rounded-full bg-gray-700"></div>
+        </div>
+        <button class="text-white text-2xl px-6 active:opacity-50" onclick="window.location.href='/settings'">⚙️</button>
     </div>
 
     <script>
-        const socket=io();
-        let matches=[];
-        let pMode={left:false,right:false};
-        let currentGirone='rosso';
-        let globalState = {}; 
-        let priorityAnimTimer = null;
-        
-        setInterval(() => {
-            fetch('/api/pico_status')
-                .then(r => r.json())
-                .then(s => {
-                    const pr = document.getElementById('stat-pico-r');
-                    const pv = document.getElementById('stat-pico-v');
-                    if(s.rosso.active) { pr.className = 'sensor-status sensor-active-red'; } 
-                    else { pr.className = 'sensor-status'; }
-                    if(s.verde.active) { pv.className = 'sensor-status sensor-active-green'; } 
-                    else { pv.className = 'sensor-status'; }
-                }).catch(e => {});
-        }, 2000);
+        const socket = io();
+        let allGironi = {};
+        let currentGironeIdx = 0;
+        const gironiList = ['rosso', 'giallo', 'blu', 'verde', '32'];
 
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function unlockAudio() { if (audioCtx.state === 'suspended') { audioCtx.resume(); } }
-        
-        function playBeep(hz, duration) {
-            if (audioCtx.state === 'suspended') { audioCtx.resume(); }
-            const volume = parseFloat(globalState.settings?.buzzer_volume !== undefined ? globalState.settings.buzzer_volume : 1.0);
-            if (volume <= 0) return;
-            const o = audioCtx.createOscillator(); 
-            const g = audioCtx.createGain();
-            o.type = 'square'; o.frequency.setValueAtTime(hz, audioCtx.currentTime); 
-            g.gain.setValueAtTime(volume, audioCtx.currentTime);
-            o.connect(g); g.connect(audioCtx.destination);
-            o.start(); o.stop(audioCtx.currentTime + duration); 
-        }
-        
-        socket.on('hw_hit', data => { 
-            if (navigator.vibrate) navigator.vibrate(50); 
-            let durataSuono = data.is_manual ? 0.5 : 1.5;
-            playBeep(1200, durataSuono); 
-
-            if (data.side === 'left' || data.is_double) {
-                const b = document.getElementById('s-l');
-                b.setAttribute('data-hit', 'true');
-                b.classList.remove('priority-active-score');
-                b.classList.add('glow-red');
-                setTimeout(() => { 
-                    b.removeAttribute('data-hit');
-                    b.classList.remove('glow-red');
-                    if (globalState && globalState.priority === 'left') b.classList.add('priority-active-score');
-                }, 3000);
+        function promptTime() {
+            const t = prompt("Aggiungi o togli secondi dal tempo attuale (es. 10 o -10):", "0");
+            if(t && !isNaN(t)) {
+                socket.emit('adjust_time', {delta: parseInt(t)});
             }
-            if (data.side === 'right' || data.is_double) {
-                const b = document.getElementById('s-r');
-                b.setAttribute('data-hit', 'true');
-                b.classList.remove('priority-active-score');
-                b.classList.add('glow-green');
-                setTimeout(() => { 
-                    b.removeAttribute('data-hit');
-                    b.classList.remove('glow-green');
-                    if (globalState && globalState.priority === 'right') b.classList.add('priority-active-score');
-                }, 3000);
-            }
-        });
-
-        socket.on('time_expired', () => { 
-            if (navigator.vibrate) navigator.vibrate(500);
-            playBeep(500, 1.0);
-            document.body.style.backgroundColor='#500'; 
-            setTimeout(()=>document.body.style.backgroundColor='#050515',500); 
-        });
-
-        socket.on('priority_animation', data => {
-            let duration = data.duration;
-            let startTime = Date.now();
-            let isLeft = true;
-            let delay = 250; 
-            
-            if(priorityAnimTimer) clearTimeout(priorityAnimTimer);
-            
-            function flash() {
-                let now = Date.now();
-                if (now - startTime > duration) return; 
-                
-                document.getElementById('s-l').classList.toggle('priority-active-score', isLeft);
-                document.getElementById('s-r').classList.toggle('priority-active-score', !isLeft);
-                
-                isLeft = !isLeft;
-                delay = Math.max(40, delay * 0.85); 
-                priorityAnimTimer = setTimeout(flash, delay);
-            }
-            flash();
-        });
-
-        const accords = document.querySelectorAll('.accord');
-        accords.forEach(acc => { acc.addEventListener('toggle', (e) => { if (acc.open) { accords.forEach(other => { if (other !== acc && other.open) other.removeAttribute('open'); }); setTimeout(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }, 50); } }); });
-
-        function showToast(msg, duration = 3000) { const t = document.getElementById('toast-container'); t.innerText = msg; t.style.display = 'block'; if(window.toastTimeout) clearTimeout(window.toastTimeout); window.toastTimeout = setTimeout(() => { t.style.display = 'none'; }, duration); }
-        function forceTimerStopLocally() { const b = document.getElementById('btn-toggle'); b.innerText = "AVVIO"; b.className = "start-btn bg-start"; }
-        
-        function scoreOptimistic(side, delta) {
-            const el = document.getElementById(side === 'left' ? 's-l' : 's-r');
-            el.innerText = Math.max(0, parseInt(el.innerText) + delta);
-            forceTimerStopLocally();
-            if(delta > 0) playBeep(1200, 0.5); 
-            socket.emit('update_score',{side:side,delta:delta});
-            if(navigator.vibrate) navigator.vibrate(50);
-        }
-        
-        function doubleHitOptimistic() {
-            document.getElementById('s-l').innerText = parseInt(document.getElementById('s-l').innerText) + 1;
-            document.getElementById('s-r').innerText = parseInt(document.getElementById('s-r').innerText) + 1;
-            forceTimerStopLocally();
-            playBeep(1200, 0.5); 
-            socket.emit('double_hit');
-            if(navigator.vibrate) navigator.vibrate(50);
-        }
-        
-        function toggleTimerOptimistic() {
-            const b = document.getElementById('btn-toggle');
-            if (b.innerText === "AVVIO" || b.innerText === "RIPRENDI PAUSA") { b.innerText = "STOP"; b.className = "start-btn bg-stop"; } 
-            else { b.innerText = "AVVIO"; b.className = "start-btn bg-start"; }
-            socket.emit('toggle_timer');
-            if(navigator.vibrate) navigator.vibrate(50);
-        }
-        
-        function adjustTime(d) { socket.emit('adjust_time',{delta:d}); forceTimerStopLocally(); }
-        function resetAction(a) { socket.emit(a); document.getElementById('reset-menu').removeAttribute('open'); forceTimerStopLocally(); }
-
-        function handleCardClick(s,c){
-            let cc=c;
-            if(pMode[s]){ cc=`P_${c}`; pMode[s]=false; updatePButton(s); socket.emit('card_action',{side:s,card:cc}); forceTimerStopLocally(); return; }
-            let cardName = c === 'Y' ? "GIALLO" : c === 'R' ? "ROSSO" : "NERO";
-            if (confirm("Assegnare cartellino " + cardName + " a " + (s==='left'?'SX':'DX') + "?")) { socket.emit('card_action',{side:s,card:cc}); forceTimerStopLocally(); }
         }
 
-        socket.on('status_check', (s) => { document.getElementById('stat-wifi').className = 'icon-btn ' + (s.internet ? 'icon-ok' : 'icon-error'); document.getElementById('stat-google').className = 'icon-btn ' + (s.google === 'ok' ? 'icon-ok' : 'icon-error'); });
-        socket.on('action_feedback', (data) => { if (data.status === 'error') alert("ERRORE: " + data.msg); else showToast(data.msg, data.status === 'info' ? 5000 : 3000); });
-        
-        function changeGirone(g){ currentGirone = g; document.getElementById('girone-label').innerText="Girone: "+g.charAt(0).toUpperCase()+g.slice(1); socket.emit('fetch_sheet', {girone: g}); document.getElementById('girone-details').removeAttribute('open'); }
-        function triggerMatchLoad(){ const sel = document.getElementById('sel'); if(sel.value === "") return; if(confirm("Caricare l'assalto selezionato sul Display?")){ let matchData = matches[sel.value]; matchData.girone = currentGirone; socket.emit('load_match', matchData); forceTimerStopLocally(); } }
-        function forceUpdate(){ socket.emit('fetch_sheet', {girone: currentGirone}); showToast("Aggiornamento Google..."); }
-        function sendResult(){ if(confirm("Inviare punteggio a Google?")) socket.emit('send_result'); }
-        function toggleP(s){pMode[s]=!pMode[s];updatePButton(s)}
-        function updatePButton(s){ const b=document.getElementById(`btn-${s[0]}-P`); if(pMode[s]){b.classList.add('bg-p-active');b.innerText="P (ON)"} else{b.classList.remove('bg-p-active');b.innerText="P"} }
-        
-        const updateTimeUI=(t,p)=>{ const ts=`${Math.floor(t/60)}:${(Math.floor(t%60)<10?'0':'')+Math.floor(t%60)}`; const d=document.getElementById('timer-display'); if(p==='BREAK'){d.innerText=`PAUSA (${ts})`;d.classList.add('timer-text-break')} else{d.innerText=`Modifica Tempo (${ts})`;d.classList.remove('timer-text-break')} };
-        socket.on('timer_update',d=>updateTimeUI(d.time,d.phase));
-        
-        socket.on('state_update',s=>{
-            globalState = s; 
-            document.getElementById('s-l').innerText=s.fencer_left.score;
-            document.getElementById('s-r').innerText=s.fencer_right.score;
-            updateTimeUI(s.timer,s.phase);
-            
-            const b=document.getElementById('btn-toggle');
-            if(s.phase==='BREAK'){ b.innerText=s.running?"IN PAUSA":"RIPRENDI PAUSA"; b.className=s.running?"start-btn bg-pause":"start-btn bg-start"; } 
-            else { b.innerText=s.running?"STOP":"AVVIO"; b.className=s.running?"start-btn bg-stop":"start-btn bg-start"; }
-            
-            const prioBtn = document.getElementById('btn-priority');
-            if(s.priority === 'left') {
-                prioBtn.innerText = "Annulla Priorità (SX)";
-                prioBtn.className = "sys-btn bg-white text-black border-2 border-gray-400 flex-1 py-4 font-bold";
-                if(!document.getElementById('s-l').hasAttribute('data-hit')) document.getElementById('s-l').classList.add('priority-active-score');
-                document.getElementById('s-r').classList.remove('priority-active-score');
-            } else if(s.priority === 'right') {
-                prioBtn.innerText = "Annulla Priorità (DX)";
-                prioBtn.className = "sys-btn bg-white text-black border-2 border-gray-400 flex-1 py-4 font-bold";
-                document.getElementById('s-l').classList.remove('priority-active-score');
-                if(!document.getElementById('s-r').hasAttribute('data-hit')) document.getElementById('s-r').classList.add('priority-active-score');
+        function cycleGirone() {
+            currentGironeIdx = (currentGironeIdx + 1) % gironiList.length;
+            const g = gironiList[currentGironeIdx];
+            document.getElementById('btn-girone').innerText = "Girone: " + g.charAt(0).toUpperCase() + g.slice(1);
+            updateMatchDropdown();
+        }
+
+        function updateMatchDropdown() {
+            const g = gironiList[currentGironeIdx];
+            const matches = allGironi[g] || [];
+            const sel = document.getElementById('match-select');
+            sel.innerHTML = '<option value="">Seleziona Assalto...</option>';
+            matches.forEach(m => {
+                if(m.sx && m.dx) {
+                    const opt = document.createElement('option');
+                    opt.value = JSON.stringify({girone: g, row: m.row, sx: m.sx, dx: m.dx, p_sx: m.p_sx, p_dx: m.p_dx});
+                    opt.innerText = `${m.sx} vs ${m.dx}`;
+                    sel.appendChild(opt);
+                }
+            });
+        }
+
+        function loadSelectedMatch() {
+            const val = document.getElementById('match-select').value;
+            if(val) {
+                const data = JSON.parse(val);
+                socket.emit('load_match', data);
             } else {
-                prioBtn.innerText = "Priorità";
-                prioBtn.className = "sys-btn bg-gray-800 border-2 border-gray-600 text-white flex-1 py-4";
-                document.getElementById('s-l').classList.remove('priority-active-score');
-                document.getElementById('s-r').classList.remove('priority-active-score');
+                alert("Seleziona prima un assalto dal menu a tendina!");
+            }
+        }
+
+        socket.on('gironi_cache_update', cache => {
+            allGironi = cache;
+            updateMatchDropdown();
+        });
+
+        socket.on('timer_update', d => {
+            const timeStr = d.time > 10 ? `${Math.floor(d.time/60)}:${(Math.floor(d.time%60)<10?'0':'')+Math.floor(d.time%60)}` : d.time.toFixed(1);
+            document.getElementById('timer-display-top').innerText = timeStr;
+        });
+
+        socket.on('state_update', s => {
+            // Punteggi
+            document.getElementById('score-left').innerText = s.fencer_left.score;
+            document.getElementById('score-right').innerText = s.fencer_right.score;
+
+            // Stato AVVIO / ALT
+            const btnAvvio = document.getElementById('btn-avvio');
+            if(s.running) {
+                btnAvvio.innerText = "ALT";
+                btnAvvio.classList.remove('bg-[#16a34a]');
+                btnAvvio.classList.add('bg-[#dc2626]');
+            } else {
+                btnAvvio.innerText = "AVVIO";
+                btnAvvio.classList.remove('bg-[#dc2626]');
+                btnAvvio.classList.add('bg-[#16a34a]');
             }
 
-            const upC=(side,d)=>{
-                const sc=side[0];
-                ['Y','R','B'].forEach(c=>{let e=document.getElementById(`btn-${sc}-${c}`); if(e) e.classList.remove('active');});
-                if(d.cards.Y){let e=document.getElementById(`btn-${sc}-Y`); if(e) e.classList.add('active');}
-                if(d.cards.R){let e=document.getElementById(`btn-${sc}-R`); if(e) e.classList.add('active');}
-                if(d.cards.B){let e=document.getElementById(`btn-${sc}-B`); if(e) e.classList.add('active');}
-            };
-            upC('left',s.fencer_left); upC('right',s.fencer_right);
-            if (s.current_row_idx && matches.length > 0) { const idx = matches.findIndex(m => m.row === s.current_row_idx); const sel = document.getElementById('sel'); if (idx !== -1 && sel.value != idx) sel.value = idx; }
+            // Sincronizza il girone attivo se settato dal server
+            if (s.active_girone) {
+                const idx = gironiList.indexOf(s.active_girone);
+                if (idx !== -1 && currentGironeIdx !== idx) {
+                    currentGironeIdx = idx;
+                    document.getElementById('btn-girone').innerText = "Girone: " + s.active_girone.charAt(0).toUpperCase() + s.active_girone.slice(1);
+                    updateMatchDropdown();
+                }
+            }
         });
-        
-        socket.on('gironi_cache_update', (cache) => { matches = cache[currentGirone] || []; const sel = document.getElementById('sel'); const currentVal = sel.value; sel.innerHTML='<option value="">Seleziona Assalto...</option>'; matches.forEach((m,i)=>{ let o=document.createElement('option'); o.value=i; o.text=`${m.sx} (${m.p_sx}) - (${m.p_dx}) ${m.dx}`; sel.appendChild(o) }); if(currentVal && currentVal < matches.length) sel.value = currentVal; });
+
+        socket.on('action_feedback', d => {
+            alert(d.msg);
+        });
+
     </script>
 </body>
 </html>
