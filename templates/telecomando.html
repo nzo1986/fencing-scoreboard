@@ -10,13 +10,22 @@
         body { background: #0a0a0a; color: #fff; touch-action: manipulation; user-select: none; font-family: sans-serif; overflow: hidden; }
         .border-custom { border: 1px solid #333; }
         select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
+        .name-transition { transition: color 0.1s, text-shadow 0.1s; }
     </style>
 </head>
 <body class="h-screen flex flex-col">
 
     <!-- Top Bar -->
-    <div class="bg-[#1f1f1f] py-3 text-center border-b border-[#333]" onclick="promptTime()">
-        <span class="text-white font-bold text-lg">Modifica Tempo (<span id="timer-display-top">3:00</span>)</span>
+    <div class="bg-[#1f1f1f] py-3 text-center border-b border-[#333] cursor-pointer active:bg-[#222]" onclick="document.getElementById('menu-tempo').classList.toggle('hidden')">
+        <span class="text-white font-bold text-lg">Modifica Tempo (<span id="timer-display-top">3:00</span>) ▼</span>
+    </div>
+
+    <!-- Hidden Time Menu -->
+    <div id="menu-tempo" class="hidden grid grid-cols-4 gap-2 bg-[#18181b] p-3 border-b border-[#333] shadow-inner">
+        <button class="bg-[#27272a] text-green-400 py-3 rounded font-bold active:bg-[#444] border border-[#444] text-sm sm:text-base" onclick="socket.emit('adjust_time', {delta: 60})">+1 MIN</button>
+        <button class="bg-[#27272a] text-red-400 py-3 rounded font-bold active:bg-[#444] border border-[#444] text-sm sm:text-base" onclick="socket.emit('adjust_time', {delta: -60})">-1 MIN</button>
+        <button class="bg-[#27272a] text-green-400 py-3 rounded font-bold active:bg-[#444] border border-[#444] text-sm sm:text-base" onclick="socket.emit('adjust_time', {delta: 1})">+1 SEC</button>
+        <button class="bg-[#27272a] text-red-400 py-3 rounded font-bold active:bg-[#444] border border-[#444] text-sm sm:text-base" onclick="socket.emit('adjust_time', {delta: -1})">-1 SEC</button>
     </div>
 
     <!-- +/- Row -->
@@ -35,8 +44,15 @@
     </div>
 
     <!-- AVVIO Button -->
-    <div class="w-full px-2 py-2">
+    <div class="w-full px-2 pt-2 pb-1">
         <button id="btn-avvio" class="w-full bg-[#16a34a] text-white text-5xl font-bold py-8 rounded shadow-lg active:opacity-75 transition-colors" onclick="socket.emit('toggle_timer')">AVVIO</button>
+    </div>
+
+    <!-- Nomi Atleti Attuali -->
+    <div class="flex w-full px-2 pb-2 justify-between items-center">
+        <div class="flex-1 text-center text-red-500 text-xl font-bold truncate px-1 name-transition" id="name-left">ATLETA SX</div>
+        <div class="text-gray-500 font-bold px-1">VS</div>
+        <div class="flex-1 text-center text-green-500 text-xl font-bold truncate px-1 name-transition" id="name-right">ATLETA DX</div>
     </div>
 
     <!-- Grid Controls -->
@@ -102,6 +118,7 @@
         let allGironi = {};
         let currentGironeIdx = 0;
         const gironiList = ['rosso', 'giallo', 'blu', 'verde', '32'];
+        let priorityAnimTimer = null;
 
         // Sincronizza i dati all'avvio
         socket.on('connect', () => {
@@ -112,13 +129,6 @@
         setInterval(() => {
             socket.emit('fetch_sheet');
         }, 40000);
-
-        function promptTime() {
-            const t = prompt("Aggiungi o togli secondi dal tempo attuale (es. 10 o -10):", "0");
-            if(t && !isNaN(t)) {
-                socket.emit('adjust_time', {delta: parseInt(t)});
-            }
-        }
 
         function cycleGirone() {
             currentGironeIdx = (currentGironeIdx + 1) % gironiList.length;
@@ -179,10 +189,54 @@
             document.getElementById('timer-display-top').innerText = timeStr;
         });
 
+        // Gestione Animazione Priorità nel Telecomando
+        socket.on('priority_animation', data => {
+            let duration = data.duration;
+            let startTime = Date.now();
+            let isLeft = true;
+            let delay = 250;
+
+            if(priorityAnimTimer) clearTimeout(priorityAnimTimer);
+
+            function flash() {
+                let now = Date.now();
+                if (now - startTime > duration) return;
+
+                document.getElementById('name-left').style.color = isLeft ? '#ffffff' : '#ef4444';
+                document.getElementById('name-right').style.color = !isLeft ? '#ffffff' : '#22c55e';
+
+                isLeft = !isLeft;
+                delay = Math.max(40, delay * 0.85);
+                priorityAnimTimer = setTimeout(flash, delay);
+            }
+            flash();
+        });
+
         socket.on('state_update', s => {
             // Punteggi
             document.getElementById('score-left').innerText = s.fencer_left.score;
             document.getElementById('score-right').innerText = s.fencer_right.score;
+
+            // Nomi e feedback visivo della priorità
+            document.getElementById('name-left').innerText = s.fencer_left.name || "ATLETA SX";
+            document.getElementById('name-right').innerText = s.fencer_right.name || "ATLETA DX";
+
+            if (s.priority === 'left') {
+                document.getElementById('name-left').style.color = '#ffffff';
+                document.getElementById('name-left').style.textShadow = '0 0 10px #ffffff';
+                document.getElementById('name-right').style.color = '#22c55e';
+                document.getElementById('name-right').style.textShadow = 'none';
+            } else if (s.priority === 'right') {
+                document.getElementById('name-left').style.color = '#ef4444';
+                document.getElementById('name-left').style.textShadow = 'none';
+                document.getElementById('name-right').style.color = '#ffffff';
+                document.getElementById('name-right').style.textShadow = '0 0 10px #ffffff';
+            } else {
+                document.getElementById('name-left').style.color = '#ef4444';
+                document.getElementById('name-left').style.textShadow = 'none';
+                document.getElementById('name-right').style.color = '#22c55e';
+                document.getElementById('name-right').style.textShadow = 'none';
+            }
 
             // Stato AVVIO / ALT
             const btnAvvio = document.getElementById('btn-avvio');
