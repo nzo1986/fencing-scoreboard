@@ -82,22 +82,19 @@
 
         <!-- Row Select / AGG -->
         <div class="flex gap-2">
-            <select id="match-select" class="flex-[4] bg-[#18181b] text-white border-custom rounded px-3 py-4 outline-none text-center font-bold text-lg">
+            <select id="match-select" class="flex-[4] bg-[#18181b] text-white border-custom rounded px-3 py-4 outline-none text-center font-bold text-lg" onchange="loadSelectedMatch()">
                 <option value="">Seleziona Assalto...</option>
             </select>
-            <button class="flex-[1] bg-[#15803d] text-white font-bold py-4 rounded border border-[#166534] active:opacity-70" onclick="loadSelectedMatch()">AGG.</button>
+            <!-- Il bottone AGG ora richiede l'aggiornamento della cache a Google -->
+            <button class="flex-[1] bg-[#15803d] text-white font-bold py-4 rounded border border-[#166534] active:opacity-70" onclick="socket.emit('fetch_sheet')">AGG.</button>
         </div>
 
     </div>
 
-    <!-- Bottom Nav Bar -->
-    <div class="flex justify-around items-center bg-[#111] py-4 border-t border-[#333] mt-auto">
-        <button class="text-white text-2xl px-6 active:opacity-50" onclick="window.location.href='/inserisci_punti'">📡</button>
-        <div class="flex gap-2">
-            <div class="w-2 h-2 rounded-full bg-gray-500"></div>
-            <div class="w-2 h-2 rounded-full bg-gray-700"></div>
-        </div>
-        <button class="text-white text-2xl px-6 active:opacity-50" onclick="window.location.href='/settings'">⚙️</button>
+    <!-- Bottom Nav Bar con pulsanti espliciti richiesti -->
+    <div class="flex gap-2 p-3 bg-[#111] border-t border-[#333] mt-auto">
+        <button class="flex-[2] bg-indigo-700 text-white font-bold py-3 text-sm rounded shadow active:bg-indigo-600" onclick="window.location.href='/inserisci_punti'">📝 Altri Gironi</button>
+        <button class="flex-1 bg-gray-700 text-white font-bold py-3 text-sm rounded shadow active:bg-gray-600" onclick="window.location.href='/settings'">⚙️ Impost.</button>
     </div>
 
     <script>
@@ -105,6 +102,16 @@
         let allGironi = {};
         let currentGironeIdx = 0;
         const gironiList = ['rosso', 'giallo', 'blu', 'verde', '32'];
+
+        // Sincronizza i dati all'avvio
+        socket.on('connect', () => {
+            socket.emit('fetch_sheet');
+        });
+
+        // Loop di aggiornamento automatico ogni 40 secondi
+        setInterval(() => {
+            socket.emit('fetch_sheet');
+        }, 40000);
 
         function promptTime() {
             const t = prompt("Aggiungi o togli secondi dal tempo attuale (es. 10 o -10):", "0");
@@ -118,15 +125,20 @@
             const g = gironiList[currentGironeIdx];
             document.getElementById('btn-girone').innerText = "Girone: " + g.charAt(0).toUpperCase() + g.slice(1);
             updateMatchDropdown();
+            // Quando cambi girone forzi un aggiornamento immediato da Google Sheets
+            socket.emit('fetch_sheet'); 
         }
 
         function updateMatchDropdown() {
             const g = gironiList[currentGironeIdx];
             const matches = allGironi[g] || [];
             const sel = document.getElementById('match-select');
+            
+            // Mantiene il primo placeholder
             sel.innerHTML = '<option value="">Seleziona Assalto...</option>';
             matches.forEach(m => {
-                if(m.sx && m.dx) {
+                // Filtra solo gli atleti validi (non vuoti)
+                if(m.sx && m.dx && m.sx.trim() !== '' && m.dx.trim() !== '') {
                     const opt = document.createElement('option');
                     opt.value = JSON.stringify({girone: g, row: m.row, sx: m.sx, dx: m.dx, p_sx: m.p_sx, p_dx: m.p_dx});
                     opt.innerText = `${m.sx} vs ${m.dx}`;
@@ -135,13 +147,14 @@
             });
         }
 
+        // Carica l'assalto appena viene selezionato dalla tendina
         function loadSelectedMatch() {
             const val = document.getElementById('match-select').value;
             if(val) {
                 const data = JSON.parse(val);
                 socket.emit('load_match', data);
-            } else {
-                alert("Seleziona prima un assalto dal menu a tendina!");
+                // Resetta la tendina per permettere una nuova selezione in futuro
+                document.getElementById('match-select').value = "";
             }
         }
 
