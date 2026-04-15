@@ -141,7 +141,18 @@
                 if(m.sx && m.dx && m.sx.trim() !== '' && m.dx.trim() !== '') {
                     const opt = document.createElement('option');
                     opt.value = JSON.stringify({girone: g, row: m.row, sx: m.sx, dx: m.dx, p_sx: m.p_sx, p_dx: m.p_dx});
-                    opt.innerText = `${m.sx} vs ${m.dx}`;
+                    
+                    const p_sx_val = parseInt(m.p_sx) || 0;
+                    const p_dx_val = parseInt(m.p_dx) || 0;
+                    
+                    // Mostra i punti di fianco ai nomi
+                    opt.innerText = `${m.sx} [${p_sx_val}] - [${p_dx_val}] ${m.dx}`;
+                    
+                    // Se l'assalto è già iniziato (punti > 0), colora l'opzione di rosso
+                    if (p_sx_val !== 0 || p_dx_val !== 0) {
+                        opt.style.color = '#ef4444'; 
+                    }
+                    
                     sel.appendChild(opt);
                 }
             });
