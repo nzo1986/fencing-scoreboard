@@ -11,9 +11,13 @@
         .border-custom { border: 1px solid #333; }
         select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
         .name-transition { transition: color 0.1s, text-shadow 0.1s; }
+        .p-mode-active { background: #4b5563 !important; border-color: #9ca3af !important; box-shadow: inset 0 0 10px rgba(0,0,0,0.8); }
     </style>
 </head>
-<body class="h-screen flex flex-col">
+<body class="h-screen flex flex-col relative">
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-5 left-1/2 transform -translate-x-1/2 flex flex-col gap-2 z-50 w-11/12 max-w-md pointer-events-none"></div>
 
     <!-- Top Bar -->
     <div class="bg-[#1f1f1f] py-3 text-center border-b border-[#333] cursor-pointer active:bg-[#222]" onclick="document.getElementById('menu-tempo').classList.toggle('hidden')">
@@ -60,27 +64,27 @@
         
         <!-- Row P / Priorità / INVIA / P -->
         <div class="flex gap-2">
-            <button class="flex-1 bg-[#333] text-gray-300 font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('card_action', {side:'left', card:'P_Y'})">P</button>
+            <button id="btn-left-p" class="flex-1 bg-[#333] text-gray-300 font-bold py-4 rounded border-custom active:opacity-70 transition-colors" onclick="togglePMode('left')">P</button>
             <button class="flex-[2] bg-[#1e3a8a] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('toggle_priority')">Priorità</button>
             <button class="flex-[2] bg-[#1d4ed8] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('send_result')">INVIA</button>
-            <button class="flex-1 bg-[#333] text-gray-300 font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('card_action', {side:'right', card:'P_Y'})">P</button>
+            <button id="btn-right-p" class="flex-1 bg-[#333] text-gray-300 font-bold py-4 rounded border-custom active:opacity-70 transition-colors" onclick="togglePMode('right')">P</button>
         </div>
 
         <!-- Row G / Swipe / G -->
         <div class="flex gap-2">
-            <button class="flex-1 bg-[#ca8a04] text-black font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('card_action', {side:'left', card:'Y'})">G</button>
+            <button id="btn-left-y" class="flex-1 bg-[#ca8a04] text-black font-bold py-4 rounded border-custom active:opacity-70" onclick="sendCard('left', 'Y')">G</button>
             <button class="flex-[4] bg-[#7f1d1d] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('swap_fencers')">Swipe Atleti &lt;--&gt;</button>
-            <button class="flex-1 bg-[#ca8a04] text-black font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('card_action', {side:'right', card:'Y'})">G</button>
+            <button id="btn-right-y" class="flex-1 bg-[#ca8a04] text-black font-bold py-4 rounded border-custom active:opacity-70" onclick="sendCard('right', 'Y')">G</button>
         </div>
 
         <!-- Row R / Menu Reset / R -->
         <div class="flex gap-2">
-            <button class="flex-1 bg-[#dc2626] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('card_action', {side:'left', card:'R'})">R</button>
+            <button id="btn-left-r" class="flex-1 bg-[#dc2626] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="sendCard('left', 'R')">R</button>
             <button class="flex-[4] bg-[#27272a] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="document.getElementById('menu-reset').classList.toggle('hidden')">Menu Reset</button>
-            <button class="flex-1 bg-[#dc2626] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('card_action', {side:'right', card:'R'})">R</button>
+            <button id="btn-right-r" class="flex-1 bg-[#dc2626] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="sendCard('right', 'R')">R</button>
         </div>
 
-        <!-- Hidden Reset Menu (COL RESET DEI CARTELLINI) -->
+        <!-- Hidden Reset Menu -->
         <div id="menu-reset" class="hidden grid grid-cols-2 gap-2 bg-[#18181b] p-3 rounded border border-[#444] shadow-inner mb-1">
             <button class="bg-[#333] text-white py-3 rounded font-bold active:bg-[#555]" onclick="socket.emit('reset_scores')">Azzera Punti</button>
             <button class="bg-[#333] text-white py-3 rounded font-bold active:bg-[#555]" onclick="socket.emit('reset_timer')">Azzera Tempo</button>
@@ -91,9 +95,9 @@
 
         <!-- Row N / Girone / N -->
         <div class="flex gap-2">
-            <button class="flex-1 bg-[#000] text-white font-bold py-4 rounded border-custom active:bg-[#222]" onclick="socket.emit('card_action', {side:'left', card:'B'})">N</button>
+            <button id="btn-left-b" class="flex-1 bg-[#000] text-white font-bold py-4 rounded border-custom active:bg-[#222]" onclick="sendCard('left', 'B')">N</button>
             <button class="flex-[4] bg-[#27272a] text-white font-bold py-4 rounded border-custom active:opacity-70" id="btn-girone" onclick="cycleGirone()">Girone: Rosso</button>
-            <button class="flex-1 bg-[#000] text-white font-bold py-4 rounded border-custom active:bg-[#222]" onclick="socket.emit('card_action', {side:'right', card:'B'})">N</button>
+            <button id="btn-right-b" class="flex-1 bg-[#000] text-white font-bold py-4 rounded border-custom active:bg-[#222]" onclick="sendCard('right', 'B')">N</button>
         </div>
 
         <!-- Row Select / AGG -->
@@ -101,13 +105,12 @@
             <select id="match-select" class="flex-[4] bg-[#18181b] text-white border-custom rounded px-3 py-4 outline-none text-center font-bold text-lg" onchange="loadSelectedMatch()">
                 <option value="">Seleziona Assalto...</option>
             </select>
-            <!-- Il bottone AGG ora richiede l'aggiornamento della cache a Google -->
             <button class="flex-[1] bg-[#15803d] text-white font-bold py-4 rounded border border-[#166534] active:opacity-70" onclick="socket.emit('fetch_sheet')">AGG.</button>
         </div>
 
     </div>
 
-    <!-- Bottom Nav Bar con pulsanti espliciti richiesti -->
+    <!-- Bottom Nav Bar -->
     <div class="flex gap-2 p-3 bg-[#111] border-t border-[#333] mt-auto">
         <button class="flex-[2] bg-indigo-700 text-white font-bold py-3 text-sm rounded shadow active:bg-indigo-600" onclick="window.location.href='/inserisci_punti'">📝 Altri Gironi</button>
         <button class="flex-1 bg-gray-700 text-white font-bold py-3 text-sm rounded shadow active:bg-gray-600" onclick="window.location.href='/settings'">⚙️ Impost.</button>
@@ -119,23 +122,77 @@
         let currentGironeIdx = 0;
         const gironiList = ['rosso', 'giallo', 'blu', 'verde', '32'];
         let priorityAnimTimer = null;
+        
+        // Gestione Logica Cartellini "P"
+        let pMode = { left: false, right: false };
+
+        function togglePMode(side) {
+            pMode[side] = !pMode[side];
+            const pBtn = document.getElementById(`btn-${side}-p`);
+            if (pMode[side]) {
+                pBtn.classList.add('p-mode-active');
+            } else {
+                pBtn.classList.remove('p-mode-active');
+            }
+            
+            document.getElementById(`btn-${side}-y`).innerText = pMode[side] ? "P-G" : "G";
+            document.getElementById(`btn-${side}-r`).innerText = pMode[side] ? "P-R" : "R";
+            document.getElementById(`btn-${side}-b`).innerText = pMode[side] ? "P-N" : "N";
+        }
+
+        function sendCard(side, baseCardType) {
+            if (pMode[side]) {
+                socket.emit('card_action', {side: side, card: 'P_' + baseCardType});
+                togglePMode(side); // Torna alla normalità dopo l'invio
+            } else {
+                socket.emit('card_action', {side: side, card: baseCardType});
+            }
+        }
+
+        // Notifiche Toast (non invasive e veloci)
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let bgColor = 'bg-blue-600';
+            let borderColor = 'border-blue-400';
+            if (type === 'error') { bgColor = 'bg-red-600'; borderColor = 'border-red-400'; }
+            if (type === 'success') { bgColor = 'bg-green-600'; borderColor = 'border-green-400'; }
+
+            toast.className = `${bgColor} border ${borderColor} text-white px-4 py-3 rounded-lg shadow-xl font-bold text-center text-sm transition-opacity duration-300 opacity-0 pointer-events-auto`;
+            toast.innerText = msg;
+
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('opacity-0'), 10);
+            
+            // Chiudi rapidissimamente dopo 1 secondo (invece di 2)
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 1000); 
+        }
+
+        socket.on('action_feedback', d => {
+            showToast(d.msg, d.status);
+        });
 
         // Sincronizza i dati all'avvio
         socket.on('connect', () => {
             socket.emit('fetch_sheet');
         });
 
-        // Loop di aggiornamento automatico ogni 40 secondi
-        setInterval(() => {
-            socket.emit('fetch_sheet');
-        }, 40000);
+        setInterval(() => { socket.emit('fetch_sheet'); }, 40000);
+
+        function promptTime() {
+            const t = prompt("Aggiungi o togli secondi dal tempo attuale (es. 10 o -10):", "0");
+            if(t && !isNaN(t)) { socket.emit('adjust_time', {delta: parseInt(t)}); }
+        }
 
         function cycleGirone() {
             currentGironeIdx = (currentGironeIdx + 1) % gironiList.length;
             const g = gironiList[currentGironeIdx];
             document.getElementById('btn-girone').innerText = "Girone: " + g.charAt(0).toUpperCase() + g.slice(1);
             updateMatchDropdown();
-            // Quando cambi girone forzi un aggiornamento immediato da Google Sheets
             socket.emit('fetch_sheet'); 
         }
 
@@ -144,10 +201,8 @@
             const matches = allGironi[g] || [];
             const sel = document.getElementById('match-select');
             
-            // Mantiene il primo placeholder
             sel.innerHTML = '<option value="">Seleziona Assalto...</option>';
             matches.forEach(m => {
-                // Filtra solo gli atleti validi (non vuoti)
                 if(m.sx && m.dx && m.sx.trim() !== '' && m.dx.trim() !== '') {
                     const opt = document.createElement('option');
                     opt.value = JSON.stringify({girone: g, row: m.row, sx: m.sx, dx: m.dx, p_sx: m.p_sx, p_dx: m.p_dx});
@@ -155,26 +210,18 @@
                     const p_sx_val = parseInt(m.p_sx) || 0;
                     const p_dx_val = parseInt(m.p_dx) || 0;
                     
-                    // Mostra i punti di fianco ai nomi
                     opt.innerText = `${m.sx} [${p_sx_val}] - [${p_dx_val}] ${m.dx}`;
-                    
-                    // Se l'assalto è già iniziato (punti > 0), colora l'opzione di rosso
-                    if (p_sx_val !== 0 || p_dx_val !== 0) {
-                        opt.style.color = '#ef4444'; 
-                    }
-                    
+                    if (p_sx_val !== 0 || p_dx_val !== 0) { opt.style.color = '#ef4444'; }
                     sel.appendChild(opt);
                 }
             });
         }
 
-        // Carica l'assalto appena viene selezionato dalla tendina
         function loadSelectedMatch() {
             const val = document.getElementById('match-select').value;
             if(val) {
                 const data = JSON.parse(val);
                 socket.emit('load_match', data);
-                // Resetta la tendina per permettere una nuova selezione in futuro
                 document.getElementById('match-select').value = "";
             }
         }
@@ -189,7 +236,6 @@
             document.getElementById('timer-display-top').innerText = timeStr;
         });
 
-        // Gestione Animazione Priorità nel Telecomando
         socket.on('priority_animation', data => {
             let duration = data.duration;
             let startTime = Date.now();
@@ -213,11 +259,9 @@
         });
 
         socket.on('state_update', s => {
-            // Punteggi
             document.getElementById('score-left').innerText = s.fencer_left.score;
             document.getElementById('score-right').innerText = s.fencer_right.score;
 
-            // Nomi e feedback visivo della priorità
             document.getElementById('name-left').innerText = s.fencer_left.name || "ATLETA SX";
             document.getElementById('name-right').innerText = s.fencer_right.name || "ATLETA DX";
 
@@ -238,7 +282,6 @@
                 document.getElementById('name-right').style.textShadow = 'none';
             }
 
-            // Stato AVVIO / ALT
             const btnAvvio = document.getElementById('btn-avvio');
             if(s.running) {
                 btnAvvio.innerText = "ALT";
@@ -250,7 +293,6 @@
                 btnAvvio.classList.add('bg-[#16a34a]');
             }
 
-            // Sincronizza il girone attivo se settato dal server
             if (s.active_girone) {
                 const idx = gironiList.indexOf(s.active_girone);
                 if (idx !== -1 && currentGironeIdx !== idx) {
@@ -260,11 +302,6 @@
                 }
             }
         });
-
-        socket.on('action_feedback', d => {
-            alert(d.msg);
-        });
-
     </script>
 </body>
 </html>
