@@ -82,13 +82,19 @@
             matches.forEach(m => {
                 if (!m.sx || !m.dx || m.sx.trim() === '' || m.dx.trim() === '') return;
                 count++;
+                
+                // onfocus cancella il valore temporaneamente, onblur lo ripristina se l'utente non ha scritto nulla
                 const html = `
                 <div class="match-row">
                     <div class="fencer-name text-right pr-2 text-red-400">${m.sx}</div>
                     <div class="flex items-center gap-1">
-                        <input type="number" id="sx_${m.row}" value="${m.p_sx}" class="score-input">
+                        <input type="number" id="sx_${m.row}" value="${m.p_sx}" class="score-input" 
+                               onfocus="this.dataset.old = this.value; this.value = '';" 
+                               onblur="if(this.value === '') this.value = this.dataset.old;">
                         <span class="text-slate-500 font-bold">-</span>
-                        <input type="number" id="dx_${m.row}" value="${m.p_dx}" class="score-input">
+                        <input type="number" id="dx_${m.row}" value="${m.p_dx}" class="score-input"
+                               onfocus="this.dataset.old = this.value; this.value = '';" 
+                               onblur="if(this.value === '') this.value = this.dataset.old;">
                     </div>
                     <div class="fencer-name text-left pl-2 text-green-400">${m.dx}</div>
                     <button onclick="sendScore('${girone}', ${m.row}, '${m.sx.replace(/'/g, "\\'")}', '${m.dx.replace(/'/g, "\\'")}')" class="ml-3 bg-blue-600 active:bg-blue-500 p-3 rounded-lg shadow font-bold border border-blue-400">Invia</button>
