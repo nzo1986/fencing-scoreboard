@@ -97,7 +97,16 @@
         <!-- Row N / Girone / N -->
         <div class="flex gap-2 min-h-[50px]">
             <button id="btn-left-b" class="flex-1 bg-[#000] text-white font-bold py-3 sm:py-4 rounded border-custom active:bg-[#222]" onclick="sendCard('left', 'B')">N</button>
-            <button class="flex-[4] bg-[#27272a] text-white font-bold py-3 sm:py-4 rounded border-custom active:opacity-70" id="btn-girone" onclick="cycleGirone()">Girone: Rosso</button>
+            
+            <!-- Menu a tendina per scelta Girone -->
+            <select id="girone-select" class="flex-[4] bg-[#27272a] text-white font-bold py-3 sm:py-4 rounded border-custom outline-none text-center text-base sm:text-lg" onchange="changeGirone()">
+                <option value="rosso">Girone: Rosso</option>
+                <option value="giallo">Girone: Giallo</option>
+                <option value="blu">Girone: Blu</option>
+                <option value="verde">Girone: Verde</option>
+                <option value="32">Tabellone: 32</option>
+            </select>
+            
             <button id="btn-right-b" class="flex-1 bg-[#000] text-white font-bold py-3 sm:py-4 rounded border-custom active:bg-[#222]" onclick="sendCard('right', 'B')">N</button>
         </div>
 
@@ -120,8 +129,6 @@
     <script>
         const socket = io();
         let allGironi = {};
-        let currentGironeIdx = 0;
-        const gironiList = ['rosso', 'giallo', 'blu', 'verde', '32'];
         let priorityAnimTimer = null;
         
         // Funzioni Gestione Menu a comparsa
@@ -203,16 +210,13 @@
             if(t && !isNaN(t)) { socket.emit('adjust_time', {delta: parseInt(t)}); }
         }
 
-        function cycleGirone() {
-            currentGironeIdx = (currentGironeIdx + 1) % gironiList.length;
-            const g = gironiList[currentGironeIdx];
-            document.getElementById('btn-girone').innerText = "Girone: " + g.charAt(0).toUpperCase() + g.slice(1);
+        function changeGirone() {
             updateMatchDropdown();
             socket.emit('fetch_sheet'); 
         }
 
         function updateMatchDropdown() {
-            const g = gironiList[currentGironeIdx];
+            const g = document.getElementById('girone-select').value;
             const matches = allGironi[g] || [];
             const sel = document.getElementById('match-select');
             
@@ -310,10 +314,9 @@
             }
 
             if (s.active_girone) {
-                const idx = gironiList.indexOf(s.active_girone);
-                if (idx !== -1 && currentGironeIdx !== idx) {
-                    currentGironeIdx = idx;
-                    document.getElementById('btn-girone').innerText = "Girone: " + s.active_girone.charAt(0).toUpperCase() + s.active_girone.slice(1);
+                const gironeSelect = document.getElementById('girone-select');
+                if (gironeSelect && gironeSelect.value !== s.active_girone) {
+                    gironeSelect.value = s.active_girone;
                     updateMatchDropdown();
                 }
             }
