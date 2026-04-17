@@ -171,7 +171,19 @@
         });
         
         socket.on('timer_update', d => { 
-            document.getElementById('timer').innerText = d.time > 10 ? `${Math.floor(d.time/60)}:${(Math.floor(d.time%60)<10?'0':'')+Math.floor(d.time%60)}` : d.time.toFixed(1); 
+            const timerEl = document.getElementById('timer');
+            if (d.time > 10) {
+                let m = Math.floor(d.time/60);
+                let s = Math.floor(d.time%60);
+                let sStr = (s < 10 ? '0' : '') + s;
+                if (d.phase === 'PRIORITY_MINUTE') {
+                    timerEl.innerHTML = `${m}<span style="color:red;">:</span>${sStr}`;
+                } else {
+                    timerEl.innerText = `${m}:${sStr}`;
+                }
+            } else {
+                timerEl.innerText = d.time.toFixed(1);
+            }
         });
 
         const updateCardsUI = (side, fencer) => {
@@ -218,7 +230,20 @@
                 document.getElementById('ph-r').classList.remove('priority-active'); 
             }
             
-            document.getElementById('timer').innerText = s.timer > 10 ? `${Math.floor(s.timer/60)}:${(Math.floor(s.timer%60)<10?'0':'')+Math.floor(s.timer%60)}` : s.timer.toFixed(1);
+            const timerEl = document.getElementById('timer');
+            if (s.timer > 10) {
+                let m = Math.floor(s.timer/60);
+                let sec = Math.floor(s.timer%60);
+                let sStr = (sec < 10 ? '0' : '') + sec;
+                if (s.phase === 'PRIORITY_MINUTE') {
+                    timerEl.innerHTML = `${m}<span style="color:red;">:</span>${sStr}`;
+                } else {
+                    timerEl.innerText = `${m}:${sStr}`;
+                }
+            } else {
+                timerEl.innerText = s.timer.toFixed(1);
+            }
+            
             document.getElementById('n-l').innerText=s.fencer_left.name; 
             document.getElementById('s-l').innerText=s.fencer_left.score;
             document.getElementById('n-r').innerText=s.fencer_right.name; 

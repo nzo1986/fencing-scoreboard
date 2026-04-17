@@ -131,6 +131,31 @@
         let allGironi = {};
         let priorityAnimTimer = null;
         
+        // Aggiunta gestione audio telecomando
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Sblocca l'audio al primo tocco
+        document.body.addEventListener('click', () => {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+        }, {once: true});
+
+        function playBeep(hz, duration) {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const o = audioCtx.createOscillator(); 
+            const g = audioCtx.createGain();
+            o.type = 'square'; 
+            o.frequency.setValueAtTime(hz, audioCtx.currentTime); 
+            g.gain.setValueAtTime(1.0, audioCtx.currentTime);
+            o.connect(g); 
+            g.connect(audioCtx.destination);
+            o.start(); 
+            o.stop(audioCtx.currentTime + duration); 
+        }
+
+        socket.on('time_expired', () => {
+            playBeep(500, 1.0); // Suono quando scade il tempo
+        });
+        
         // Funzioni Gestione Menu a comparsa
         function closeAllMenus(except = null) {
             if (except !== 'menu-tempo') document.getElementById('menu-tempo').classList.add('hidden');
@@ -260,8 +285,19 @@
         });
 
         socket.on('timer_update', d => {
-            const timeStr = d.time > 10 ? `${Math.floor(d.time/60)}:${(Math.floor(d.time%60)<10?'0':'')+Math.floor(d.time%60)}` : d.time.toFixed(1);
-            document.getElementById('timer-display-top').innerText = timeStr;
+            const display = document.getElementById('timer-display-top');
+            if (d.time > 10) {
+                let m = Math.floor(d.time/60);
+                let s = Math.floor(d.time%60);
+                let sStr = (s < 10 ? '0' : '') + s;
+                if (d.phase === 'PRIORITY_MINUTE') {
+                    display.innerHTML = `${m}<span class="text-red-500">:</span>${sStr}`;
+                } else {
+                    display.innerHTML = `${m}:${sStr}`;
+                }
+            } else {
+                display.innerText = d.time.toFixed(1);
+            }
         });
 
         socket.on('priority_animation', data => {

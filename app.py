@@ -351,8 +351,14 @@ def timer_thread():
                 socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase','MATCH')})
                 if current_state['timer'] <= 0:
                     socketio.emit('time_expired')
-                    current_state['timer'] = float(current_state['settings']['time_match'])
-                    current_state['phase'] = 'MATCH'
+                    
+                    # Se finisce il tempo regolare, passa al minuto di priorità
+                    if current_state.get('phase') != 'PRIORITY_MINUTE':
+                        current_state['timer'] = 60.0
+                        current_state['phase'] = 'PRIORITY_MINUTE'
+                    else:
+                        current_state['timer'] = 0.0 # Resta a zero se scade anche la priorità
+                        
                     current_state['running'] = False
                     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
                     socketio.emit('state_update', current_state)
