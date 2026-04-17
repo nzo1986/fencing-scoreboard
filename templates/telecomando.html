@@ -113,7 +113,7 @@
         <!-- Row Select / AGG -->
         <div class="flex gap-2 min-h-[50px]">
             <select id="match-select" class="flex-[4] bg-[#18181b] text-white border-custom rounded px-3 py-3 sm:py-4 outline-none text-center font-bold text-base sm:text-lg" onchange="loadSelectedMatch()">
-                <option value="">Seleziona Assalto...</option>
+                <option value="" style="color: white;">Seleziona Assalto...</option>
             </select>
             <button class="flex-[1] bg-[#15803d] text-white font-bold py-3 sm:py-4 rounded border border-[#166534] active:opacity-70" onclick="socket.emit('fetch_sheet')">AGG.</button>
         </div>
@@ -203,7 +203,7 @@
             socket.emit('fetch_sheet');
         });
 
-        // Aggiorna passivamente ogni 40s (non forza il caricamento della grafica del girone se l'utente la sta usando)
+        // Aggiorna passivamente ogni 40s
         setInterval(() => { socket.emit('fetch_sheet'); }, 40000);
 
         function promptTime() {
@@ -221,7 +221,7 @@
             const matches = allGironi[g] || [];
             const sel = document.getElementById('match-select');
             
-            sel.innerHTML = '<option value="">Seleziona Assalto...</option>';
+            sel.innerHTML = '<option value="" style="color: white;">Seleziona Assalto...</option>';
             matches.forEach(m => {
                 if(m.sx && m.dx && m.sx.trim() !== '' && m.dx.trim() !== '') {
                     const opt = document.createElement('option');
@@ -230,8 +230,15 @@
                     const p_sx_val = parseInt(m.p_sx) || 0;
                     const p_dx_val = parseInt(m.p_dx) || 0;
                     
-                    opt.innerText = `${m.sx} [${p_sx_val}] - [${p_dx_val}] ${m.dx}`;
-                    if (p_sx_val !== 0 || p_dx_val !== 0) { opt.style.color = '#ef4444'; }
+                    // Condizione per colorare e inserire indicatore visivo
+                    if (p_sx_val !== 0 || p_dx_val !== 0) { 
+                        opt.style.color = '#ef4444'; // Rosso (funziona su Desktop/Alcuni Mobile)
+                        opt.innerText = `🔴 ${m.sx} [${p_sx_val}] - [${p_dx_val}] ${m.dx}`;
+                    } else {
+                        opt.style.color = '#22c55e'; // Verde (funziona su Desktop/Alcuni Mobile)
+                        opt.innerText = `🟢 ${m.sx} [${p_sx_val}] - [${p_dx_val}] ${m.dx}`;
+                    }
+                    
                     sel.appendChild(opt);
                 }
             });
@@ -312,6 +319,14 @@
                 btnAvvio.innerText = "AVVIO";
                 btnAvvio.classList.remove('bg-[#dc2626]');
                 btnAvvio.classList.add('bg-[#16a34a]');
+            }
+
+            if (s.active_girone) {
+                const gironeSelect = document.getElementById('girone-select');
+                if (gironeSelect && gironeSelect.value !== s.active_girone) {
+                    gironeSelect.value = s.active_girone;
+                    updateMatchDropdown();
+                }
             }
         });
     </script>
