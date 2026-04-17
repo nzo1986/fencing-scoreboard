@@ -7,25 +7,25 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        body { background: #0a0a0a; color: #fff; touch-action: manipulation; user-select: none; font-family: sans-serif; overflow: hidden; }
+        body { background: #0a0a0a; color: #fff; touch-action: manipulation; user-select: none; font-family: sans-serif; }
         .border-custom { border: 1px solid #333; }
         select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
         .name-transition { transition: color 0.1s, text-shadow 0.1s; }
         .p-mode-active { background: #4b5563 !important; border-color: #9ca3af !important; box-shadow: inset 0 0 10px rgba(0,0,0,0.8); }
     </style>
 </head>
-<body class="h-screen flex flex-col relative">
+<body class="h-[100dvh] flex flex-col relative overflow-hidden">
 
     <!-- Toast Container -->
     <div id="toast-container" class="fixed top-5 left-1/2 transform -translate-x-1/2 flex flex-col gap-2 z-50 w-11/12 max-w-md pointer-events-none"></div>
 
     <!-- Top Bar -->
-    <div class="bg-[#1f1f1f] py-3 text-center border-b border-[#333] cursor-pointer active:bg-[#222]" onclick="document.getElementById('menu-tempo').classList.toggle('hidden')">
+    <div class="bg-[#1f1f1f] py-3 text-center border-b border-[#333] cursor-pointer active:bg-[#222] flex-none" onclick="toggleMenu('menu-tempo')">
         <span class="text-white font-bold text-lg">Modifica Tempo (<span id="timer-display-top">3:00</span>) ▼</span>
     </div>
 
     <!-- Hidden Time Menu -->
-    <div id="menu-tempo" class="hidden grid grid-cols-4 gap-2 bg-[#18181b] p-3 border-b border-[#333] shadow-inner">
+    <div id="menu-tempo" class="hidden grid grid-cols-4 gap-2 bg-[#18181b] p-3 border-b border-[#333] shadow-inner flex-none">
         <button class="bg-[#27272a] text-green-400 py-3 rounded font-bold active:bg-[#444] border border-[#444] text-sm sm:text-base" onclick="socket.emit('adjust_time', {delta: 60})">+1 MIN</button>
         <button class="bg-[#27272a] text-red-400 py-3 rounded font-bold active:bg-[#444] border border-[#444] text-sm sm:text-base" onclick="socket.emit('adjust_time', {delta: -60})">-1 MIN</button>
         <button class="bg-[#27272a] text-green-400 py-3 rounded font-bold active:bg-[#444] border border-[#444] text-sm sm:text-base" onclick="socket.emit('adjust_time', {delta: 1})">+1 SEC</button>
@@ -33,7 +33,7 @@
     </div>
 
     <!-- +/- Row -->
-    <div class="flex w-full bg-[#111] border-b border-[#333]">
+    <div class="flex w-full bg-[#111] border-b border-[#333] flex-none">
         <button class="flex-1 py-4 text-red-500 font-bold border-r border-[#333] active:bg-[#222]" onclick="socket.emit('update_score', {side:'left', delta:-1})">-</button>
         <button class="flex-1 py-4 text-green-500 font-bold border-r border-[#333] active:bg-[#222]" onclick="socket.emit('update_score', {side:'left', delta:1})">+</button>
         <button class="flex-[2] py-4 text-gray-300 font-bold border-r border-[#333] active:bg-[#222]" onclick="socket.emit('double_hit')">DOPPIO</button>
@@ -42,76 +42,77 @@
     </div>
 
     <!-- Scores -->
-    <div class="flex w-full bg-[#050505] py-6">
+    <div class="flex w-full bg-[#050505] py-4 sm:py-6 flex-none">
         <div class="flex-1 text-center text-red-500 text-6xl font-bold" id="score-left">0</div>
         <div class="flex-1 text-center text-green-500 text-6xl font-bold" id="score-right">0</div>
     </div>
 
     <!-- AVVIO Button -->
-    <div class="w-full px-2 pt-2 pb-1">
-        <button id="btn-avvio" class="w-full bg-[#16a34a] text-white text-5xl font-bold py-8 rounded shadow-lg active:opacity-75 transition-colors" onclick="socket.emit('toggle_timer')">AVVIO</button>
+    <div class="w-full px-2 pt-2 pb-1 flex-none">
+        <!-- Cliccare AVVIO ora chiude anche tutti i menu aperti -->
+        <button id="btn-avvio" class="w-full bg-[#16a34a] text-white text-4xl sm:text-5xl font-bold py-6 sm:py-8 rounded shadow-lg active:opacity-75 transition-colors" onclick="socket.emit('toggle_timer'); closeAllMenus();">AVVIO</button>
     </div>
 
     <!-- Nomi Atleti Attuali -->
-    <div class="flex w-full px-2 pb-2 justify-between items-center">
-        <div class="flex-1 text-center text-red-500 text-xl font-bold truncate px-1 name-transition" id="name-left">ATLETA SX</div>
+    <div class="flex w-full px-2 pb-2 justify-between items-center flex-none">
+        <div class="flex-1 text-center text-red-500 text-lg sm:text-xl font-bold truncate px-1 name-transition" id="name-left">ATLETA SX</div>
         <div class="text-gray-500 font-bold px-1">VS</div>
-        <div class="flex-1 text-center text-green-500 text-xl font-bold truncate px-1 name-transition" id="name-right">ATLETA DX</div>
+        <div class="flex-1 text-center text-green-500 text-lg sm:text-xl font-bold truncate px-1 name-transition" id="name-right">ATLETA DX</div>
     </div>
 
-    <!-- Grid Controls -->
-    <div class="w-full px-2 pb-2 flex-1 flex flex-col gap-2 justify-center">
+    <!-- Grid Controls (Zona centrale con scroll se lo schermo è piccolo) -->
+    <div class="w-full px-2 pb-2 flex-1 flex flex-col gap-2 justify-start sm:justify-center overflow-y-auto">
         
         <!-- Row P / Priorità / INVIA / P -->
-        <div class="flex gap-2">
-            <button id="btn-left-p" class="flex-1 bg-[#333] text-gray-300 font-bold py-4 rounded border-custom active:opacity-70 transition-colors" onclick="togglePMode('left')">P</button>
-            <button class="flex-[2] bg-[#1e3a8a] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('toggle_priority')">Priorità</button>
-            <button class="flex-[2] bg-[#1d4ed8] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('send_result')">INVIA</button>
-            <button id="btn-right-p" class="flex-1 bg-[#333] text-gray-300 font-bold py-4 rounded border-custom active:opacity-70 transition-colors" onclick="togglePMode('right')">P</button>
+        <div class="flex gap-2 min-h-[50px]">
+            <button id="btn-left-p" class="flex-1 bg-[#333] text-gray-300 font-bold py-3 sm:py-4 rounded border-custom active:opacity-70 transition-colors" onclick="togglePMode('left')">P</button>
+            <button class="flex-[2] bg-[#1e3a8a] text-white font-bold py-3 sm:py-4 rounded border-custom active:opacity-70" onclick="socket.emit('toggle_priority')">Priorità</button>
+            <button class="flex-[2] bg-[#1d4ed8] text-white font-bold py-3 sm:py-4 rounded border-custom active:opacity-70" onclick="socket.emit('send_result')">INVIA</button>
+            <button id="btn-right-p" class="flex-1 bg-[#333] text-gray-300 font-bold py-3 sm:py-4 rounded border-custom active:opacity-70 transition-colors" onclick="togglePMode('right')">P</button>
         </div>
 
         <!-- Row G / Swipe / G -->
-        <div class="flex gap-2">
-            <button id="btn-left-y" class="flex-1 bg-[#ca8a04] text-black font-bold py-4 rounded border-custom active:opacity-70" onclick="sendCard('left', 'Y')">G</button>
-            <button class="flex-[4] bg-[#7f1d1d] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="socket.emit('swap_fencers')">Swipe Atleti &lt;--&gt;</button>
-            <button id="btn-right-y" class="flex-1 bg-[#ca8a04] text-black font-bold py-4 rounded border-custom active:opacity-70" onclick="sendCard('right', 'Y')">G</button>
+        <div class="flex gap-2 min-h-[50px]">
+            <button id="btn-left-y" class="flex-1 bg-[#ca8a04] text-black font-bold py-3 sm:py-4 rounded border-custom active:opacity-70" onclick="sendCard('left', 'Y')">G</button>
+            <button class="flex-[4] bg-[#7f1d1d] text-white font-bold py-3 sm:py-4 rounded border-custom active:opacity-70" onclick="socket.emit('swap_fencers')">Swipe Atleti &lt;--&gt;</button>
+            <button id="btn-right-y" class="flex-1 bg-[#ca8a04] text-black font-bold py-3 sm:py-4 rounded border-custom active:opacity-70" onclick="sendCard('right', 'Y')">G</button>
         </div>
 
         <!-- Row R / Menu Reset / R -->
-        <div class="flex gap-2">
-            <button id="btn-left-r" class="flex-1 bg-[#dc2626] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="sendCard('left', 'R')">R</button>
-            <button class="flex-[4] bg-[#27272a] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="document.getElementById('menu-reset').classList.toggle('hidden')">Menu Reset</button>
-            <button id="btn-right-r" class="flex-1 bg-[#dc2626] text-white font-bold py-4 rounded border-custom active:opacity-70" onclick="sendCard('right', 'R')">R</button>
+        <div class="flex gap-2 min-h-[50px]">
+            <button id="btn-left-r" class="flex-1 bg-[#dc2626] text-white font-bold py-3 sm:py-4 rounded border-custom active:opacity-70" onclick="sendCard('left', 'R')">R</button>
+            <button class="flex-[4] bg-[#27272a] text-white font-bold py-3 sm:py-4 rounded border-custom active:opacity-70" onclick="toggleMenu('menu-reset')">Menu Reset</button>
+            <button id="btn-right-r" class="flex-1 bg-[#dc2626] text-white font-bold py-3 sm:py-4 rounded border-custom active:opacity-70" onclick="sendCard('right', 'R')">R</button>
         </div>
 
-        <!-- Hidden Reset Menu -->
+        <!-- Hidden Reset Menu (Si chiude al click di un pulsante) -->
         <div id="menu-reset" class="hidden grid grid-cols-2 gap-2 bg-[#18181b] p-3 rounded border border-[#444] shadow-inner mb-1">
-            <button class="bg-[#333] text-white py-3 rounded font-bold active:bg-[#555]" onclick="socket.emit('reset_scores')">Azzera Punti</button>
-            <button class="bg-[#333] text-white py-3 rounded font-bold active:bg-[#555]" onclick="socket.emit('reset_timer')">Azzera Tempo</button>
-            <button class="bg-[#222] text-white py-3 rounded font-bold col-span-2 border border-[#444] active:bg-[#444]" onclick="socket.emit('reset_all')">Reset Totale</button>
-            <button class="bg-[#3f1f1f] text-red-300 py-3 rounded font-bold text-sm border border-[#5c2b2b] active:bg-[#5c2b2b]" onclick="socket.emit('reset_cards', {side:'left'})">Reset Cart. SX</button>
-            <button class="bg-[#1b3b22] text-green-300 py-3 rounded font-bold text-sm border border-[#2b5c35] active:bg-[#2b5c35]" onclick="socket.emit('reset_cards', {side:'right'})">Reset Cart. DX</button>
+            <button class="bg-[#333] text-white py-3 rounded font-bold active:bg-[#555]" onclick="socket.emit('reset_scores'); closeAllMenus();">Azzera Punti</button>
+            <button class="bg-[#333] text-white py-3 rounded font-bold active:bg-[#555]" onclick="socket.emit('reset_timer'); closeAllMenus();">Azzera Tempo</button>
+            <button class="bg-[#222] text-white py-3 rounded font-bold col-span-2 border border-[#444] active:bg-[#444]" onclick="socket.emit('reset_all'); closeAllMenus();">Reset Totale</button>
+            <button class="bg-[#3f1f1f] text-red-300 py-3 rounded font-bold text-sm border border-[#5c2b2b] active:bg-[#5c2b2b]" onclick="socket.emit('reset_cards', {side:'left'}); closeAllMenus();">Reset Cart. SX</button>
+            <button class="bg-[#1b3b22] text-green-300 py-3 rounded font-bold text-sm border border-[#2b5c35] active:bg-[#2b5c35]" onclick="socket.emit('reset_cards', {side:'right'}); closeAllMenus();">Reset Cart. DX</button>
         </div>
 
         <!-- Row N / Girone / N -->
-        <div class="flex gap-2">
-            <button id="btn-left-b" class="flex-1 bg-[#000] text-white font-bold py-4 rounded border-custom active:bg-[#222]" onclick="sendCard('left', 'B')">N</button>
-            <button class="flex-[4] bg-[#27272a] text-white font-bold py-4 rounded border-custom active:opacity-70" id="btn-girone" onclick="cycleGirone()">Girone: Rosso</button>
-            <button id="btn-right-b" class="flex-1 bg-[#000] text-white font-bold py-4 rounded border-custom active:bg-[#222]" onclick="sendCard('right', 'B')">N</button>
+        <div class="flex gap-2 min-h-[50px]">
+            <button id="btn-left-b" class="flex-1 bg-[#000] text-white font-bold py-3 sm:py-4 rounded border-custom active:bg-[#222]" onclick="sendCard('left', 'B')">N</button>
+            <button class="flex-[4] bg-[#27272a] text-white font-bold py-3 sm:py-4 rounded border-custom active:opacity-70" id="btn-girone" onclick="cycleGirone()">Girone: Rosso</button>
+            <button id="btn-right-b" class="flex-1 bg-[#000] text-white font-bold py-3 sm:py-4 rounded border-custom active:bg-[#222]" onclick="sendCard('right', 'B')">N</button>
         </div>
 
         <!-- Row Select / AGG -->
-        <div class="flex gap-2">
-            <select id="match-select" class="flex-[4] bg-[#18181b] text-white border-custom rounded px-3 py-4 outline-none text-center font-bold text-lg" onchange="loadSelectedMatch()">
+        <div class="flex gap-2 min-h-[50px]">
+            <select id="match-select" class="flex-[4] bg-[#18181b] text-white border-custom rounded px-3 py-3 sm:py-4 outline-none text-center font-bold text-base sm:text-lg" onchange="loadSelectedMatch()">
                 <option value="">Seleziona Assalto...</option>
             </select>
-            <button class="flex-[1] bg-[#15803d] text-white font-bold py-4 rounded border border-[#166534] active:opacity-70" onclick="socket.emit('fetch_sheet')">AGG.</button>
+            <button class="flex-[1] bg-[#15803d] text-white font-bold py-3 sm:py-4 rounded border border-[#166534] active:opacity-70" onclick="socket.emit('fetch_sheet')">AGG.</button>
         </div>
 
     </div>
 
-    <!-- Bottom Nav Bar -->
-    <div class="flex gap-2 p-3 bg-[#111] border-t border-[#333] mt-auto">
+    <!-- Bottom Nav Bar con pulsanti espliciti (sempre visibili a fine schermo) -->
+    <div class="flex gap-2 p-3 bg-[#111] border-t border-[#333] mt-auto flex-none">
         <button class="flex-[2] bg-indigo-700 text-white font-bold py-3 text-sm rounded shadow active:bg-indigo-600" onclick="window.location.href='/inserisci_punti'">📝 Altri Gironi</button>
         <button class="flex-1 bg-gray-700 text-white font-bold py-3 text-sm rounded shadow active:bg-gray-600" onclick="window.location.href='/settings'">⚙️ Impost.</button>
     </div>
@@ -123,6 +124,21 @@
         const gironiList = ['rosso', 'giallo', 'blu', 'verde', '32'];
         let priorityAnimTimer = null;
         
+        // Funzioni Gestione Menu a comparsa
+        function closeAllMenus(except = null) {
+            if (except !== 'menu-tempo') document.getElementById('menu-tempo').classList.add('hidden');
+            if (except !== 'menu-reset') document.getElementById('menu-reset').classList.add('hidden');
+        }
+
+        function toggleMenu(menuId) {
+            const menu = document.getElementById(menuId);
+            const isHidden = menu.classList.contains('hidden');
+            closeAllMenus(); // Chiudi gli altri prima di aprire questo
+            if (isHidden) {
+                menu.classList.remove('hidden');
+            }
+        }
+
         // Gestione Logica Cartellini "P"
         let pMode = { left: false, right: false };
 
@@ -149,7 +165,7 @@
             }
         }
 
-        // Notifiche Toast (non invasive e veloci)
+        // Notifiche Toast
         function showToast(msg, type = 'info') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
@@ -165,7 +181,6 @@
             container.appendChild(toast);
             setTimeout(() => toast.classList.remove('opacity-0'), 10);
             
-            // Chiudi rapidissimamente dopo 1 secondo (invece di 2)
             setTimeout(() => {
                 toast.classList.add('opacity-0');
                 setTimeout(() => toast.remove(), 300);
@@ -223,6 +238,7 @@
                 const data = JSON.parse(val);
                 socket.emit('load_match', data);
                 document.getElementById('match-select').value = "";
+                closeAllMenus(); // Chiude tutto se era aperto
             }
         }
 
