@@ -192,6 +192,7 @@ def r_timer():
     current_state['timer'] = float(current_state['settings']['time_match'])
     current_state['phase'] = 'MATCH'
     current_state['running'] = False
+    current_state['priority'] = None
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
     eventlet.spawn(save_state)
@@ -357,7 +358,9 @@ def timer_thread():
                         current_state['timer'] = 60.0
                         current_state['phase'] = 'PRIORITY_MINUTE'
                     else:
-                        current_state['timer'] = 0.0 # Resta a zero se scade anche la priorità
+                        current_state['timer'] = float(current_state['settings']['time_match'])
+                        current_state['phase'] = 'MATCH'
+                        current_state['priority'] = None
                         
                     current_state['running'] = False
                     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
