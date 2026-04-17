@@ -245,6 +245,8 @@ def handle_swap():
 def l_match(d):
     push_history()
     current_state['active_girone'] = d.get('girone', current_state.get('current_girone', 'rosso'))
+    current_state['current_girone'] = current_state['active_girone'] # Sincronizza il girone per il display
+    current_state['match_list'] = gironi_cache.get(current_state['active_girone'], []) # Aggiorna la lista del display immediatamente
     current_state['manual_selection'] = True
     current_state['swapped'] = False 
     current_state['current_row_idx'] = d['row']
@@ -293,6 +295,8 @@ def handle_send_result():
                 break
     if next_match:
         current_state['active_girone'] = g
+        current_state['current_girone'] = g # Sincronizza il girone per il display
+        current_state['match_list'] = gironi_cache.get(g, []) # Aggiorna la lista
         current_state['manual_selection'] = True
         current_state['swapped'] = False 
         current_state['current_row_idx'] = next_match['row']
