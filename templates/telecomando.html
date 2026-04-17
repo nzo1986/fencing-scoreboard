@@ -203,6 +203,7 @@
             socket.emit('fetch_sheet');
         });
 
+        // Aggiorna passivamente ogni 40s (non forza il caricamento della grafica del girone se l'utente la sta usando)
         setInterval(() => { socket.emit('fetch_sheet'); }, 40000);
 
         function promptTime() {
@@ -210,9 +211,9 @@
             if(t && !isNaN(t)) { socket.emit('adjust_time', {delta: parseInt(t)}); }
         }
 
+        // Cambia semplicemente i dati nella tendina senza forzare chiamate esterne (legge la cache allGironi)
         function changeGirone() {
             updateMatchDropdown();
-            socket.emit('fetch_sheet'); 
         }
 
         function updateMatchDropdown() {
@@ -311,14 +312,6 @@
                 btnAvvio.innerText = "AVVIO";
                 btnAvvio.classList.remove('bg-[#dc2626]');
                 btnAvvio.classList.add('bg-[#16a34a]');
-            }
-
-            if (s.active_girone) {
-                const gironeSelect = document.getElementById('girone-select');
-                if (gironeSelect && gironeSelect.value !== s.active_girone) {
-                    gironeSelect.value = s.active_girone;
-                    updateMatchDropdown();
-                }
             }
         });
     </script>
