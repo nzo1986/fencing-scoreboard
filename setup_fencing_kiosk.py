@@ -101,7 +101,7 @@ cd ~/fencing_scoreboard
 source venv/bin/activate
 python app.py &
 sleep 10
-chromium-browser --kiosk --noerrdialogs --disable-infobars --autoplay-policy=no-user-gesture-required http://localhost:5000
+chromium-browser --kiosk --noerrdialogs --disable-infobars --autoplay-policy=no-user-gesture-required http://127.0.0.1:5000
 """
     with open(Run_Script, "w") as f: f.write(run_script_content)
     run_command(f"chmod +x {Run_Script}")
