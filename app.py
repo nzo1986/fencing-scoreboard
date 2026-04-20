@@ -25,6 +25,8 @@ def settings(): return render_template('settings.html')
 def riferimenti(): return render_template('riferimenti.html')
 @app.route('/inserisci_punti')
 def inserisci_punti(): return render_template('inserisci_punti.html')
+@app.route('/inserisci_atleti')
+def inserisci_atleti(): return render_template('inserisci_atleti.html')
 @app.route('/wifi')
 def wifi_page(): return render_template('wifi.html')
 @app.route('/foto')
@@ -360,6 +362,37 @@ def handle_send_background_result(data):
     }
     socketio.emit('action_feedback', {'status': 'info', 'msg': f"Invio risultato {data['sx']} vs {data['dx']} in background..."})
     eventlet.spawn(process_background_upload, payload, g, socketio)
+
+@socketio.on('save_bulk_atleti')
+def handle_save_bulk_atleti(data):
+    url = current_state['settings'].get('google_script_url')
+    if not url:
+        socketio.emit('action_feedback', {'status': 'error', 'msg': 'URL Apps Script mancante. Vai in Impostazioni per inserirlo.'})
+        return
+    
+    def send_bulk():
+        try:
+            import requests
+            # Payload con struttura per aggiornamento multiplo (richiede setup nell'App Script di Google)
+            payload = {
+                "action": "update_atleti",
+                "sheet_name": "Atleti",
+                "data": data['atleti']
+            }
+            res = requests.post(url, json=payload, timeout=15)
+            if res.status_code == 200:
+                socketio.emit('upload_status', {'color': 'green'})
+                socketio.emit('action_feedback', {'status': 'success', 'msg': 'Dati Atleti inviati a Google Sheets!'})
+            else:
+                socketio.emit('upload_status', {'color': 'red'})
+                socketio.emit('action_feedback', {'status': 'error', 'msg': f'Errore salvataggio Google: HTTP {res.status_code}'})
+        except Exception as e:
+            socketio.emit('upload_status', {'color': 'red'})
+            socketio.emit('action_feedback', {'status': 'error', 'msg': f'Errore di rete: {str(e)}'})
+            
+    socketio.emit('upload_status', {'color': 'yellow'})
+    socketio.emit('action_feedback', {'status': 'info', 'msg': 'Salvataggio Atleti in corso...'})
+    eventlet.spawn(send_bulk)
 
 @socketio.on('fetch_sheet')
 def f_sheet(d=None):

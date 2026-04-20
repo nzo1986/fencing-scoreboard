@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gestione Atleti</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { background: #0f172a; color: white; font-family: sans-serif; padding-bottom: 40px; }
+        .table-container { max-height: 70vh; overflow-y: auto; border: 1px solid #334155; border-radius: 0.5rem; }
+        thead th { position: sticky; top: 0; background-color: #1e293b; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .duplicate { border: 2px solid #ef4444 !important; box-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+        .autocomplete-items {
+            position: absolute; border: 1px solid #334155; z-index: 99; top: 100%; left: 0; right: 0;
+            background-color: #1e293b; max-height: 200px; overflow-y: auto; border-radius: 0 0 0.5rem 0.5rem;
+        }
+        .autocomplete-items div {
+            padding: 10px; cursor: pointer; border-bottom: 1px solid #334155;
+        }
+        .autocomplete-items div:hover { background-color: #3b82f6; }
+        input { background: #0f172a; color: white; border: 1px solid #475569; border-radius: 0.25rem; padding: 8px; outline: none; width: 100%; }
+        input:focus { border-color: #3b82f6; }
+    </style>
+</head>
+<body class="p-3 relative" onclick="closeAllLists()">
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-5 left-1/2 transform -translate-x-1/2 flex flex-col gap-2 z-50 w-11/12 max-w-md pointer-events-none"></div>
+
+    <div class="flex flex-col sm:flex-row justify-between items-center mb-4 pb-3 border-b border-slate-700 gap-3">
+        <h1 class="text-2xl font-bold text-slate-100 flex items-center gap-2">🤺 Gestione Atleti</h1>
+        <div class="flex gap-2 w-full sm:w-auto">
+            <button onclick="saveAll()" class="flex-1 sm:flex-none bg-green-600 hover:bg-green-500 px-5 py-2.5 rounded-lg font-bold shadow transition">💾 Salva in Google</button>
+            <button onclick="window.location.href='/telecomando'" class="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded-lg font-bold shadow transition text-sm">Indietro</button>
+        </div>
+    </div>
+
+    <div class="bg-slate-800/80 p-3 rounded-lg mb-4 border border-slate-700 text-sm flex justify-between items-center">
+        <div>
+            <span class="text-blue-400 font-bold">Nota:</span> Il foglio Google deve avere permessi "Chiunque abbia il link" in Lettura.
+        </div>
+        <button onclick="loadGoogleData()" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded font-bold shadow text-xs">🔄 Sincronizza Dati</button>
+    </div>
+
+    <div class="table-container bg-slate-900">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr>
+                    <th class="p-3 text-slate-400 w-12 text-center">RIGA</th>
+                    <th class="p-3 text-slate-400">NOME ATLETA</th>
+                    <th class="p-3 text-slate-400 w-24 text-center">RANKING</th>
+                    <th class="p-3 text-slate-400 w-24 text-center">GIRONE (Pos)</th>
+                    <th class="p-3 text-slate-400 w-24 text-center">ED (1-5, 32)</th>
+                </tr>
+            </thead>
+            <tbody id="atleti-tbody">
+                <!-- Generato dal JS -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const socket = io();
+        let sheetId = "";
+        let rankList = []; // [{name: "MARIO ROSSI", rank: 15}]
+        
+        // 1. Notifiche Toast
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            let bgColor = 'bg-blue-600', borderColor = 'border-blue-400';
+            if (type === 'error') { bgColor = 'bg-red-600'; borderColor = 'border-red-400'; }
+            if (type === 'success') { bgColor = 'bg-green-600'; borderColor = 'border-green-400'; }
+            if (type === 'warning') { bgColor = 'bg-yellow-600'; borderColor = 'border-yellow-400'; }
+
+            toast.className = `${bgColor} border ${borderColor} text-white px-4 py-3 rounded-lg shadow-xl font-bold text-center text-sm transition-opacity duration-300 opacity-0 pointer-events-auto`;
+            toast.innerText = msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('opacity-0'), 10);
+            setTimeout(() => { toast.classList.add('opacity-0'); setTimeout(() => toast.remove(), 300); }, 2000); 
+        }
+
+        // 2. Ricezione ID Google Sheets
+        socket.on('state_update', s => {
+            if(s.settings && s.settings.google_sheet_id && !sheetId) {
+                sheetId = s.settings.google_sheet_id;
+                loadGoogleData();
+            }
+        });
+
+        socket.on('action_feedback', d => showToast(d.msg, d.status));
+
+        // 3. Generazione Righe vuote (da M5 a M44)
+        function initTable() {
+            const tbody = document.getElementById('atleti-tbody');
+            tbody.innerHTML = '';
+            for(let i = 5; i <= 44; i++) {
+                tbody.innerHTML += `
+                    <tr class="border-b border-slate-800 hover:bg-slate-800 transition-colors">
+                        <td class="p-3 text-center text-slate-500 font-bold">${i}</td>
+                        <td class="p-3 relative">
+                            <input type="text" id="nome_${i}" placeholder="Inserisci Nome..." oninput="handleInput(this, ${i})" autocomplete="off">
+                            <div id="autocomplete_${i}" class="autocomplete-items hidden"></div>
+                        </td>
+                        <td class="p-3 text-center"><span id="rank_${i}" class="bg-indigo-900 text-indigo-200 px-2 py-1 rounded text-xs font-bold empty:hidden"></span></td>
+                        <td class="p-3"><input type="number" id="girone_${i}" placeholder="Es: 11" class="text-center girone-input" onchange="checkDuplicates()"></td>
+                        <td class="p-3"><input type="text" id="ed_${i}" placeholder="1-5, 32" class="text-center"></td>
+                    </tr>
+                `;
+            }
+        }
+
+        // 4. Scaricamento dati diretti da Google Sheets via CSV
+        function loadGoogleData() {
+            if(!sheetId) return showToast("Manca ID Foglio Google nelle impostazioni!", "error");
+            
+            showToast("Sincronizzazione dati da Google in corso...", "warning");
+            
+            // A. Leggi Ranking (Supponiamo E3:F400 - E:Nome, F:Rank)
+            const rankUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Rank&range=E3:F400`;
+            fetch(rankUrl).then(r => r.text()).then(csv => {
+                rankList = parseCSV(csv).map(r => ({ name: (r[0]||"").toUpperCase().trim(), rank: r[1]||"" })).filter(r => r.name !== "");
+            }).catch(e => console.log("Errore Rank:", e));
+
+            // B. Leggi Atleti Attuali (M5:S44)
+            const atletiUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Atleti&range=M5:S44`;
+            fetch(atletiUrl).then(r => r.text()).then(csv => {
+                const rows = parseCSV(csv);
+                rows.forEach((r, idx) => {
+                    const rowNum = idx + 5;
+                    if(rowNum <= 44) {
+                        document.getElementById(`nome_${rowNum}`).value = r[0] || "";      // Colonna M
+                        document.getElementById(`rank_${rowNum}`).innerText = r[1] || "";    // Colonna N (Ranking Attuale)
+                        document.getElementById(`girone_${rowNum}`).value = r[3] || "";      // Colonna P (Girone)
+                        document.getElementById(`ed_${rowNum}`).value = r[6] || "";          // Colonna S (ED)
+                    }
+                });
+                checkDuplicates();
+                showToast("Sincronizzazione Completata!", "success");
+            }).catch(e => showToast("Errore di lettura CSV Google. Assicurati che il foglio sia condiviso pubblicamente in Lettura.", "error"));
+        }
+
+        // 5. Parser CSV Semplificato
+        function parseCSV(str) {
+            const arr = []; let quote = false, row = [], col = '';
+            for (let c = 0; c < str.length; c++) {
+                let cc = str[c], nc = str[c+1];
+                if (cc === '"' && quote && nc === '"') { col += cc; ++c; continue; }
+                if (cc === '"') { quote = !quote; continue; }
+                if (cc === ',' && !quote) { row.push(col.trim()); col = ''; continue; }
+                if (cc === '\n' && !quote) { row.push(col.trim()); arr.push(row); row = []; col = ''; continue; }
+                col += cc;
+            }
+            if (col !== '' || row.length > 0) { row.push(col.trim()); arr.push(row); }
+            return arr;
+        }
+
+        // 6. Logica Autocomplete
+        function handleInput(inp, rowNum) {
+            closeAllLists();
+            const val = inp.value.toUpperCase();
+            if (!val) { document.getElementById(`rank_${rowNum}`).innerText = ""; return; }
+            
+            const listContainer = document.getElementById(`autocomplete_${rowNum}`);
+            listContainer.innerHTML = '';
+            
+            let count = 0;
+            for (let i = 0; i < rankList.length; i++) {
+                if (rankList[i].name.includes(val)) {
+                    const item = document.createElement("div");
+                    // Evidenzia testuale
+                    const startIdx = rankList[i].name.indexOf(val);
+                    item.innerHTML = rankList[i].name.substring(0, startIdx) + 
+                                     "<strong>" + val + "</strong>" + 
+                                     rankList[i].name.substring(startIdx + val.length) +
+                                     `<span class="float-right text-slate-400 text-xs">P.ti: ${rankList[i].rank}</span>`;
+                    
+                    item.innerHTML += `<input type="hidden" value="${rankList[i].name}">`;
+                    item.innerHTML += `<input type="hidden" data-rank="${rankList[i].rank}">`;
+                    
+                    item.addEventListener("click", function(e) {
+                        inp.value = this.getElementsByTagName("input")[0].value;
+                        document.getElementById(`rank_${rowNum}`).innerText = this.getElementsByTagName("input")[1].getAttribute("data-rank");
+                        closeAllLists();
+                    });
+                    listContainer.appendChild(item);
+                    listContainer.classList.remove('hidden');
+                    count++;
+                    if(count >= 8) break; // Max 8 suggerimenti
+                }
+            }
+            if(count === 0) listContainer.classList.add('hidden');
+        }
+
+        function closeAllLists(elmnt) {
+            const x = document.getElementsByClassName("autocomplete-items");
+            for (let i = 0; i < x.length; i++) {
+                if (elmnt != x[i] && elmnt != document.activeElement) {
+                    x[i].classList.add('hidden');
+                }
+            }
+        }
+
+        // 7. Controllo Duplicati Girone (Colonna P)
+        function checkDuplicates() {
+            const inputs = document.querySelectorAll('.girone-input');
+            const values = {};
+            
+            inputs.forEach(inp => inp.classList.remove('duplicate'));
+
+            inputs.forEach(inp => {
+                const val = inp.value.trim();
+                if(val) {
+                    if(values[val]) { values[val].push(inp); } 
+                    else { values[val] = [inp]; }
+                }
+            });
+
+            let foundDup = false;
+            for(const key in values) {
+                if(values[key].length > 1) {
+                    foundDup = true;
+                    values[key].forEach(inp => inp.classList.add('duplicate'));
+                }
+            }
+            if(foundDup) showToast("Attenzione: Rilevati duplicati nell'assegnazione Girone/Posizione!", "error");
+        }
+
+        // 8. Salvataggio
+        function saveAll() {
+            const atletiData = [];
+            for(let i = 5; i <= 44; i++) {
+                atletiData.push({
+                    row: i,
+                    nome: document.getElementById(`nome_${i}`).value.trim(),
+                    ranking: document.getElementById(`rank_${i}`).innerText.trim(),
+                    girone: document.getElementById(`girone_${i}`).value.trim(),
+                    ed: document.getElementById(`ed_${i}`).value.trim()
+                });
+            }
+            socket.emit('save_bulk_atleti', { atleti: atletiData });
+            
+            // Nota: Perchè questo funzioni in modo definitivo, 
+            // sul Google Apps Script andrà aggiunta l'intercettazione di action == "update_atleti".
+        }
+
+        // Inizializza tabella
+        initTable();
+    </script>
+</body>
+</html>
