@@ -11,21 +11,28 @@
         .table-container { max-height: 65vh; overflow-y: auto; border: 1px solid #334155; border-radius: 0.5rem; }
         thead th { position: sticky; top: 0; background-color: #1e293b; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
         .duplicate { border: 2px solid #ef4444 !important; box-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
-        .autocomplete-items {
-            position: absolute; border: 1px solid #334155; z-index: 99; top: 100%; left: 0; right: 0;
-            background-color: #1e293b; max-height: 200px; overflow-y: auto; border-radius: 0 0 0.5rem 0.5rem;
-        }
-        .autocomplete-items div { padding: 10px; cursor: pointer; border-bottom: 1px solid #334155; }
-        .autocomplete-items div:hover { background-color: #3b82f6; }
-        input, select { background: #0f172a; color: white; border: 1px solid #475569; border-radius: 0.25rem; padding: 8px; outline: none; width: 100%; }
-        input:focus, select:focus { border-color: #3b82f6; }
         
-        /* Stili Gruppi Colorati (opacity 20% e bordi) */
-        .group-0 { background-color: rgba(239, 68, 68, 0.15); border-bottom: 1px solid rgba(239, 68, 68, 0.3); } /* Rosso */
-        .group-1 { background-color: rgba(59, 130, 246, 0.15); border-bottom: 1px solid rgba(59, 130, 246, 0.3); } /* Blu */
-        .group-2 { background-color: rgba(234, 179, 8, 0.15); border-bottom: 1px solid rgba(234, 179, 8, 0.3); }   /* Giallo */
-        .group-3 { background-color: rgba(34, 197, 94, 0.15); border-bottom: 1px solid rgba(34, 197, 94, 0.3); }  /* Verde */
-        .group-4 { background-color: rgba(148, 163, 184, 0.15); border-bottom: 1px solid rgba(148, 163, 184, 0.3); } /* Grigio/Azzurro */
+        /* FIX Z-INDEX E CONFLITTI VISIVI */
+        .name-cell { position: relative; z-index: 1; }
+        .name-cell:focus-within { z-index: 9999; }
+        
+        .autocomplete-items {
+            position: absolute; border: 1px solid #334155; top: 100%; left: 0; right: 0;
+            background-color: #1e293b; max-height: 250px; overflow-y: auto; border-radius: 0 0 0.5rem 0.5rem;
+            z-index: 10000; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8);
+        }
+        .autocomplete-items div { padding: 12px 10px; cursor: pointer; border-bottom: 1px solid #334155; transition: background 0.1s; }
+        .autocomplete-items div:hover, .autocomplete-items div:active { background-color: #3b82f6; }
+        
+        input, select { background: #0f172a; color: white; border: 1px solid #475569; border-radius: 0.25rem; padding: 8px; outline: none; width: 100%; transition: border-color 0.2s;}
+        input:focus, select:focus { border-color: #3b82f6; box-shadow: 0 0 0 1px #3b82f6; }
+        
+        /* Stili Gruppi Colorati */
+        .group-0 { background-color: rgba(239, 68, 68, 0.15); border-bottom: 1px solid rgba(239, 68, 68, 0.3); } 
+        .group-1 { background-color: rgba(59, 130, 246, 0.15); border-bottom: 1px solid rgba(59, 130, 246, 0.3); } 
+        .group-2 { background-color: rgba(234, 179, 8, 0.15); border-bottom: 1px solid rgba(234, 179, 8, 0.3); }   
+        .group-3 { background-color: rgba(34, 197, 94, 0.15); border-bottom: 1px solid rgba(34, 197, 94, 0.3); }  
+        .group-4 { background-color: rgba(148, 163, 184, 0.15); border-bottom: 1px solid rgba(148, 163, 184, 0.3); } 
     </style>
 </head>
 <body class="p-3 relative" onclick="closeAllLists()">
@@ -74,13 +81,13 @@
         <button onclick="loadGoogleData()" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded font-bold shadow text-xs">🔄 Leggi Dati da Google</button>
     </div>
 
-    <!-- Tabella Atleti (Gruppi da 8) -->
+    <!-- Tabella Atleti -->
     <div class="table-container bg-slate-900">
         <table class="w-full text-left border-collapse">
             <thead>
                 <tr>
                     <th class="p-3 text-slate-300 w-12 text-center text-sm">RIGA</th>
-                    <th class="p-3 text-slate-300 text-sm">NOME ATLETA</th>
+                    <th class="p-3 text-slate-300 text-sm z-20 relative">NOME ATLETA</th>
                     <th class="p-3 text-slate-300 w-24 text-center text-sm">RANKING</th>
                     <th class="p-3 text-slate-300 w-24 text-center text-sm">GIRONE (Pos)</th>
                     <th class="p-3 text-slate-300 w-24 text-center text-sm">ED (1-5,32)</th>
@@ -129,13 +136,14 @@
             tbody.innerHTML = '';
             
             for(let i = 1; i <= 40; i++) {
-                const sheetRow = i + 4; // L'ID degli elementi sarà 5-44 per coerenza col foglio
-                const groupIdx = Math.floor((i - 1) / 8); // Crea indici 0, 1, 2, 3, 4 ogni 8 righe
+                const sheetRow = i + 4; // L'ID degli elementi sarà 5-44
+                const groupIdx = Math.floor((i - 1) / 8); 
                 
+                // Aggiunta la classe "name-cell" al TD del nome per gestire lo z-index
                 tbody.innerHTML += `
-                    <tr class="group-${groupIdx} hover:opacity-80 transition-opacity">
+                    <tr class="group-${groupIdx} hover:opacity-90 transition-opacity">
                         <td class="p-2 text-center text-slate-300 font-bold">${i}</td>
-                        <td class="p-2 relative">
+                        <td class="p-2 name-cell">
                             <input type="text" id="nome_${sheetRow}" placeholder="Inserisci Nome..." oninput="handleInput(this, ${sheetRow})" autocomplete="off" class="bg-slate-900/50">
                             <div id="autocomplete_${sheetRow}" class="autocomplete-items hidden"></div>
                         </td>
@@ -147,36 +155,51 @@
             }
         }
 
-        // 4. Scaricamento dati completi (Formule + Atleti)
+        // 4. Scaricamento dati completi
         function loadGoogleData() {
             if(!sheetId) return showToast("Manca ID Foglio Google nelle impostazioni!", "error");
             showToast("Lettura dati in corso...", "warning");
             
-            // A. Leggi Ranking (E3:F400)
-            const rankUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Rank&range=E3:F400`;
+            // A. Leggi Ranking esteso (E3:H400) per cercare anche nelle colonne adiacenti
+            const rankUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Rank&range=E3:H400`;
             fetch(rankUrl).then(r => r.text()).then(csv => {
-                rankList = parseCSV(csv).map(r => ({ name: (r[0]||"").toUpperCase().trim(), rank: r[1]||"" })).filter(r => r.name !== "");
+                rankList = parseCSV(csv).map(r => {
+                    let name = (r[0]||"").toUpperCase().trim();
+                    let val1 = r[1] || "";
+                    let val2 = r[2] || "";
+                    
+                    let rankVal = val1;
+                    let desc = "";
+                    
+                    // Se la colonna accanto al nome non è un numero, probabilmente è il cognome o la società.
+                    // Cerchiamo il punteggio nella colonna successiva.
+                    if(isNaN(parseFloat(val1)) && val1 !== "") {
+                        desc = val1;
+                        rankVal = val2 || r[3] || "";
+                    } else if (val1 !== "") {
+                        desc = "P.ti: " + val1;
+                    }
+                    
+                    return { name: name, rank: rankVal, desc: desc };
+                }).filter(r => r.name !== "");
             }).catch(e => console.log("Errore Rank:", e));
 
-            // B. Leggi Foglio Atleti Partendo da M1 per coprire O2, O3, R1 e gli atleti
+            // B. Leggi Foglio Atleti Partendo da M1
             const atletiUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Atleti&range=M1:S44`;
             fetch(atletiUrl).then(r => r.text()).then(csv => {
                 const rows = parseCSV(csv);
                 
-                // Mappatura celle in base all'offset da M1 (M=0, N=1, O=2, P=3, Q=4, R=5, S=6)
-                // Riga 1 di Google = Indice 0 dell'array
-                if(rows[0] && rows[0][5]) document.getElementById('gir_da_val').value = rows[0][5]; // R1
-                if(rows[1] && rows[1][2]) document.getElementById('squadre_val').value = rows[1][2]; // O2
-                if(rows[2] && rows[2][2]) document.getElementById('serpentone_val').value = rows[2][2]; // O3
+                if(rows[0] && rows[0][5]) document.getElementById('gir_da_val').value = rows[0][5]; 
+                if(rows[1] && rows[1][2]) document.getElementById('squadre_val').value = rows[1][2]; 
+                if(rows[2] && rows[2][2]) document.getElementById('serpentone_val').value = rows[2][2]; 
 
-                // Gli atleti partono dalla riga 5 di Google (Indice 4 dell'array)
                 for(let i = 4; i < rows.length; i++) {
                     const sheetRow = i + 1; // 5..44
                     if(sheetRow <= 44 && document.getElementById(`nome_${sheetRow}`)) {
-                        document.getElementById(`nome_${sheetRow}`).value = rows[i][0] || "";      // Colonna M
-                        document.getElementById(`rank_${sheetRow}`).innerText = rows[i][1] || "";    // Colonna N
-                        document.getElementById(`girone_${sheetRow}`).value = rows[i][3] || "";      // Colonna P
-                        document.getElementById(`ed_${sheetRow}`).value = rows[i][6] || "";          // Colonna S
+                        document.getElementById(`nome_${sheetRow}`).value = rows[i][0] || "";      
+                        document.getElementById(`rank_${sheetRow}`).innerText = rows[i][1] || "";    
+                        document.getElementById(`girone_${sheetRow}`).value = rows[i][3] || "";      
+                        document.getElementById(`ed_${sheetRow}`).value = rows[i][6] || "";          
                     }
                 }
                 checkDuplicates();
@@ -184,7 +207,6 @@
             }).catch(e => showToast("Errore di lettura CSV Google. Il foglio è condiviso in Lettura?", "error"));
         }
 
-        // 5. Parser CSV Semplificato
         function parseCSV(str) {
             const arr = []; let quote = false, row = [], col = '';
             for (let c = 0; c < str.length; c++) {
@@ -199,7 +221,7 @@
             return arr;
         }
 
-        // 6. Logica Autocomplete Ranking
+        // 6. Logica Autocomplete Infallibile
         function handleInput(inp, sheetRow) {
             closeAllLists();
             const val = inp.value.toUpperCase();
@@ -216,16 +238,21 @@
                     item.innerHTML = rankList[i].name.substring(0, startIdx) + 
                                      "<strong>" + val + "</strong>" + 
                                      rankList[i].name.substring(startIdx + val.length) +
-                                     `<span class="float-right text-slate-400 text-xs">P.ti: ${rankList[i].rank}</span>`;
+                                     `<span class="float-right text-slate-400 text-xs">${rankList[i].desc}</span>`;
                     
-                    item.innerHTML += `<input type="hidden" value="${rankList[i].name}">`;
-                    item.innerHTML += `<input type="hidden" data-rank="${rankList[i].rank}">`;
+                    // Usiamo i dataset per conservare i dati in modo sicuro senza rompere l'HTML
+                    item.dataset.name = rankList[i].name;
+                    item.dataset.rank = rankList[i].rank;
                     
-                    item.addEventListener("click", function(e) {
-                        inp.value = this.getElementsByTagName("input")[0].value;
-                        document.getElementById(`rank_${sheetRow}`).innerText = this.getElementsByTagName("input")[1].getAttribute("data-rank");
+                    // Usiamo mousedown per intercettare il click PRIMA che l'input perda il focus o succeda altro
+                    item.addEventListener("mousedown", function(e) {
+                        e.preventDefault();   // Previene perdite di focus anomale
+                        e.stopPropagation();  // Evita che il body chiuda la tendina prima di eseguire questa funzione
+                        inp.value = this.dataset.name;
+                        document.getElementById(`rank_${sheetRow}`).innerText = this.dataset.rank;
                         closeAllLists();
                     });
+
                     listContainer.appendChild(item);
                     listContainer.classList.remove('hidden');
                     count++;
@@ -244,7 +271,7 @@
             }
         }
 
-        // 7. Controllo Duplicati Girone (Colonna P)
+        // 7. Controllo Duplicati Girone
         function checkDuplicates() {
             const inputs = document.querySelectorAll('.girone-input');
             const values = {};
@@ -271,17 +298,15 @@
 
         // 8. Salvataggio Complessivo
         function saveAll() {
-            // Raccogli i dati della Formula
             const formulaData = {
                 squadre: document.getElementById('squadre_val').value,
                 serpentone: document.getElementById('serpentone_val').value,
                 gir_da: document.getElementById('gir_da_val').value
             };
 
-            // Raccogli gli atleti
             const atletiData = [];
             for(let i = 1; i <= 40; i++) {
-                const sheetRow = i + 4; // 5-44
+                const sheetRow = i + 4; 
                 atletiData.push({
                     row: sheetRow,
                     nome: document.getElementById(`nome_${sheetRow}`).value.trim(),
@@ -291,11 +316,7 @@
                 });
             }
 
-            // Invia tutto a Google (L'Apps Script dovrà poi spacchettare il "formula" e "atleti")
-            socket.emit('save_bulk_atleti', { 
-                formula: formulaData, 
-                atleti: atletiData 
-            });
+            socket.emit('save_bulk_atleti', { formula: formulaData, atleti: atletiData });
         }
 
         initTable();
