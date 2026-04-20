@@ -46,24 +46,88 @@ def update_all_gironi_data(socketio):
         socketio.emit('gironi_cache_update', gironi_cache)
         
         curr_row = current_state.get('current_row_idx')
-        curr_gir = current_state.get('active_girone')
+        curr_gir = current_state.get('active_girone', current_state.get('current_girone', 'rosso'))
         updated_current = False
         
-        if curr_row and curr_gir in gironi_cache:
-            for m in gironi_cache[curr_gir]:
+        matches_in_gir = gironi_cache.get(curr_gir, [])
+        current_match_completed = False
+        match_found = False
+
+        if curr_row:
+            for m in matches_in_gir:
                 if m['row'] == curr_row:
-                    target_l, target_r = (m['dx'], m['sx']) if current_state.get('swapped', False) else (m['sx'], m['dx'])
-                    if current_state['fencer_left']['name'] != target_l or current_state['fencer_right']['name'] != target_r:
-                        current_state['fencer_left']['name'] = target_l
-                        current_state['fencer_left']['photo'] = get_photo_url(target_l)
-                        current_state['fencer_right']['name'] = target_r
-                        current_state['fencer_right']['photo'] = get_photo_url(target_r)
-                        updated_current = True
+                    match_found = True
+                    try:
+                        p_sx = int(float(m.get('p_sx', '0') or '0'))
+                        p_dx = int(float(m.get('p_dx', '0') or '0'))
+                    except:
+                        p_sx, p_dx = 0, 0
+                    
+                    if p_sx != 0 or p_dx != 0:
+                        current_match_completed = True
+                    else:
+                        target_l, target_r = (m['dx'], m['sx']) if current_state.get('swapped', False) else (m['sx'], m['dx'])
+                        if current_state['fencer_left']['name'] != target_l or current_state['fencer_right']['name'] != target_r:
+                            current_state['fencer_left']['name'] = target_l
+                            current_state['fencer_left']['photo'] = get_photo_url(target_l)
+                            current_state['fencer_right']['name'] = target_r
+                            current_state['fencer_right']['photo'] = get_photo_url(target_r)
+                            updated_current = True
                     break
+            if not match_found:
+                current_match_completed = True
+
+        if current_match_completed or (not curr_row and current_state['fencer_left']['name'] == current_state['settings']['default_name_left']):
+            next_match = None
+            for m in matches_in_gir:
+                try:
+                    p_sx = int(float(m.get('p_sx', '0') or '0'))
+                    p_dx = int(float(m.get('p_dx', '0') or '0'))
+                except:
+                    p_sx, p_dx = 0, 0
+                if p_sx == 0 and p_dx == 0:
+                    next_match = m
+                    break
+            
+            if next_match:
+                current_state['current_row_idx'] = next_match['row']
+                current_state['fencer_left']['name'] = clean_fencer_name(next_match['sx'])
+                current_state['fencer_right']['name'] = clean_fencer_name(next_match['dx'])
+                current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left']['name'])
+                current_state['fencer_right']['photo'] = get_photo_url(current_state['fencer_right']['name'])
+                current_state['fencer_left']['score'] = 0
+                current_state['fencer_right']['score'] = 0
+                current_state['swapped'] = False
+                current_state['timer'] = float(current_state['settings']['time_match'])
+                current_state['phase'] = 'MATCH'
+                current_state['running'] = False
+                current_state['priority'] = None
+                for s in ['left','right']:
+                    current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
+                    current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+                updated_current = True
+            elif current_match_completed:
+                current_state['current_row_idx'] = None
+                current_state['fencer_left']['name'] = current_state['settings']['default_name_left']
+                current_state['fencer_right']['name'] = current_state['settings']['default_name_right']
+                current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left']['name'])
+                current_state['fencer_right']['photo'] = get_photo_url(current_state['fencer_right']['name'])
+                current_state['fencer_left']['score'] = 0
+                current_state['fencer_right']['score'] = 0
+                current_state['swapped'] = False
+                current_state['timer'] = float(current_state['settings']['time_match'])
+                current_state['phase'] = 'MATCH'
+                current_state['running'] = False
+                current_state['priority'] = None
+                for s in ['left','right']:
+                    current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
+                    current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+                updated_current = True
 
         cg = current_state.get('current_girone', 'rosso')
         current_state['match_list'] = gironi_cache.get(cg, [])
         socketio.emit('state_update', current_state)
+        socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
         if updated_current: eventlet.spawn(save_state)
     except Exception as e: print(f"Update error: {e}")
 

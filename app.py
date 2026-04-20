@@ -318,7 +318,29 @@ def handle_send_result():
         socketio.emit('action_feedback', {'status': 'success', 'msg': f"Caricato: {next_match['sx']} vs {next_match['dx']}"})
         eventlet.spawn(save_state)
     else:
-        socketio.emit('action_feedback', {'status': 'info', 'msg': 'Nessun altro assalto a 0 nel girone!'})
+        current_state['active_girone'] = g
+        current_state['current_girone'] = g 
+        current_state['match_list'] = gironi_cache.get(g, []) 
+        current_state['manual_selection'] = False
+        current_state['swapped'] = False 
+        current_state['current_row_idx'] = None
+        current_state['fencer_left']['name'] = current_state['settings']['default_name_left']
+        current_state['fencer_right']['name'] = current_state['settings']['default_name_right']
+        current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left']['name'])
+        current_state['fencer_right']['photo'] = get_photo_url(current_state['fencer_right']['name'])
+        current_state['fencer_left']['score'] = 0
+        current_state['fencer_right']['score'] = 0
+        current_state['timer'] = float(current_state['settings']['time_match'])
+        current_state['phase'] = 'MATCH' 
+        current_state['running'] = False
+        current_state['priority'] = None
+        for s in ['left','right']:
+            current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
+            current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+        socketio.emit('state_update', current_state)
+        socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
+        socketio.emit('action_feedback', {'status': 'info', 'msg': 'Girone completato! Display ripristinato.'})
+        eventlet.spawn(save_state)
 
 @socketio.on('send_background_result')
 def handle_send_background_result(data):
