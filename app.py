@@ -87,11 +87,9 @@ def upload_photo():
     updated = False
     
     if current_state['fencer_left']['name'] == name:
-        current_state['fencer_left']['photo'] = new_url
-        updated = True
+        current_state['fencer_left']['photo'] = new_url; updated = True
     if current_state['fencer_right']['name'] == name:
-        current_state['fencer_right']['photo'] = new_url
-        updated = True
+        current_state['fencer_right']['photo'] = new_url; updated = True
 
     if updated:
         socketio.emit('state_update', current_state)
@@ -115,7 +113,6 @@ def download_photos():
 
 @app.route('/api/upload_zip_bulk', methods=['POST'])
 def upload_zip_bulk():
-    """Importazione massiva di uno ZIP da locale."""
     if 'zipfile' not in request.files: return jsonify({"status": "error", "msg": "Nessun file ricevuto."})
     file = request.files['zipfile']
     if file.filename == '': return jsonify({"status": "error", "msg": "Nessun file selezionato."})
@@ -135,97 +132,95 @@ def upload_zip_bulk():
         return jsonify({"status": "success", "msg": f"{conteggio} foto estratte e salvate!"})
     except Exception as e: return jsonify({"status": "error", "msg": f"File ZIP non valido: {str(e)}"})
 
-@app.route('/api/sync_drive_folder', methods=['POST'])
-def sync_drive_folder():
-    """Gestore Unificato Bidirezionale (Google Drive)"""
-    data = request.json or {}
+# --- MOTORE SINCRONIZZAZIONE DRIVE IN BACKGROUND (UNA AD UNA) ---
+@socketio.on('start_drive_sync')
+def start_drive_sync(data):
     link = data.get('link', '')
-    direction = data.get('direction', 'import') 
+    direction = data.get('direction', 'import')
+    script_url = current_state['settings'].get('google_script_url')
 
-    if not link: return jsonify({"status": "error", "msg": "Inserisci il link."})
-
-    try:
-        if direction == 'export':
-            script_url = current_state['settings'].get('google_script_url')
-            if not script_url: return jsonify({"status": "error", "msg": "Manca URL Apps Script nelle Impostazioni."})
-
-            memory_file = io.BytesIO()
-            with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-                for root, _, files in os.walk(PHOTOS_DIR):
-                    for file in files: zf.write(os.path.join(root, file), arcname=file)
-
-            zip_b64 = base64.b64encode(memory_file.getvalue()).decode('utf-8')
-            payload = { "action": "backup_to_drive", "folder_url": link, "zip_base64": zip_b64 }
-
-            res = requests.post(script_url, json=payload, timeout=60)
-            if res.status_code == 200 and res.json().get('status') == 'success':
-                return jsonify({"status": "success", "msg": "Backup esportato su Google Drive!"})
-            else:
-                err = res.json().get('message', 'Errore script') if res.status_code == 200 else f"HTTP {res.status_code}"
-                return jsonify({"status": "error", "msg": f"Errore Drive: {err}"})
-
-        elif direction == 'import':
-            # Gestione Link Diretto al File (.ZIP)
-            if "/file/d/" in link or "open?id=" in link:
-                file_id = link.split("/d/")[1].split("/")[0] if "/file/d/" in link else link.split("id=")[1].split("&")[0]
-                download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-
-                req = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req) as response:
-                    file_bytes = response.read()
-
-                    conteggio = 0
-                    with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
-                        for filename in zf.namelist():
-                            if filename.lower().endswith(('.png', '.jpg', '.jpeg')) and not '__MACOSX' in filename:
-                                base_name = os.path.basename(filename)
-                                if not base_name: continue
-                                clean_name = clean_fencer_name(os.path.splitext(base_name)[0])
-                                ext = base_name.rsplit('.', 1)[1].lower()
-                                with open(os.path.join(PHOTOS_DIR, f"{clean_name}.{ext}"), 'wb') as f: f.write(zf.read(filename))
-                                conteggio += 1
-                return jsonify({"status": "success", "msg": f"{conteggio} foto scaricate dal file ZIP Drive!"})
-
-            # Gestione Link CARTELLA Drive (tramite Apps Script)
-            else:
-                script_url = current_state['settings'].get('google_script_url')
-                if not script_url: return jsonify({"status": "error", "msg": "Manca URL Apps Script nelle Impostazioni."})
-
-                payload = { "action": "restore_from_drive", "folder_url": link }
-                res = requests.post(script_url, json=payload, timeout=120)
-                
-                if res.status_code == 200 and res.json().get('status') == 'success':
-                    zip_b64 = res.json().get('zip_base64', '')
-                    if not zip_b64: return jsonify({"status": "error", "msg": "Cartella Drive vuota o protetta."})
-
-                    conteggio = 0
-                    with zipfile.ZipFile(io.BytesIO(base64.b64decode(zip_b64))) as zf:
-                        for filename in zf.namelist():
-                            if filename.lower().endswith('.zip') and not '__MACOSX' in filename:
-                                inner_bytes = zf.read(filename)
-                                with zipfile.ZipFile(io.BytesIO(inner_bytes)) as inner_zf:
-                                    for inner_file in inner_zf.namelist():
-                                        if inner_file.lower().endswith(('.png', '.jpg', '.jpeg')) and not '__MACOSX' in inner_file:
-                                            base_name = os.path.basename(inner_file)
-                                            if not base_name: continue
-                                            clean_name = clean_fencer_name(os.path.splitext(base_name)[0])
-                                            ext = base_name.rsplit('.', 1)[1].lower()
-                                            with open(os.path.join(PHOTOS_DIR, f"{clean_name}.{ext}"), 'wb') as f: f.write(inner_zf.read(inner_file))
-                                            conteggio += 1
-                            elif filename.lower().endswith(('.png', '.jpg', '.jpeg')) and not '__MACOSX' in filename:
-                                base_name = os.path.basename(filename)
-                                if not base_name: continue
-                                clean_name = clean_fencer_name(os.path.splitext(base_name)[0])
-                                ext = base_name.rsplit('.', 1)[1].lower()
-                                with open(os.path.join(PHOTOS_DIR, f"{clean_name}.{ext}"), 'wb') as f: f.write(zf.read(filename))
-                                conteggio += 1
-                    return jsonify({"status": "success", "msg": f"{conteggio} foto lette dalla Cartella Drive!"})
-                else:
-                    err = res.json().get('message', 'Errore API Google') if res.status_code == 200 else f"HTTP {res.status_code}"
-                    return jsonify({"status": "error", "msg": f"Errore: {err}"})
+    if not script_url:
+        socketio.emit('sync_status', {'status': 'error', 'msg': 'Manca URL Apps Script nelle Impostazioni.'})
+        return
+        
+    def run_sync():
+        try:
+            if direction == 'export':
+                files = []
+                for root, _, filenames in os.walk(PHOTOS_DIR):
+                    for f in filenames:
+                        if f.lower().endswith(('.png', '.jpg', '.jpeg')):
+                            files.append(os.path.join(root, f))
+                            
+                total = len(files)
+                if total == 0:
+                    socketio.emit('sync_status', {'status': 'error', 'msg': 'Nessuna foto locale da esportare.'})
+                    return
                     
-    except urllib.error.HTTPError as e: return jsonify({"status": "error", "msg": "Accesso negato. Usa un link 'Chiunque abbia il link'."})
-    except Exception as e: return jsonify({"status": "error", "msg": str(e)})
+                socketio.emit('sync_progress', {'current': 0, 'total': total, 'msg': 'Inizio esportazione foto...'})
+                
+                success_count = 0
+                for i, filepath in enumerate(files):
+                    filename = os.path.basename(filepath)
+                    socketio.emit('sync_progress', {'current': i, 'total': total, 'msg': f'Caricamento in corso: {filename}...'})
+                    
+                    with open(filepath, 'rb') as f:
+                        b64 = base64.b64encode(f.read()).decode('utf-8')
+                        
+                    payload = {
+                        "action": "backup_single_photo",
+                        "folder_url": link,
+                        "filename": filename,
+                        "base64_data": b64
+                    }
+                    res = requests.post(script_url, json=payload, timeout=60)
+                    if res.status_code == 200 and res.json().get('status') == 'success':
+                        success_count += 1
+                    
+                socketio.emit('sync_status', {'status': 'success', 'msg': f'Esportate correttamente {success_count} su {total} foto!'})
+
+            elif direction == 'import':
+                socketio.emit('sync_progress', {'current': 0, 'total': 0, 'msg': 'Lettura della cartella Drive in corso...'})
+                payload = { "action": "list_drive_photos", "folder_url": link }
+                res = requests.post(script_url, json=payload, timeout=60)
+                
+                if res.status_code != 200 or res.json().get('status') != 'success':
+                    socketio.emit('sync_status', {'status': 'error', 'msg': 'Errore lettura cartella Drive (Permessi ok?).'})
+                    return
+                    
+                file_list = res.json().get('files', [])
+                total = len(file_list)
+                
+                if total == 0:
+                    socketio.emit('sync_status', {'status': 'error', 'msg': 'Cartella Drive vuota o senza foto valide.'})
+                    return
+                    
+                success_count = 0
+                for i, drive_file in enumerate(file_list):
+                    fname = drive_file['name']
+                    fid = drive_file['id']
+                    socketio.emit('sync_progress', {'current': i, 'total': total, 'msg': f'Scaricamento in corso: {fname}...'})
+                    
+                    payload_file = { "action": "get_drive_photo", "file_id": fid }
+                    res_file = requests.post(script_url, json=payload_file, timeout=60)
+                    
+                    if res_file.status_code == 200 and res_file.json().get('status') == 'success':
+                        b64_data = res_file.json().get('base64')
+                        if b64_data:
+                            clean_name = clean_fencer_name(os.path.splitext(fname)[0])
+                            ext = fname.rsplit('.', 1)[1].lower() if '.' in fname else 'png'
+                            filepath = os.path.join(PHOTOS_DIR, f"{clean_name}.{ext}")
+                            with open(filepath, 'wb') as f:
+                                f.write(base64.b64decode(b64_data))
+                            success_count += 1
+                            
+                socketio.emit('sync_status', {'status': 'success', 'msg': f'Importate correttamente {success_count} su {total} foto!'})
+
+        except Exception as e:
+            socketio.emit('sync_status', {'status': 'error', 'msg': f'Errore Imprevisto: {str(e)}'})
+
+    # Lancia il processo lento in un thread parallelo per non bloccare Flask
+    socketio.start_background_task(run_sync)
 
 @app.route('/api/scan_wifi')
 def scan_wifi():
