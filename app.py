@@ -2,6 +2,8 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 import eventlet
 eventlet.monkey_patch()
+import urllib.request
+import urllib.error
 
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit
@@ -436,3 +438,82 @@ if __name__ == '__main__':
     load_state()
     eventlet.spawn(update_all_gironi_data, socketio)
     socketio.run(app, host='0.0.0.0', port=5000)
+
+@app.route('/api/upload_zip_bulk', methods=['POST'])
+def upload_zip_bulk():
+    """Riceve uno ZIP dal dispositivo, lo scompatta e salva le foto rinominate correttamente."""
+    if 'zipfile' not in request.files:
+        return jsonify({"status": "error", "msg": "Nessun file ricevuto dal server."})
+    
+    file = request.files['zipfile']
+    if file.filename == '':
+        return jsonify({"status": "error", "msg": "Nessun file selezionato."})
+        
+    try:
+        conteggio = 0
+        with zipfile.ZipFile(file) as zf:
+            for filename in zf.namelist():
+                # Ignora le cartelle di sistema MacOS/Windows e accetta solo immagini
+                if filename.lower().endswith(('.png', '.jpg', '.jpeg')) and not '__MACOSX' in filename:
+                    base_name = os.path.basename(filename)
+                    if not base_name: continue
+                    
+                    # Usa la logica di pulizia nomi esistente per associarle automaticamente
+                    name_without_ext = os.path.splitext(base_name)[0]
+                    clean_name = clean_fencer_name(name_without_ext)
+                    ext = base_name.rsplit('.', 1)[1].lower()
+                    filepath = os.path.join(PHOTOS_DIR, f"{clean_name}.{ext}")
+                    
+                    # Estrae il singolo file e lo scrive nella cartella photos
+                    with open(filepath, 'wb') as f:
+                        f.write(zf.read(filename))
+                    conteggio += 1
+                    
+        return jsonify({"status": "success", "msg": f"{conteggio} foto estratte e salvate!"})
+    except Exception as e:
+        return jsonify({"status": "error", "msg": f"File ZIP corrotto o non valido: {str(e)}"})
+
+@app.route('/api/import_drive_zip', methods=['POST'])
+def import_drive_zip():
+    """Scarica un file ZIP pubblico da Google Drive tramite il link."""
+    data = request.json or {}
+    link = data.get('link', '')
+    
+    if not link:
+        return jsonify({"status": "error", "msg": "Link vuoto."})
+        
+    # Converte i link di visualizzazione Drive in link di download diretto
+    if "drive.google.com/file/d/" in link:
+        file_id = link.split("/d/")[1].split("/")[0]
+        link = f"https://drive.google.com/uc?export=download&id={file_id}"
+    elif "drive.google.com/open?id=" in link:
+        file_id = link.split("id=")[1].split("&")[0]
+        link = f"https://drive.google.com/uc?export=download&id={file_id}"
+
+    try:
+        # Finge di essere un browser normale per non farsi bloccare da Google
+        req = urllib.request.Request(link, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+        with urllib.request.urlopen(req) as response:
+            file_bytes = response.read()
+            
+            conteggio = 0
+            with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+                for filename in zf.namelist():
+                    if filename.lower().endswith(('.png', '.jpg', '.jpeg')) and not '__MACOSX' in filename:
+                        base_name = os.path.basename(filename)
+                        if not base_name: continue
+                        
+                        name_without_ext = os.path.splitext(base_name)[0]
+                        clean_name = clean_fencer_name(name_without_ext)
+                        ext = base_name.rsplit('.', 1)[1].lower()
+                        filepath = os.path.join(PHOTOS_DIR, f"{clean_name}.{ext}")
+                        
+                        with open(filepath, 'wb') as f:
+                            f.write(zf.read(filename))
+                        conteggio += 1
+                        
+        return jsonify({"status": "success", "msg": f"{conteggio} foto scaricate da Drive ed estratte!"})
+    except urllib.error.HTTPError as e:
+        return jsonify({"status": "error", "msg": f"Accesso negato. Assicurati che il file Drive sia impostato su 'Chiunque abbia il link'."})
+    except Exception as e:
+        return jsonify({"status": "error", "msg": f"Errore durante l'elaborazione del link: {str(e)}"})
