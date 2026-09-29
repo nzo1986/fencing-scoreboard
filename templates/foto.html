@@ -5,89 +5,50 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestione Foto Atleti</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { background: #0f172a; color: white; font-family: sans-serif; padding-bottom: 40px; }
         .photo-card { 
-            aspect-ratio: 3/4; 
-            position: relative; 
-            overflow: hidden; 
-            border-radius: 0.75rem; 
-            border: 2px solid #334155; 
-            cursor: pointer; 
-            transition: all 0.2s ease-in-out; 
-            background-color: #1e293b; 
-            background-size: cover; 
-            background-position: center; 
+            aspect-ratio: 3/4; position: relative; overflow: hidden; border-radius: 0.75rem; 
+            border: 2px solid #334155; cursor: pointer; transition: all 0.2s ease-in-out; 
+            background-color: #1e293b; background-size: cover; background-position: center; 
         }
-        .photo-card:hover { 
-            border-color: #3b82f6; 
-            transform: translateY(-4px); 
-            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.5); 
-        }
+        .photo-card:hover { border-color: #3b82f6; transform: translateY(-4px); box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.5); }
         .name-overlay { 
-            position: absolute; 
-            bottom: 0; 
-            left: 0; 
-            width: 100%; 
+            position: absolute; bottom: 0; left: 0; width: 100%; 
             background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.4) 60%, transparent 100%); 
-            padding: 16px 8px 8px 8px; 
-            text-align: center; 
-            font-weight: bold; 
-            font-size: 0.9rem; 
-            text-transform: uppercase; 
-            white-space: nowrap; 
-            overflow: hidden; 
-            text-overflow: ellipsis; 
-            text-shadow: 0px 2px 4px rgba(0,0,0,1);
+            padding: 16px 8px 8px 8px; text-align: center; font-weight: bold; font-size: 0.9rem; 
+            text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0px 2px 4px rgba(0,0,0,1);
         }
         .uploading::after {
-            content: "CARICAMENTO...";
-            position: absolute;
-            inset: 0;
-            background: rgba(0,0,0,0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            color: #3b82f6;
-            animation: pulse 1s infinite;
+            content: "CARICAMENTO..."; position: absolute; inset: 0; background: rgba(0,0,0,0.7);
+            display: flex; align-items: center; justify-content: center; font-weight: bold; color: #3b82f6; animation: pulse 1s infinite;
         }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>
 </head>
 <body class="p-4 sm:p-6">
     <div class="max-w-7xl mx-auto">
-        
         <div class="flex flex-col xl:flex-row justify-between items-center mb-6 pb-4 border-b border-slate-700 gap-4">
-            <h1 class="text-2xl sm:text-3xl font-bold text-slate-100 flex items-center gap-3">
-                📸 Fotografie Atleti
-            </h1>
+            <h1 class="text-2xl sm:text-3xl font-bold text-slate-100 flex items-center gap-3">📸 Fotografie Atleti</h1>
             <div class="flex gap-2 flex-wrap w-full xl:w-auto justify-center">
-                <!-- Nuovi Pulsanti Azioni Massive -->
                 <a href="/api/download_photos" class="bg-green-600 hover:bg-green-500 px-4 py-2.5 rounded-lg font-bold shadow-lg transition text-sm flex items-center gap-2"><i class="fa-solid fa-download"></i> Backup ZIP</a>
                 <button onclick="openZipModal()" class="bg-purple-600 hover:bg-purple-500 px-4 py-2.5 rounded-lg font-bold shadow-lg transition text-sm flex items-center gap-2"><i class="fa-solid fa-cloud"></i> Sync ZIP/Drive</button>
-                
-                <!-- Pulsanti Originali -->
                 <button onclick="loadFencers()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2.5 rounded-lg font-bold shadow-lg transition text-sm flex items-center gap-2"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
                 <button onclick="window.location.href='/settings'" class="bg-slate-700 hover:bg-slate-600 border border-slate-600 px-4 py-2.5 rounded-lg font-bold shadow-lg transition text-sm">Indietro</button>
             </div>
         </div>
         
         <div class="bg-slate-800/50 p-4 rounded-xl mb-8 border border-slate-700 text-slate-300 text-sm sm:text-base">
-            <span class="text-blue-400 font-bold">Istruzioni:</span> Clicca sul riquadro di un atleta per sostituire la foto. Usa <strong>Sync ZIP/Drive</strong> in alto per caricare tutte le foto in blocco da una cartella compressa locale, oppure per esportare e importare l'intero database foto da una cartella di Google Drive.
+            <span class="text-blue-400 font-bold">Istruzioni:</span> Clicca sul riquadro di un atleta per sostituire la foto. Usa <strong>Sync ZIP/Drive</strong> in alto per sincronizzare in automatico l'intero database fotografico con una cartella Google Drive.
         </div>
 
-        <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
-            <!-- Le foto verranno inserite qui dal Javascript -->
-        </div>
-        
+        <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6"></div>
     </div>
 
-    <!-- Input nascosto per caricare i file singolarmente -->
     <input type="file" id="file-input" accept="image/*" class="hidden">
 
-    <!-- POPUP MODALE PER SINCRONIZZAZIONE (ZIP/DRIVE) -->
     <div id="zip-modal" class="fixed inset-0 bg-black bg-opacity-80 hidden z-50 flex justify-center items-center p-4">
         <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-md p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <h2 class="text-xl font-bold text-purple-400 mb-4 border-b border-slate-700 pb-2"><i class="fa-solid fa-cloud-arrow-up"></i> Sincronizzazione Foto</h2>
@@ -100,20 +61,29 @@
             </div>
 
             <div class="mb-4 bg-slate-900/50 p-4 rounded border border-slate-700">
-                <label class="block text-sm font-bold text-slate-300 mb-2">Opzione 2: Sincronizzazione con Google Drive</label>
-                <input type="text" id="drive-link" placeholder="Incolla il link della cartella Google Drive..." class="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white mb-3 text-sm">
+                <label class="block text-sm font-bold text-slate-300 mb-2">Opzione 2: Sincronizza cartella Google Drive</label>
+                <input type="text" id="drive-link" placeholder="Incolla qui il link della cartella Drive..." class="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white mb-3 text-sm">
                 
                 <div class="flex gap-2">
-                    <button onclick="syncDrive('import')" class="flex-1 bg-blue-600 hover:bg-blue-500 font-bold py-2 rounded text-white transition shadow text-sm"><i class="fa-solid fa-cloud-arrow-down"></i> Importa da Drive</button>
-                    <button onclick="syncDrive('export')" class="flex-1 bg-green-600 hover:bg-green-500 font-bold py-2 rounded text-white transition shadow text-sm"><i class="fa-solid fa-cloud-arrow-up"></i> Salva su Drive</button>
+                    <button onclick="syncDrive('import')" class="flex-1 bg-blue-600 hover:bg-blue-500 font-bold py-2 rounded text-white transition shadow text-sm"><i class="fa-solid fa-cloud-arrow-down"></i> Importa</button>
+                    <button onclick="syncDrive('export')" class="flex-1 bg-green-600 hover:bg-green-500 font-bold py-2 rounded text-white transition shadow text-sm"><i class="fa-solid fa-cloud-arrow-up"></i> Esporta</button>
                 </div>
             </div>
             
-            <div id="zip-status" class="text-center font-bold mt-4 min-h-[40px]"></div>
+            <!-- Barra di Progressione -->
+            <div id="sync-progress-container" class="hidden mt-4">
+                <div class="w-full bg-slate-700 rounded-full h-4 mb-2">
+                    <div id="sync-progress-bar" class="bg-blue-500 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <p id="sync-progress-text" class="text-sm text-slate-300 text-center font-mono">0 / 0</p>
+            </div>
+            
+            <div id="zip-status" class="text-center font-bold mt-2 min-h-[40px]"></div>
         </div>
     </div>
 
     <script>
+        const socket = io();
         let currentFencer = '';
 
         function loadFencers() {
@@ -128,7 +98,6 @@
                         grid.innerHTML = '<div class="col-span-full text-center py-20 text-slate-400 text-lg">Nessun atleta trovato. Assicurati che i gironi siano caricati in Impostazioni.</div>';
                         return;
                     }
-                    
                     data.forEach(f => {
                         const card = document.createElement('div');
                         card.className = 'photo-card shadow-lg';
@@ -143,16 +112,10 @@
                         grid.appendChild(card);
                     });
                 })
-                .catch(e => {
-                    grid.innerHTML = '<div class="col-span-full text-center py-20 text-red-400 text-lg">Errore di rete durante la lettura degli atleti.</div>';
-                });
+                .catch(e => { grid.innerHTML = '<div class="col-span-full text-center py-20 text-red-400 text-lg">Errore di rete.</div>'; });
         }
 
-        // --- Logica Foto Singola ---
-        function openPicker(name) {
-            currentFencer = name;
-            document.getElementById('file-input').click();
-        }
+        function openPicker(name) { currentFencer = name; document.getElementById('file-input').click(); }
 
         document.getElementById('file-input').addEventListener('change', function(e) {
             if(this.files.length === 0) return;
@@ -163,9 +126,7 @@
 
             const cards = document.querySelectorAll('.photo-card');
             let targetCard = null;
-            cards.forEach(c => { 
-                if(c.querySelector('.name-overlay').innerText === currentFencer) targetCard = c;
-            });
+            cards.forEach(c => { if(c.querySelector('.name-overlay').innerText === currentFencer) targetCard = c; });
             if(targetCard) targetCard.classList.add('uploading');
 
             fetch('/api/upload_photo', { method: 'POST', body: formData })
@@ -179,24 +140,18 @@
                     targetCard.classList.remove('uploading');
                 }
             })
-            .catch(err => {
-                alert("Errore di connessione col server.");
-                if(targetCard) targetCard.classList.remove('uploading');
-            })
+            .catch(err => { alert("Errore di connessione col server."); if(targetCard) targetCard.classList.remove('uploading'); })
             .finally(() => { this.value = ''; });
         });
 
-        // --- Funzioni Modal ZIP & Drive ---
+        // --- Logica Sincronizzazione in tempo reale (Socket) ---
         function openZipModal() {
             document.getElementById('zip-modal').classList.remove('hidden');
-            const status = document.getElementById('zip-status');
-            status.innerText = "";
-            status.className = "text-center font-bold mt-4 min-h-[40px]";
+            document.getElementById('zip-status').innerText = "";
+            document.getElementById('sync-progress-container').classList.add('hidden');
         }
 
-        function closeZipModal() {
-            document.getElementById('zip-modal').classList.add('hidden');
-        }
+        function closeZipModal() { document.getElementById('zip-modal').classList.add('hidden'); }
 
         function uploadLocalZip() {
             const fileInput = document.getElementById('zip-input');
@@ -230,39 +185,43 @@
             const link = document.getElementById('drive-link').value.trim();
             if(!link) return alert("Inserisci un link Google Drive valido!");
 
+            document.getElementById('sync-progress-container').classList.remove('hidden');
+            document.getElementById('sync-progress-bar').style.width = '0%';
+            document.getElementById('sync-progress-text').innerText = '0 / 0';
+            
             const status = document.getElementById('zip-status');
-            if(direction === 'export') {
-                status.innerText = "Creazione Backup e caricamento su Drive in corso... ⏳ (Può richiedere un minuto)";
-            } else {
-                status.innerText = "Scaricamento ed estrazione da Drive in corso... ⏳ (Può richiedere un minuto)";
-            }
-            status.className = "text-center font-bold mt-4 min-h-[40px] text-yellow-400 animate-pulse";
+            status.innerText = "Avvio procedura... ⏳";
+            status.className = "text-center font-bold mt-4 min-h-[40px] text-yellow-400";
 
-            fetch('/api/sync_drive_folder', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({link: link, direction: direction})
-            })
-            .then(r => r.json())
-            .then(res => {
-                if(res.status === 'success') {
-                    status.innerText = "Successo! " + res.msg;
-                    status.className = "text-center font-bold mt-4 min-h-[40px] text-green-400";
-                    setTimeout(() => { closeZipModal(); loadFencers(); }, 2500);
-                } else {
-                    status.innerText = "Errore: " + res.msg;
-                    status.className = "text-center font-bold mt-4 min-h-[40px] text-red-400";
-                }
-            }).catch(err => {
-                status.innerText = "Errore di rete/timeout (potrebbe finire in background). Controlla tra poco.";
-                status.className = "text-center font-bold mt-4 min-h-[40px] text-red-400";
-            });
+            // Avvia il comando asincrono via Socket.IO
+            socket.emit('start_drive_sync', {link: link, direction: direction});
         }
 
-        document.getElementById('zip-modal').addEventListener('click', function(e) {
-            if(e.target.id === 'zip-modal') closeZipModal();
+        // Ascolto aggiornamenti in tempo reale dal Server
+        socket.on('sync_progress', data => {
+            const status = document.getElementById('zip-status');
+            status.innerText = data.msg;
+            if(data.total > 0) {
+                const pct = Math.round((data.current / data.total) * 100);
+                document.getElementById('sync-progress-bar').style.width = pct + '%';
+                document.getElementById('sync-progress-text').innerText = `${data.current} di ${data.total}`;
+            }
         });
 
+        socket.on('sync_status', res => {
+            const status = document.getElementById('zip-status');
+            if(res.status === 'success') {
+                document.getElementById('sync-progress-bar').style.width = '100%';
+                status.innerText = "Operazione Conclusa! " + res.msg;
+                status.className = "text-center font-bold mt-4 min-h-[40px] text-green-400";
+                setTimeout(() => { closeZipModal(); loadFencers(); }, 3000);
+            } else {
+                status.innerText = "Errore: " + res.msg;
+                status.className = "text-center font-bold mt-4 min-h-[40px] text-red-400";
+            }
+        });
+
+        document.getElementById('zip-modal').addEventListener('click', function(e) { if(e.target.id === 'zip-modal') closeZipModal(); });
         window.onload = loadFencers;
     </script>
 </body>
