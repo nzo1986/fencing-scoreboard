@@ -6,36 +6,27 @@
     <title>Gestione Atleti</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { background: #0f172a; color: white; font-family: sans-serif; padding-bottom: 40px; }
         .table-container { max-height: 65vh; overflow-y: auto; border: 1px solid #334155; border-radius: 0.5rem; }
         thead th { position: sticky; top: 0; background-color: #1e293b; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
-        .duplicate { border: 2px solid #ef4444 !important; box-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
         
-        /* FIX Z-INDEX E CONFLITTI VISIVI */
-        .name-cell { position: relative; z-index: 1; }
-        .name-cell:focus-within { z-index: 9999; }
-        
-        .autocomplete-items {
-            position: absolute; border: 1px solid #334155; top: 100%; left: 0; right: 0;
-            background-color: #1e293b; max-height: 250px; overflow-y: auto; border-radius: 0 0 0.5rem 0.5rem;
-            z-index: 10000; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8);
-        }
-        .autocomplete-items div { padding: 12px 10px; cursor: pointer; border-bottom: 1px solid #334155; transition: background 0.1s; }
-        .autocomplete-items div:hover, .autocomplete-items div:active { background-color: #3b82f6; }
-        
-        input, select { background: #0f172a; color: white; border: 1px solid #475569; border-radius: 0.25rem; padding: 8px; outline: none; width: 100%; transition: border-color 0.2s;}
+        /* Stili per il Modal e Autocomplete */
+        .autocomplete-item { padding: 12px 10px; cursor: pointer; border-bottom: 1px solid #475569; transition: background 0.1s; display: flex; justify-content: space-between; align-items: center; }
+        .autocomplete-item:hover, .autocomplete-item:active { background-color: #3b82f6; }
+        input, select { outline: none; transition: border-color 0.2s;}
         input:focus, select:focus { border-color: #3b82f6; box-shadow: 0 0 0 1px #3b82f6; }
         
         /* Stili Gruppi Colorati */
-        .group-0 { background-color: rgba(239, 68, 68, 0.15); border-bottom: 1px solid rgba(239, 68, 68, 0.3); } 
-        .group-1 { background-color: rgba(59, 130, 246, 0.15); border-bottom: 1px solid rgba(59, 130, 246, 0.3); } 
-        .group-2 { background-color: rgba(234, 179, 8, 0.15); border-bottom: 1px solid rgba(234, 179, 8, 0.3); }   
-        .group-3 { background-color: rgba(34, 197, 94, 0.15); border-bottom: 1px solid rgba(34, 197, 94, 0.3); }  
-        .group-4 { background-color: rgba(148, 163, 184, 0.15); border-bottom: 1px solid rgba(148, 163, 184, 0.3); } 
+        .group-0 { background-color: rgba(239, 68, 68, 0.10); } 
+        .group-1 { background-color: rgba(59, 130, 246, 0.10); } 
+        .group-2 { background-color: rgba(234, 179, 8, 0.10); }   
+        .group-3 { background-color: rgba(34, 197, 94, 0.10); }  
+        .group-4 { background-color: rgba(148, 163, 184, 0.10); } 
     </style>
 </head>
-<body class="p-3 relative" onclick="closeAllLists()">
+<body class="p-3 relative">
 
     <!-- Toast Container -->
     <div id="toast-container" class="fixed top-5 left-1/2 transform -translate-x-1/2 flex flex-col gap-2 z-50 w-11/12 max-w-md pointer-events-none"></div>
@@ -44,7 +35,7 @@
     <div class="flex flex-col sm:flex-row justify-between items-center mb-4 pb-3 border-b border-slate-700 gap-3">
         <h1 class="text-2xl font-bold text-slate-100 flex items-center gap-2">🤺 Gestione Atleti</h1>
         <div class="flex gap-2 w-full sm:w-auto">
-            <button onclick="saveAll()" class="flex-1 sm:flex-none bg-green-600 hover:bg-green-500 px-5 py-2.5 rounded-lg font-bold shadow transition">💾 Salva in Google</button>
+            <button onclick="saveAll()" class="flex-1 sm:flex-none bg-green-600 hover:bg-green-500 px-5 py-2.5 rounded-lg font-bold shadow transition text-lg"><i class="fa-solid fa-floppy-disk"></i> Salva in Google</button>
             <button onclick="window.location.href='/telecomando'" class="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded-lg font-bold shadow transition text-sm">Indietro</button>
         </div>
     </div>
@@ -55,14 +46,14 @@
         <div class="grid grid-cols-3 gap-4">
             <div>
                 <label class="block text-xs font-bold text-slate-400 mb-1">Squadre (O2)</label>
-                <select id="squadre_val">
+                <select id="squadre_val" class="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-center">
                     <option value="NO">NO</option>
                     <option value="SI">SI</option>
                 </select>
             </div>
             <div>
                 <label class="block text-xs font-bold text-slate-400 mb-1">Serpentone (O3)</label>
-                <select id="serpentone_val">
+                <select id="serpentone_val" class="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-center">
                     <option value="Rnk">Rnk</option>
                     <option value="NO">NO</option>
                     <option value="SI">SI</option>
@@ -70,41 +61,78 @@
             </div>
             <div>
                 <label class="block text-xs font-bold text-slate-400 mb-1">Gir da (R1)</label>
-                <input type="number" id="gir_da_val" placeholder="Es: 6" class="text-center">
+                <input type="number" id="gir_da_val" placeholder="Es: 6" class="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-center">
             </div>
         </div>
     </div>
 
-    <!-- Sincronizzazione / Info -->
     <div class="flex justify-between items-center mb-3">
-        <span class="text-xs text-slate-400">Inserisci i nomi per assegnare il Ranking in automatico.</span>
-        <button onclick="loadGoogleData()" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded font-bold shadow text-xs">🔄 Leggi Dati da Google</button>
+        <span class="text-xs text-slate-400">Clicca sul nome per modificarlo.</span>
+        <button onclick="loadGoogleData()" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded font-bold shadow text-xs"><i class="fa-solid fa-rotate"></i> Sincronizza</button>
     </div>
 
-    <!-- Tabella Atleti -->
+    <!-- Tabella Atleti (Senza input, solo testo e bottoni) -->
     <div class="table-container bg-slate-900">
         <table class="w-full text-left border-collapse">
             <thead>
                 <tr>
-                    <th class="p-3 text-slate-300 w-12 text-center text-sm">RIGA</th>
-                    <th class="p-3 text-slate-300 text-sm z-20 relative">NOME ATLETA</th>
-                    <th class="p-3 text-slate-300 w-24 text-center text-sm">RANKING</th>
-                    <th class="p-3 text-slate-300 w-24 text-center text-sm">GIRONE (Pos)</th>
-                    <th class="p-3 text-slate-300 w-24 text-center text-sm">ED (1-5,32)</th>
+                    <th class="p-3 text-slate-300 w-12 text-center text-sm">#</th>
+                    <th class="p-3 text-slate-300 text-sm">NOME ATLETA</th>
+                    <th class="p-3 text-slate-300 w-16 text-center text-sm">RNK</th>
+                    <th class="p-3 text-slate-300 w-16 text-center text-sm">GIR</th>
+                    <th class="p-3 text-slate-300 w-16 text-center text-sm">ED</th>
                 </tr>
             </thead>
             <tbody id="atleti-tbody">
-                <!-- Generato dal JS in gruppi da 8 -->
+                <!-- Righe generate dal JS -->
             </tbody>
         </table>
+    </div>
+
+    <!-- POPUP MODALE -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-80 hidden z-50 flex justify-center items-center p-4">
+        <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-md p-5 shadow-2xl relative">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-blue-400" id="modal-title">Modifica Riga</h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            
+            <input type="hidden" id="modal-row">
+            
+            <div class="mb-4 relative">
+                <label class="block text-sm font-bold text-slate-300 mb-1">Nome Atleta</label>
+                <input type="text" id="modal-nome" placeholder="Cerca nome..." class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white uppercase text-lg" oninput="handleModalInput()" onblur="this.value = this.value.toUpperCase()">
+                
+                <!-- Tendina Autocomplete nel Modal -->
+                <div id="modal-autocomplete" class="absolute left-0 right-0 bg-slate-700 border border-slate-500 z-50 hidden max-h-48 overflow-y-auto rounded-b-lg shadow-xl"></div>
+            </div>
+            
+            <input type="hidden" id="modal-rank">
+
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                    <label class="block text-sm font-bold text-slate-300 mb-1">Girone (Pos)</label>
+                    <input type="number" id="modal-girone" placeholder="Es: 11" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white text-center text-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-300 mb-1">ED (1-5,32)</label>
+                    <input type="text" id="modal-ed" placeholder="Es: 32" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white text-center uppercase text-lg" onblur="this.value = this.value.toUpperCase()">
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <button onclick="saveModal()" class="flex-[2] bg-blue-600 hover:bg-blue-500 font-bold py-3 rounded-lg text-white transition text-lg"><i class="fa-solid fa-check"></i> Fatto</button>
+                <button onclick="deleteModal()" class="flex-1 bg-red-700 hover:bg-red-600 font-bold py-3 rounded-lg text-white transition"><i class="fa-solid fa-trash"></i> Svuota</button>
+            </div>
+        </div>
     </div>
 
     <script>
         const socket = io();
         let sheetId = "";
         let rankList = []; 
+        let atletiData = {}; // Memorizza lo stato locale delle 40 righe
         
-        // 1. Notifiche Toast
         function showToast(msg, type = 'info') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
@@ -120,7 +148,6 @@
             setTimeout(() => { toast.classList.add('opacity-0'); setTimeout(() => toast.remove(), 300); }, 2000); 
         }
 
-        // 2. Ricezione ID Google Sheets
         socket.on('state_update', s => {
             if(s.settings && s.settings.google_sheet_id && !sheetId) {
                 sheetId = s.settings.google_sheet_id;
@@ -130,61 +157,59 @@
 
         socket.on('action_feedback', d => showToast(d.msg, d.status));
 
-        // 3. Generazione Righe (da 1 a 40, colorate a blocchi di 8)
-        function initTable() {
+        // Inizializza il dizionario locale
+        for(let i=1; i<=40; i++) {
+            atletiData[i] = { row: i + 4, nome: '', rank: '', girone: '', ed: '' };
+        }
+
+        function renderTable() {
             const tbody = document.getElementById('atleti-tbody');
             tbody.innerHTML = '';
             
             for(let i = 1; i <= 40; i++) {
-                const sheetRow = i + 4; // L'ID degli elementi sarà 5-44
+                const a = atletiData[i];
                 const groupIdx = Math.floor((i - 1) / 8); 
                 
-                // Aggiunta la classe "name-cell" al TD del nome per gestire lo z-index
+                let btnHtml = '';
+                if(a.nome) {
+                    btnHtml = `<button onclick="openModal(${i})" class="w-full text-left bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded border border-slate-600 text-white font-bold truncate"><i class="fa-solid fa-pen text-slate-400 mr-2 text-xs"></i>${a.nome}</button>`;
+                } else {
+                    btnHtml = `<button onclick="openModal(${i})" class="w-full text-center bg-slate-800/50 hover:bg-slate-700 px-3 py-2 rounded border border-slate-600 border-dashed text-slate-400 font-bold text-sm"><i class="fa-solid fa-plus mr-1"></i>Inserisci</button>`;
+                }
+
                 tbody.innerHTML += `
-                    <tr class="group-${groupIdx} hover:opacity-90 transition-opacity">
-                        <td class="p-2 text-center text-slate-300 font-bold">${i}</td>
-                        <td class="p-2 name-cell">
-                            <input type="text" id="nome_${sheetRow}" placeholder="Inserisci Nome..." oninput="handleInput(this, ${sheetRow})" autocomplete="off" class="bg-slate-900/50">
-                            <div id="autocomplete_${sheetRow}" class="autocomplete-items hidden"></div>
-                        </td>
-                        <td class="p-2 text-center"><span id="rank_${sheetRow}" class="bg-indigo-900 text-indigo-200 px-2 py-1 rounded text-xs font-bold empty:hidden"></span></td>
-                        <td class="p-2"><input type="number" id="girone_${sheetRow}" placeholder="11" class="text-center girone-input bg-slate-900/50" onchange="checkDuplicates()"></td>
-                        <td class="p-2"><input type="text" id="ed_${sheetRow}" placeholder="32" class="text-center bg-slate-900/50"></td>
+                    <tr class="group-${groupIdx} border-b border-slate-700/50">
+                        <td class="p-2 text-center text-slate-400 font-bold">${i}</td>
+                        <td class="p-1">${btnHtml}</td>
+                        <td class="p-2 text-center"><span class="${a.rank ? 'bg-indigo-900 text-indigo-200' : ''} px-1.5 py-0.5 rounded text-xs font-bold">${a.rank}</span></td>
+                        <td class="p-2 text-center font-mono text-slate-300 text-sm">${a.girone}</td>
+                        <td class="p-2 text-center font-mono text-slate-300 text-sm">${a.ed}</td>
                     </tr>
                 `;
             }
         }
 
-        // 4. Scaricamento dati completi
         function loadGoogleData() {
             if(!sheetId) return showToast("Manca ID Foglio Google nelle impostazioni!", "error");
             showToast("Lettura dati in corso...", "warning");
             
-            // A. Leggi Ranking esteso (E3:H400) per cercare anche nelle colonne adiacenti
             const rankUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Rank&range=E3:H400`;
             fetch(rankUrl).then(r => r.text()).then(csv => {
                 rankList = parseCSV(csv).map(r => {
                     let name = (r[0]||"").toUpperCase().trim();
                     let val1 = r[1] || "";
                     let val2 = r[2] || "";
-                    
                     let rankVal = val1;
                     let desc = "";
-                    
-                    // Se la colonna accanto al nome non è un numero, probabilmente è il cognome o la società.
-                    // Cerchiamo il punteggio nella colonna successiva.
                     if(isNaN(parseFloat(val1)) && val1 !== "") {
-                        desc = val1;
-                        rankVal = val2 || r[3] || "";
+                        desc = val1; rankVal = val2 || r[3] || "";
                     } else if (val1 !== "") {
                         desc = "P.ti: " + val1;
                     }
-                    
                     return { name: name, rank: rankVal, desc: desc };
                 }).filter(r => r.name !== "");
             }).catch(e => console.log("Errore Rank:", e));
 
-            // B. Leggi Foglio Atleti Partendo da M1
             const atletiUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Atleti&range=M1:S44`;
             fetch(atletiUrl).then(r => r.text()).then(csv => {
                 const rows = parseCSV(csv);
@@ -193,18 +218,23 @@
                 if(rows[1] && rows[1][2]) document.getElementById('squadre_val').value = rows[1][2]; 
                 if(rows[2] && rows[2][2]) document.getElementById('serpentone_val').value = rows[2][2]; 
 
+                window.originalAtleti = {}; // Tracker modifiche
+
                 for(let i = 4; i < rows.length; i++) {
-                    const sheetRow = i + 1; // 5..44
-                    if(sheetRow <= 44 && document.getElementById(`nome_${sheetRow}`)) {
-                        document.getElementById(`nome_${sheetRow}`).value = rows[i][0] || "";      
-                        document.getElementById(`rank_${sheetRow}`).innerText = rows[i][1] || "";    
-                        document.getElementById(`girone_${sheetRow}`).value = rows[i][3] || "";      
-                        document.getElementById(`ed_${sheetRow}`).value = rows[i][6] || "";          
+                    const idx = i - 3; // da 1 a 40
+                    if(idx <= 40) {
+                        const nome = rows[i][0] || "";
+                        const rank = rows[i][1] || ""; // La N è letta per visualizzazione, ma non verrà sovrascritta da noi!
+                        const girone = rows[i][3] || "";
+                        const ed = rows[i][6] || "";
+
+                        atletiData[idx] = { row: idx + 4, nome, rank, girone, ed };
+                        window.originalAtleti[idx + 4] = { nome, rank, girone, ed };
                     }
                 }
-                checkDuplicates();
+                renderTable();
                 showToast("Dati sincronizzati con successo!", "success");
-            }).catch(e => showToast("Errore di lettura CSV Google. Il foglio è condiviso in Lettura?", "error"));
+            }).catch(e => showToast("Errore di lettura CSV Google.", "error"));
         }
 
         function parseCSV(str) {
@@ -221,37 +251,84 @@
             return arr;
         }
 
-        // 6. Logica Autocomplete Infallibile
-        function handleInput(inp, sheetRow) {
-            closeAllLists();
+        // --- GESTIONE MODALE ---
+        function openModal(idx) {
+            const a = atletiData[idx];
+            document.getElementById('modal-title').innerText = `Riga ${idx} (Foglio riga ${a.row})`;
+            document.getElementById('modal-row').value = idx;
+            document.getElementById('modal-nome').value = a.nome;
+            document.getElementById('modal-rank').value = a.rank;
+            document.getElementById('modal-girone').value = a.girone;
+            document.getElementById('modal-ed').value = a.ed;
+            
+            document.getElementById('modal-autocomplete').classList.add('hidden');
+            document.getElementById('modal-overlay').classList.remove('hidden');
+            
+            // Focus sul nome automaticamente se è vuoto
+            if(!a.nome) setTimeout(() => document.getElementById('modal-nome').focus(), 100);
+        }
+
+        function closeModal() {
+            document.getElementById('modal-overlay').classList.add('hidden');
+        }
+
+        function deleteModal() {
+            const idx = document.getElementById('modal-row').value;
+            atletiData[idx].nome = '';
+            atletiData[idx].rank = '';
+            atletiData[idx].girone = '';
+            atletiData[idx].ed = '';
+            renderTable();
+            closeModal();
+        }
+
+        function saveModal() {
+            const idx = document.getElementById('modal-row').value;
+            atletiData[idx].nome = document.getElementById('modal-nome').value.trim().toUpperCase();
+            atletiData[idx].rank = document.getElementById('modal-rank').value;
+            atletiData[idx].girone = document.getElementById('modal-girone').value.trim();
+            atletiData[idx].ed = document.getElementById('modal-ed').value.trim().toUpperCase();
+            renderTable();
+            closeModal();
+        }
+
+        // --- AUTOCOMPLETE NEL MODAL ---
+        function handleModalInput() {
+            const inp = document.getElementById('modal-nome');
             const val = inp.value.toUpperCase();
-            if (!val) { document.getElementById(`rank_${sheetRow}`).innerText = ""; return; }
+            const listContainer = document.getElementById('modal-autocomplete');
             
-            const listContainer = document.getElementById(`autocomplete_${sheetRow}`);
+            if (!val) { 
+                listContainer.innerHTML = '';
+                listContainer.classList.add('hidden');
+                document.getElementById('modal-rank').value = '';
+                return; 
+            }
+            
             listContainer.innerHTML = '';
-            
             let count = 0;
+            
             for (let i = 0; i < rankList.length; i++) {
                 if (rankList[i].name.includes(val)) {
                     const item = document.createElement("div");
+                    item.className = "autocomplete-item";
                     const startIdx = rankList[i].name.indexOf(val);
-                    item.innerHTML = rankList[i].name.substring(0, startIdx) + 
-                                     "<strong>" + val + "</strong>" + 
-                                     rankList[i].name.substring(startIdx + val.length) +
-                                     `<span class="float-right text-slate-400 text-xs">${rankList[i].desc}</span>`;
                     
-                    // Usiamo i dataset per conservare i dati in modo sicuro senza rompere l'HTML
+                    item.innerHTML = `<span class="truncate pr-2 text-white">${rankList[i].name.substring(0, startIdx)}<strong class="text-blue-300">${val}</strong>${rankList[i].name.substring(startIdx + val.length)}</span>
+                                      <span class="text-slate-400 text-xs whitespace-nowrap">${rankList[i].desc}</span>`;
+                    
                     item.dataset.name = rankList[i].name;
                     item.dataset.rank = rankList[i].rank;
                     
-                    // Usiamo mousedown per intercettare il click PRIMA che l'input perda il focus o succeda altro
-                    item.addEventListener("mousedown", function(e) {
-                        e.preventDefault();   // Previene perdite di focus anomale
-                        e.stopPropagation();  // Evita che il body chiuda la tendina prima di eseguire questa funzione
+                    const selectHandler = function(e) {
+                        e.preventDefault(); e.stopPropagation();
                         inp.value = this.dataset.name;
-                        document.getElementById(`rank_${sheetRow}`).innerText = this.dataset.rank;
-                        closeAllLists();
-                    });
+                        document.getElementById('modal-rank').value = this.dataset.rank;
+                        listContainer.classList.add('hidden');
+                    };
+
+                    item.addEventListener("mousedown", selectHandler);
+                    item.addEventListener("touchstart", selectHandler, {passive: false});
 
                     listContainer.appendChild(item);
                     listContainer.classList.remove('hidden');
@@ -262,41 +339,13 @@
             if(count === 0) listContainer.classList.add('hidden');
         }
 
-        function closeAllLists(elmnt) {
-            const x = document.getElementsByClassName("autocomplete-items");
-            for (let i = 0; i < x.length; i++) {
-                if (elmnt != x[i] && elmnt != document.activeElement) {
-                    x[i].classList.add('hidden');
-                }
-            }
-        }
+        // Chiude tendina se si clicca fuori (nel modal)
+        document.getElementById('modal-overlay').addEventListener('click', function(e) {
+            if(e.target.id === 'modal-overlay') closeModal();
+            else if(e.target.id !== 'modal-nome') document.getElementById('modal-autocomplete').classList.add('hidden');
+        });
 
-        // 7. Controllo Duplicati Girone
-        function checkDuplicates() {
-            const inputs = document.querySelectorAll('.girone-input');
-            const values = {};
-            
-            inputs.forEach(inp => inp.classList.remove('duplicate'));
-
-            inputs.forEach(inp => {
-                const val = inp.value.trim();
-                if(val) {
-                    if(values[val]) { values[val].push(inp); } 
-                    else { values[val] = [inp]; }
-                }
-            });
-
-            let foundDup = false;
-            for(const key in values) {
-                if(values[key].length > 1) {
-                    foundDup = true;
-                    values[key].forEach(inp => inp.classList.add('duplicate'));
-                }
-            }
-            if(foundDup) showToast("Attenzione: Rilevati duplicati nell'assegnazione Girone!", "error");
-        }
-
-        // 8. Salvataggio Complessivo
+        // --- INVIO DATI A GOOGLE ---
         function saveAll() {
             const formulaData = {
                 squadre: document.getElementById('squadre_val').value,
@@ -304,22 +353,32 @@
                 gir_da: document.getElementById('gir_da_val').value
             };
 
-            const atletiData = [];
+            const datiDaInviare = [];
             for(let i = 1; i <= 40; i++) {
-                const sheetRow = i + 4; 
-                atletiData.push({
-                    row: sheetRow,
-                    nome: document.getElementById(`nome_${sheetRow}`).value.trim(),
-                    ranking: document.getElementById(`rank_${sheetRow}`).innerText.trim(),
-                    girone: document.getElementById(`girone_${sheetRow}`).value.trim(),
-                    ed: document.getElementById(`ed_${sheetRow}`).value.trim()
-                });
+                const a = atletiData[i];
+                const orig = window.originalAtleti ? window.originalAtleti[a.row] : null;
+
+                // Invia la riga solo se è stata modificata rispetto al caricamento
+                if (!orig || orig.nome !== a.nome || orig.girone !== a.girone || orig.ed !== a.ed) {
+                    datiDaInviare.push({ 
+                        row: a.row, 
+                        nome: a.nome, 
+                        // Nota: Inseriamo il ranking nell'oggetto, ma il server ora NON lo sovrascriverà 
+                        ranking: a.rank, 
+                        girone: a.girone, 
+                        ed: a.ed 
+                    });
+                }
             }
 
-            socket.emit('save_bulk_atleti', { formula: formulaData, atleti: atletiData });
+            if(datiDaInviare.length === 0 && !confirm("Non risultano modifiche agli atleti. Vuoi forzare l'aggiornamento della sola formula di gara?")) {
+                return;
+            }
+
+            socket.emit('save_bulk_atleti', { formula: formulaData, atleti: datiDaInviare });
         }
 
-        initTable();
+        renderTable();
     </script>
 </body>
 </html>
