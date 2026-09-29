@@ -1,21 +1,33 @@
+import os
+os.environ['EVENTLET_NO_GREENDNS'] = 'yes'
+
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
-import eventlet
-eventlet.monkey_patch()
-import urllib.request
-import urllib.error
 
-from flask import Flask, render_template, request, jsonify
+try:
+    import eventlet
+    eventlet.monkey_patch()
+    ASYNC_MODE = 'eventlet'
+except ImportError:
+    ASYNC_MODE = 'threading'
+
+import sys, time, random, io, zipfile, subprocess, socket
+import base64, requests, urllib.request, urllib.error
+
+from flask import Flask, render_template, request, jsonify, send_file
 from flask_socketio import SocketIO, emit
-import os, time, random
 
-from config_state import current_state, load_state, save_state, push_history, gironi_cache, get_photo_url, clean_fencer_name, PHOTOS_DIR, get_system_fonts, letter_to_sheet_col, default_columns, BASE_DIR
+from config_state import (
+    current_state, load_state, save_state, push_history, gironi_cache,
+    get_photo_url, clean_fencer_name, PHOTOS_DIR, get_system_fonts,
+    letter_to_sheet_col, default_columns, BASE_DIR, get_local_ip, get_current_ssid
+)
 from fencing_logic import apply_card
 from google_api import update_all_gironi_data, process_background_upload, check_internet, check_google
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'scherma_secret_key'
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+app.config['SECRET_KEY'] = 'scherma_secret_key_windows'
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode=ASYNC_MODE)
 
 @app.route('/')
 def index(): return render_template('index.html')
@@ -53,55 +65,254 @@ def get_fencers():
 
 @app.route('/api/upload_photo', methods=['POST'])
 def upload_photo():
-    if 'photo' not in request.files or 'name' not in request.form: return jsonify({"status": "error", "msg": "Dati mancanti"})
+    if 'photo' not in request.files or 'name' not in request.form:
+        return jsonify({"status": "error", "msg": "Dati mancanti"})
     file = request.files['photo']
     name = request.form['name']
     if file.filename == '': return jsonify({"status": "error", "msg": "Nessun file selezionato"})
+    
     clean_name = clean_fencer_name(name)
     ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'png'
     filename = f"{clean_name}.{ext}"
     filepath = os.path.join(PHOTOS_DIR, filename)
+
     for e in ['jpg', 'png', 'jpeg', 'JPG', 'PNG']:
         old_path = os.path.join(PHOTOS_DIR, f"{clean_name}.{e}")
         if os.path.exists(old_path):
             try: os.remove(old_path)
-            except: pass
+            except Exception: pass
+
     file.save(filepath)
     new_url = f"/static/photos/{filename}?v={int(time.time())}"
     updated = False
+    
     if current_state['fencer_left']['name'] == name:
-        current_state['fencer_left']['photo'] = new_url; updated = True
+        current_state['fencer_left']['photo'] = new_url
+        updated = True
     if current_state['fencer_right']['name'] == name:
-        current_state['fencer_right']['photo'] = new_url; updated = True
+        current_state['fencer_right']['photo'] = new_url
+        updated = True
+
     if updated:
         socketio.emit('state_update', current_state)
-        eventlet.spawn(save_state)
+        socketio.start_background_task(save_state)
+
     return jsonify({"status": "success", "url": new_url})
 
-@app.route('/api/update_system', methods=['POST'])
-def update_system():
-    def run_update_process():
-        import subprocess
-        cmd = ['python', 'setup_fencing_kiosk.py']
+@app.route('/api/download_photos')
+def download_photos():
+    try:
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for root, _, files in os.walk(PHOTOS_DIR):
+                for file in files:
+                    filepath = os.path.join(root, file)
+                    zf.write(filepath, arcname=file)
+        memory_file.seek(0)
+        return send_file(memory_file, mimetype='application/zip', as_attachment=True, download_name='foto_atleti.zip')
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)})
+
+@app.route('/api/upload_zip_bulk', methods=['POST'])
+def upload_zip_bulk():
+    """Importazione massiva di uno ZIP da locale."""
+    if 'zipfile' not in request.files: return jsonify({"status": "error", "msg": "Nessun file ricevuto."})
+    file = request.files['zipfile']
+    if file.filename == '': return jsonify({"status": "error", "msg": "Nessun file selezionato."})
+        
+    try:
+        conteggio = 0
+        with zipfile.ZipFile(file) as zf:
+            for filename in zf.namelist():
+                if filename.lower().endswith(('.png', '.jpg', '.jpeg')) and not '__MACOSX' in filename:
+                    base_name = os.path.basename(filename)
+                    if not base_name: continue
+                    clean_name = clean_fencer_name(os.path.splitext(base_name)[0])
+                    ext = base_name.rsplit('.', 1)[1].lower()
+                    with open(os.path.join(PHOTOS_DIR, f"{clean_name}.{ext}"), 'wb') as f:
+                        f.write(zf.read(filename))
+                    conteggio += 1
+        return jsonify({"status": "success", "msg": f"{conteggio} foto estratte e salvate!"})
+    except Exception as e: return jsonify({"status": "error", "msg": f"File ZIP non valido: {str(e)}"})
+
+@app.route('/api/sync_drive_folder', methods=['POST'])
+def sync_drive_folder():
+    """Gestore Unificato Bidirezionale (Google Drive)"""
+    data = request.json or {}
+    link = data.get('link', '')
+    direction = data.get('direction', 'import') 
+
+    if not link: return jsonify({"status": "error", "msg": "Inserisci il link."})
+
+    try:
+        if direction == 'export':
+            script_url = current_state['settings'].get('google_script_url')
+            if not script_url: return jsonify({"status": "error", "msg": "Manca URL Apps Script nelle Impostazioni."})
+
+            memory_file = io.BytesIO()
+            with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for root, _, files in os.walk(PHOTOS_DIR):
+                    for file in files: zf.write(os.path.join(root, file), arcname=file)
+
+            zip_b64 = base64.b64encode(memory_file.getvalue()).decode('utf-8')
+            payload = { "action": "backup_to_drive", "folder_url": link, "zip_base64": zip_b64 }
+
+            res = requests.post(script_url, json=payload, timeout=60)
+            if res.status_code == 200 and res.json().get('status') == 'success':
+                return jsonify({"status": "success", "msg": "Backup esportato su Google Drive!"})
+            else:
+                err = res.json().get('message', 'Errore script') if res.status_code == 200 else f"HTTP {res.status_code}"
+                return jsonify({"status": "error", "msg": f"Errore Drive: {err}"})
+
+        elif direction == 'import':
+            # Gestione Link Diretto al File (.ZIP)
+            if "/file/d/" in link or "open?id=" in link:
+                file_id = link.split("/d/")[1].split("/")[0] if "/file/d/" in link else link.split("id=")[1].split("&")[0]
+                download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+
+                req = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req) as response:
+                    file_bytes = response.read()
+
+                    conteggio = 0
+                    with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+                        for filename in zf.namelist():
+                            if filename.lower().endswith(('.png', '.jpg', '.jpeg')) and not '__MACOSX' in filename:
+                                base_name = os.path.basename(filename)
+                                if not base_name: continue
+                                clean_name = clean_fencer_name(os.path.splitext(base_name)[0])
+                                ext = base_name.rsplit('.', 1)[1].lower()
+                                with open(os.path.join(PHOTOS_DIR, f"{clean_name}.{ext}"), 'wb') as f: f.write(zf.read(filename))
+                                conteggio += 1
+                return jsonify({"status": "success", "msg": f"{conteggio} foto scaricate dal file ZIP Drive!"})
+
+            # Gestione Link CARTELLA Drive (tramite Apps Script)
+            else:
+                script_url = current_state['settings'].get('google_script_url')
+                if not script_url: return jsonify({"status": "error", "msg": "Manca URL Apps Script nelle Impostazioni."})
+
+                payload = { "action": "restore_from_drive", "folder_url": link }
+                res = requests.post(script_url, json=payload, timeout=120)
+                
+                if res.status_code == 200 and res.json().get('status') == 'success':
+                    zip_b64 = res.json().get('zip_base64', '')
+                    if not zip_b64: return jsonify({"status": "error", "msg": "Cartella Drive vuota o protetta."})
+
+                    conteggio = 0
+                    with zipfile.ZipFile(io.BytesIO(base64.b64decode(zip_b64))) as zf:
+                        for filename in zf.namelist():
+                            if filename.lower().endswith('.zip') and not '__MACOSX' in filename:
+                                inner_bytes = zf.read(filename)
+                                with zipfile.ZipFile(io.BytesIO(inner_bytes)) as inner_zf:
+                                    for inner_file in inner_zf.namelist():
+                                        if inner_file.lower().endswith(('.png', '.jpg', '.jpeg')) and not '__MACOSX' in inner_file:
+                                            base_name = os.path.basename(inner_file)
+                                            if not base_name: continue
+                                            clean_name = clean_fencer_name(os.path.splitext(base_name)[0])
+                                            ext = base_name.rsplit('.', 1)[1].lower()
+                                            with open(os.path.join(PHOTOS_DIR, f"{clean_name}.{ext}"), 'wb') as f: f.write(inner_zf.read(inner_file))
+                                            conteggio += 1
+                            elif filename.lower().endswith(('.png', '.jpg', '.jpeg')) and not '__MACOSX' in filename:
+                                base_name = os.path.basename(filename)
+                                if not base_name: continue
+                                clean_name = clean_fencer_name(os.path.splitext(base_name)[0])
+                                ext = base_name.rsplit('.', 1)[1].lower()
+                                with open(os.path.join(PHOTOS_DIR, f"{clean_name}.{ext}"), 'wb') as f: f.write(zf.read(filename))
+                                conteggio += 1
+                    return jsonify({"status": "success", "msg": f"{conteggio} foto lette dalla Cartella Drive!"})
+                else:
+                    err = res.json().get('message', 'Errore API Google') if res.status_code == 200 else f"HTTP {res.status_code}"
+                    return jsonify({"status": "error", "msg": f"Errore: {err}"})
+                    
+    except urllib.error.HTTPError as e: return jsonify({"status": "error", "msg": "Accesso negato. Usa un link 'Chiunque abbia il link'."})
+    except Exception as e: return jsonify({"status": "error", "msg": str(e)})
+
+@app.route('/api/scan_wifi')
+def scan_wifi():
+    ssids = []
+    if os.name == 'nt':
         try:
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=BASE_DIR)
-            for line in iter(process.stdout.readline, ''):
-                if line: socketio.emit('update_log', {'msg': line.strip()})
-            process.stdout.close()
-            process.wait()
-            socketio.emit('update_complete')
-            os.system("nohup bash -c 'sleep 2 && pkill -f \"python app.py\" || true; source venv/bin/activate && python app.py' >/dev/null 2>&1 &")
-        except Exception as e:
-            socketio.emit('update_log', {'msg': f"[ERRORE FATALE] {str(e)}"})
-            socketio.emit('update_complete')
-    eventlet.spawn(run_update_process)
-    return jsonify({"status": "updating"})
+            cmd = "netsh wlan show networks"
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode('latin1', errors='ignore')
+            for line in output.splitlines():
+                if "SSID" in line and ":" in line:
+                    ssid = line.split(":", 1)[1].strip()
+                    if ssid and ssid not in ssids: ssids.append(ssid)
+        except Exception: pass
+    else:
+        try:
+            out = subprocess.check_output("nmcli -t -f SSID dev wifi list", shell=True).decode()
+            ssids = [s.strip() for s in out.splitlines() if s.strip()]
+        except Exception: pass
+    if not ssids: ssids = [get_current_ssid()]
+    return jsonify(list(dict.fromkeys(ssids)))
+
+@app.route('/api/saved_wifi')
+def saved_wifi():
+    saved = []
+    if os.name == 'nt':
+        try:
+            cmd = "netsh wlan show profiles"
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode('latin1', errors='ignore')
+            for line in output.splitlines():
+                if ":" in line and ("All User Profile" in line or "Profilo utente" in line):
+                    profile = line.split(":", 1)[1].strip()
+                    if profile: saved.append(profile)
+        except Exception: pass
+    return jsonify(saved)
+
+@app.route('/api/connect_wifi', methods=['POST'])
+def connect_wifi():
+    data = request.json or {}
+    ssid = data.get('ssid', '')
+    if os.name == 'nt':
+        try:
+            subprocess.run(f'netsh wlan connect name="{ssid}"', shell=True)
+            return jsonify({"status": "success", "ip": get_local_ip()})
+        except Exception as e: return jsonify({"status": "error", "msg": str(e)})
+    return jsonify({"status": "success", "ip": get_local_ip()})
+
+@app.route('/api/delete_wifi', methods=['POST'])
+def delete_wifi():
+    data = request.json or {}
+    ssid = data.get('ssid', '')
+    if os.name == 'nt':
+        try:
+            subprocess.run(f'netsh wlan delete profile name="{ssid}"', shell=True)
+            return jsonify({"status": "success"})
+        except Exception as e: return jsonify({"status": "error", "msg": str(e)})
+    return jsonify({"status": "success"})
+
+@app.route('/api/ota/<pico_name>/version')
+def ota_version(pico_name): return "9.0"
+
+@app.route('/api/ota/<pico_name>/code')
+def ota_code(pico_name):
+    filename = f"pico_{pico_name.lower()}.py"
+    path = os.path.join(BASE_DIR, "templates", "pico_code", filename)
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f: return f.read()
+    return "# File not found"
 
 @app.route('/api/get_fonts')
 def api_get_fonts(): return jsonify(get_system_fonts())
 
+@app.route('/api/update_system', methods=['POST'])
+def update_system():
+    def run_update_process():
+        try:
+            socketio.emit('update_log', {'msg': 'Verifica aggiornamenti git...'})
+            res = subprocess.run(['git', 'pull'], cwd=BASE_DIR, capture_output=True, text=True)
+            socketio.emit('update_log', {'msg': res.stdout or res.stderr or 'Aggiornamento completato.'})
+            socketio.emit('update_complete')
+        except Exception as e:
+            socketio.emit('update_log', {'msg': f"[ERRORE] {str(e)}"})
+            socketio.emit('update_complete')
+    socketio.start_background_task(run_update_process)
+    return jsonify({"status": "updating"})
+
 @socketio.on('connect')
-def handle_connect(): 
+def handle_connect():
     emit('status_check', {'internet': check_internet(), 'google': check_google()})
     emit('wifi_info', {'ssid': current_state['ssid'], 'ip': current_state['server_ip']})
     emit('state_update', current_state)
@@ -116,18 +327,18 @@ def handle_score(d):
     if d['delta'] > 0: socketio.emit('hw_hit', {'side': side, 'is_double': False, 'score_added': True, 'is_manual': True})
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
-    eventlet.spawn(save_state)
+    socketio.start_background_task(save_state)
 
 @socketio.on('double_hit')
 def db_hit():
     push_history()
     current_state['fencer_left']['score'] += 1
     current_state['fencer_right']['score'] += 1
-    current_state['running'] = False 
+    current_state['running'] = False
     socketio.emit('hw_hit', {'side': 'double', 'is_double': True, 'score_added': True, 'is_manual': True})
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
-    eventlet.spawn(save_state)
+    socketio.start_background_task(save_state)
 
 @socketio.on('card_action')
 def handle_card(d):
@@ -141,22 +352,22 @@ def handle_reset_cards(data):
     current_state[f'fencer_{side}']['cards'] = {"Y": False, "R": False, "B": False, "R_count": 0}
     current_state[f'fencer_{side}']['p_cards'] = {"Y": False, "R": False, "B": False}
     socketio.emit('state_update', current_state)
-    eventlet.spawn(save_state)
+    socketio.start_background_task(save_state)
 
 @socketio.on('toggle_timer')
 def handle_toggle():
     current_state['running'] = not current_state['running']
     socketio.emit('state_update', current_state)
-    eventlet.spawn(save_state)
+    socketio.start_background_task(save_state)
 
 @socketio.on('adjust_time')
 def handle_adjust_time(data):
     push_history()
-    current_state['timer'] = max(0, current_state['timer'] + float(data.get('delta',0)))
-    current_state['running'] = False 
+    current_state['timer'] = max(0.0, current_state['timer'] + float(data.get('delta', 0)))
+    current_state['running'] = False
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
-    eventlet.spawn(save_state)
+    socketio.start_background_task(save_state)
 
 @socketio.on('toggle_priority')
 def handle_priority():
@@ -165,30 +376,30 @@ def handle_priority():
     if curr:
         current_state['priority'] = None
         socketio.emit('state_update', current_state)
-        eventlet.spawn(save_state)
+        socketio.start_background_task(save_state)
     else:
         winner = random.choice(['left', 'right'])
         socketio.emit('priority_animation', {'duration': 2500})
         def apply_priority():
-            eventlet.sleep(2.5)
+            socketio.sleep(2.5)
             current_state['priority'] = winner
-            current_state['timer'] = 60.0 
+            current_state['timer'] = 60.0
             current_state['running'] = False
             socketio.emit('state_update', current_state)
             socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
             save_state()
-        eventlet.spawn(apply_priority)
+        socketio.start_background_task(apply_priority)
 
 @socketio.on('reset_scores')
 def r_scores():
     push_history()
     current_state['running'] = False
-    for s in ['left','right']:
+    for s in ['left', 'right']:
         current_state[f'fencer_{s}']['score'] = 0
-        current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
-        current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+        current_state[f'fencer_{s}']['cards'] = {"Y": False, "R": False, "B": False, "R_count": 0}
+        current_state[f'fencer_{s}']['p_cards'] = {"Y": False, "R": False, "B": False}
     socketio.emit('state_update', current_state)
-    eventlet.spawn(save_state)
+    socketio.start_background_task(save_state)
 
 @socketio.on('reset_timer')
 def r_timer():
@@ -199,7 +410,7 @@ def r_timer():
     current_state['priority'] = None
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
-    eventlet.spawn(save_state)
+    socketio.start_background_task(save_state)
 
 @socketio.on('reset_all')
 def r_all():
@@ -208,12 +419,12 @@ def r_all():
     current_state['phase'] = 'MATCH'
     current_state['running'] = False
     current_state['priority'] = None
-    current_state['manual_selection'] = False 
-    current_state['swapped'] = False 
-    for s in ['left','right']:
+    current_state['manual_selection'] = False
+    current_state['swapped'] = False
+    for s in ['left', 'right']:
         current_state[f'fencer_{s}']['score'] = 0
-        current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
-        current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+        current_state[f'fencer_{s}']['cards'] = {"Y": False, "R": False, "B": False, "R_count": 0}
+        current_state[f'fencer_{s}']['p_cards'] = {"Y": False, "R": False, "B": False}
     current_state['fencer_left']['name'] = current_state['settings']['default_name_left']
     current_state['fencer_right']['name'] = current_state['settings']['default_name_right']
     current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left']['name'])
@@ -221,19 +432,19 @@ def r_all():
     current_state['current_row_idx'] = None
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
-    eventlet.spawn(save_state)
+    socketio.start_background_task(save_state)
 
 @socketio.on('update_settings')
 def up_set(d):
-    for k,v in d.items(): 
+    for k, v in d.items():
         if k == 'columns': current_state['settings']['columns'] = v
-        elif k in current_state['settings']: 
+        elif k in current_state['settings']:
             if isinstance(current_state['settings'][k], (int, float)):
                 try: current_state['settings'][k] = float(v)
-                except: pass
+                except Exception: pass
             else: current_state['settings'][k] = str(v)
     socketio.emit('state_update', current_state)
-    eventlet.spawn(save_state)
+    socketio.start_background_task(save_state)
 
 @socketio.on('swap_fencers')
 def handle_swap():
@@ -243,34 +454,34 @@ def handle_swap():
     if curr == 'left': current_state['priority'] = 'right'
     elif curr == 'right': current_state['priority'] = 'left'
     socketio.emit('state_update', current_state)
-    eventlet.spawn(save_state)
+    socketio.start_background_task(save_state)
 
 @socketio.on('load_match')
 def l_match(d):
     push_history()
     current_state['active_girone'] = d.get('girone', current_state.get('current_girone', 'rosso'))
-    current_state['current_girone'] = current_state['active_girone'] # Sincronizza il girone per il display
-    current_state['match_list'] = gironi_cache.get(current_state['active_girone'], []) # Aggiorna la lista del display immediatamente
+    current_state['current_girone'] = current_state['active_girone']
+    current_state['match_list'] = gironi_cache.get(current_state['active_girone'], [])
     current_state['manual_selection'] = True
-    current_state['swapped'] = False 
+    current_state['swapped'] = False
     current_state['current_row_idx'] = d['row']
     current_state['fencer_left']['name'] = clean_fencer_name(d['sx'])
     current_state['fencer_right']['name'] = clean_fencer_name(d['dx'])
     current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left']['name'])
     current_state['fencer_right']['photo'] = get_photo_url(current_state['fencer_right']['name'])
     try: current_state['fencer_left']['score'] = int(float(d['p_sx']))
-    except: current_state['fencer_left']['score'] = 0
+    except Exception: current_state['fencer_left']['score'] = 0
     try: current_state['fencer_right']['score'] = int(float(d['p_dx']))
-    except: current_state['fencer_right']['score'] = 0
+    except Exception: current_state['fencer_right']['score'] = 0
     current_state['timer'] = float(current_state['settings']['time_match'])
-    current_state['phase'] = 'MATCH' 
+    current_state['phase'] = 'MATCH'
     current_state['running'] = False
     current_state['priority'] = None
-    for s in ['left','right']:
-        current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
-        current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+    for s in ['left', 'right']:
+        current_state[f'fencer_{s}']['cards'] = {"Y": False, "R": False, "B": False, "R_count": 0}
+        current_state[f'fencer_{s}']['p_cards'] = {"Y": False, "R": False, "B": False}
     socketio.emit('state_update', current_state)
-    eventlet.spawn(save_state)
+    socketio.start_background_task(save_state)
 
 @socketio.on('send_result')
 def handle_send_result():
@@ -279,30 +490,34 @@ def handle_send_result():
         return
     g = current_state.get('active_girone', current_state.get('current_girone', 'rosso'))
     cols_map = current_state['settings'].get('columns', default_columns)
-    cols = cols_map.get(g, default_columns['rosso']) 
+    cols = cols_map.get(g, default_columns['rosso'])
     val_sx = current_state['fencer_right']['score'] if current_state.get('swapped') else current_state['fencer_left']['score']
     val_dx = current_state['fencer_left']['score'] if current_state.get('swapped') else current_state['fencer_right']['score']
-    payload = { "sheet_name": "display3gir", "row": current_state['current_row_idx'], "col_sx": letter_to_sheet_col(cols['psx']), "val_sx": val_sx, "col_dx": letter_to_sheet_col(cols['pdx']), "val_dx": val_dx }
+    payload = {
+        "sheet_name": "display3gir", "row": current_state['current_row_idx'],
+        "col_sx": letter_to_sheet_col(cols['psx']), "val_sx": val_sx,
+        "col_dx": letter_to_sheet_col(cols['pdx']), "val_dx": val_dx
+    }
     socketio.emit('action_feedback', {'status': 'info', 'msg': 'Invio in background...'})
-    eventlet.spawn(process_background_upload, payload, g, socketio)
+    socketio.start_background_task(process_background_upload, payload, g, socketio)
 
     matches = gironi_cache.get(g, [])
     next_match = None
     for m in matches:
         if m['row'] != current_state['current_row_idx']:
             try: p_sx = int(float(m.get('p_sx', '0') or '0'))
-            except: p_sx = 0
+            except Exception: p_sx = 0
             try: p_dx = int(float(m.get('p_dx', '0') or '0'))
-            except: p_dx = 0
+            except Exception: p_dx = 0
             if p_sx == 0 and p_dx == 0:
                 next_match = m
                 break
     if next_match:
         current_state['active_girone'] = g
-        current_state['current_girone'] = g # Sincronizza il girone per il display
-        current_state['match_list'] = gironi_cache.get(g, []) # Aggiorna la lista
+        current_state['current_girone'] = g
+        current_state['match_list'] = gironi_cache.get(g, [])
         current_state['manual_selection'] = True
-        current_state['swapped'] = False 
+        current_state['swapped'] = False
         current_state['current_row_idx'] = next_match['row']
         current_state['fencer_left']['name'] = clean_fencer_name(next_match['sx'])
         current_state['fencer_right']['name'] = clean_fencer_name(next_match['dx'])
@@ -311,22 +526,22 @@ def handle_send_result():
         current_state['fencer_left']['score'] = 0
         current_state['fencer_right']['score'] = 0
         current_state['timer'] = float(current_state['settings']['time_match'])
-        current_state['phase'] = 'MATCH' 
+        current_state['phase'] = 'MATCH'
         current_state['running'] = False
         current_state['priority'] = None
-        for s in ['left','right']:
-            current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
-            current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+        for s in ['left', 'right']:
+            current_state[f'fencer_{s}']['cards'] = {"Y": False, "R": False, "B": False, "R_count": 0}
+            current_state[f'fencer_{s}']['p_cards'] = {"Y": False, "R": False, "B": False}
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
         socketio.emit('action_feedback', {'status': 'success', 'msg': f"Caricato: {next_match['sx']} vs {next_match['dx']}"})
-        eventlet.spawn(save_state)
+        socketio.start_background_task(save_state)
     else:
         current_state['active_girone'] = g
-        current_state['current_girone'] = g 
-        current_state['match_list'] = gironi_cache.get(g, []) 
+        current_state['current_girone'] = g
+        current_state['match_list'] = gironi_cache.get(g, [])
         current_state['manual_selection'] = False
-        current_state['swapped'] = False 
+        current_state['swapped'] = False
         current_state['current_row_idx'] = None
         current_state['fencer_left']['name'] = current_state['settings']['default_name_left']
         current_state['fencer_right']['name'] = current_state['settings']['default_name_right']
@@ -335,16 +550,16 @@ def handle_send_result():
         current_state['fencer_left']['score'] = 0
         current_state['fencer_right']['score'] = 0
         current_state['timer'] = float(current_state['settings']['time_match'])
-        current_state['phase'] = 'MATCH' 
+        current_state['phase'] = 'MATCH'
         current_state['running'] = False
         current_state['priority'] = None
-        for s in ['left','right']:
-            current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
-            current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+        for s in ['left', 'right']:
+            current_state[f'fencer_{s}']['cards'] = {"Y": False, "R": False, "B": False, "R_count": 0}
+            current_state[f'fencer_{s}']['p_cards'] = {"Y": False, "R": False, "B": False}
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
         socketio.emit('action_feedback', {'status': 'info', 'msg': 'Girone completato! Display ripristinato.'})
-        eventlet.spawn(save_state)
+        socketio.start_background_task(save_state)
 
 @socketio.on('send_background_result')
 def handle_send_background_result(data):
@@ -355,31 +570,25 @@ def handle_send_background_result(data):
     cols_map = current_state['settings'].get('columns', default_columns)
     cols = cols_map.get(g, default_columns['rosso']) 
     payload = { 
-        "sheet_name": "display3gir", 
-        "row": data['row'], 
-        "col_sx": letter_to_sheet_col(cols['psx']), 
-        "val_sx": data['val_sx'], 
-        "col_dx": letter_to_sheet_col(cols['pdx']), 
-        "val_dx": data['val_dx'] 
+        "sheet_name": "display3gir", "row": data['row'], 
+        "col_sx": letter_to_sheet_col(cols['psx']), "val_sx": data['val_sx'], 
+        "col_dx": letter_to_sheet_col(cols['pdx']), "val_dx": data['val_dx'] 
     }
     socketio.emit('action_feedback', {'status': 'info', 'msg': f"Invio risultato {data['sx']} vs {data['dx']} in background..."})
-    eventlet.spawn(process_background_upload, payload, g, socketio)
+    socketio.start_background_task(process_background_upload, payload, g, socketio)
 
 @socketio.on('save_bulk_atleti')
 def handle_save_bulk_atleti(data):
     url = current_state['settings'].get('google_script_url')
     if not url:
-        socketio.emit('action_feedback', {'status': 'error', 'msg': 'URL Apps Script mancante. Vai in Impostazioni per inserirlo.'})
+        socketio.emit('action_feedback', {'status': 'error', 'msg': 'URL Apps Script mancante. Vai in Impostazioni.'})
         return
     
     def send_bulk():
         try:
-            import requests
-            # Payload con struttura per aggiornamento multiplo (richiede setup nell'App Script di Google)
             payload = {
-                "action": "update_atleti",
-                "sheet_name": "Atleti",
-                "data": data['atleti']
+                "action": "update_atleti", "sheet_name": "Atleti",
+                "formula": data.get('formula', {}), "data": data.get('atleti', [])
             }
             res = requests.post(url, json=payload, timeout=15)
             if res.status_code == 200:
@@ -394,126 +603,75 @@ def handle_save_bulk_atleti(data):
             
     socketio.emit('upload_status', {'color': 'yellow'})
     socketio.emit('action_feedback', {'status': 'info', 'msg': 'Salvataggio Atleti in corso...'})
-    eventlet.spawn(send_bulk)
+    socketio.start_background_task(send_bulk)
 
 @socketio.on('fetch_sheet')
 def f_sheet(d=None):
     if d and 'girone' in d:
         current_state['current_girone'] = d['girone']
-        current_state['manual_selection'] = False 
-        eventlet.spawn(save_state)
-    eventlet.spawn(update_all_gironi_data, socketio)
+        current_state['manual_selection'] = False
+        socketio.start_background_task(save_state)
+    socketio.start_background_task(update_all_gironi_data, socketio)
 
 def timer_thread():
     while True:
         if current_state['running']:
             if current_state['timer'] > 0:
                 current_state['timer'] -= 0.1
-                if current_state['timer'] < 0: current_state['timer'] = 0
-                socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase','MATCH')})
+                if current_state['timer'] < 0: current_state['timer'] = 0.0
+                socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase', 'MATCH')})
                 if current_state['timer'] <= 0:
                     socketio.emit('time_expired')
-                    
-                    # Se finisce il tempo regolare, passa al minuto di priorità
                     if current_state.get('phase') != 'PRIORITY_MINUTE':
-                        current_state['timer'] = 60.0
-                        current_state['phase'] = 'PRIORITY_MINUTE'
+                        current_state['timer'] = 60.0; current_state['phase'] = 'PRIORITY_MINUTE'
                     else:
                         current_state['timer'] = float(current_state['settings']['time_match'])
-                        current_state['phase'] = 'MATCH'
-                        current_state['priority'] = None
-                        
+                        current_state['phase'] = 'MATCH'; current_state['priority'] = None
+
                     current_state['running'] = False
                     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
                     socketio.emit('state_update', current_state)
-                    eventlet.spawn(save_state)
+                    socketio.start_background_task(save_state)
             else:
                 current_state['running'] = False
-                eventlet.spawn(save_state)
-        eventlet.sleep(0.1)
+                socketio.start_background_task(save_state)
+        socketio.sleep(0.1)
 
-eventlet.spawn(timer_thread)
+def pico_udp_listener():
+    UDP_PORT = 7777
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(('0.0.0.0', UDP_PORT))
+        print(f"[Pico UDP] In ascolto su porta UDP {UDP_PORT}...")
+    except Exception as e:
+        print(f"[Pico UDP Warning] Impossibile avviare socket UDP: {e}"); return
+
+    while True:
+        try:
+            data, addr = sock.recvfrom(1024)
+            msg = data.decode('utf-8', errors='ignore').strip()
+            if msg.startswith("STATE_"):
+                parts = msg.split("_")
+                if len(parts) >= 4:
+                    pico_side = 'left' if parts[1].upper() == 'ROSSO' else 'right'
+                    hit = parts[2] == '1'
+                    massa = parts[3] == '1'
+
+                    if hit: socketio.emit('hw_hit', {'side': pico_side, 'is_double': False, 'score_added': False, 'is_manual': False, 'hit_type': 'TARGET'})
+                    elif massa: socketio.emit('hw_massa', {'side': pico_side})
+        except Exception: socketio.sleep(0.1)
+
+socketio.start_background_task(timer_thread)
+socketio.start_background_task(pico_udp_listener)
 
 if __name__ == '__main__':
     load_state()
-    eventlet.spawn(update_all_gironi_data, socketio)
+    socketio.start_background_task(update_all_gironi_data, socketio)
+    local_ip = get_local_ip()
+    print("=" * 60)
+    print("   🤺 FENCING SCOREBOARD ATTIVO (CROSS-PLATFORM)")
+    print("=" * 60)
+    print(f" > Display Principale: http://localhost:5000")
+    print(f" > Telecomando Smartphone: http://{local_ip}:5000/telecomando")
+    print("=" * 60)
     socketio.run(app, host='0.0.0.0', port=5000)
-
-@app.route('/api/upload_zip_bulk', methods=['POST'])
-def upload_zip_bulk():
-    """Riceve uno ZIP dal dispositivo, lo scompatta e salva le foto rinominate correttamente."""
-    if 'zipfile' not in request.files:
-        return jsonify({"status": "error", "msg": "Nessun file ricevuto dal server."})
-    
-    file = request.files['zipfile']
-    if file.filename == '':
-        return jsonify({"status": "error", "msg": "Nessun file selezionato."})
-        
-    try:
-        conteggio = 0
-        with zipfile.ZipFile(file) as zf:
-            for filename in zf.namelist():
-                # Ignora le cartelle di sistema MacOS/Windows e accetta solo immagini
-                if filename.lower().endswith(('.png', '.jpg', '.jpeg')) and not '__MACOSX' in filename:
-                    base_name = os.path.basename(filename)
-                    if not base_name: continue
-                    
-                    # Usa la logica di pulizia nomi esistente per associarle automaticamente
-                    name_without_ext = os.path.splitext(base_name)[0]
-                    clean_name = clean_fencer_name(name_without_ext)
-                    ext = base_name.rsplit('.', 1)[1].lower()
-                    filepath = os.path.join(PHOTOS_DIR, f"{clean_name}.{ext}")
-                    
-                    # Estrae il singolo file e lo scrive nella cartella photos
-                    with open(filepath, 'wb') as f:
-                        f.write(zf.read(filename))
-                    conteggio += 1
-                    
-        return jsonify({"status": "success", "msg": f"{conteggio} foto estratte e salvate!"})
-    except Exception as e:
-        return jsonify({"status": "error", "msg": f"File ZIP corrotto o non valido: {str(e)}"})
-
-@app.route('/api/import_drive_zip', methods=['POST'])
-def import_drive_zip():
-    """Scarica un file ZIP pubblico da Google Drive tramite il link."""
-    data = request.json or {}
-    link = data.get('link', '')
-    
-    if not link:
-        return jsonify({"status": "error", "msg": "Link vuoto."})
-        
-    # Converte i link di visualizzazione Drive in link di download diretto
-    if "drive.google.com/file/d/" in link:
-        file_id = link.split("/d/")[1].split("/")[0]
-        link = f"https://drive.google.com/uc?export=download&id={file_id}"
-    elif "drive.google.com/open?id=" in link:
-        file_id = link.split("id=")[1].split("&")[0]
-        link = f"https://drive.google.com/uc?export=download&id={file_id}"
-
-    try:
-        # Finge di essere un browser normale per non farsi bloccare da Google
-        req = urllib.request.Request(link, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-        with urllib.request.urlopen(req) as response:
-            file_bytes = response.read()
-            
-            conteggio = 0
-            with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
-                for filename in zf.namelist():
-                    if filename.lower().endswith(('.png', '.jpg', '.jpeg')) and not '__MACOSX' in filename:
-                        base_name = os.path.basename(filename)
-                        if not base_name: continue
-                        
-                        name_without_ext = os.path.splitext(base_name)[0]
-                        clean_name = clean_fencer_name(name_without_ext)
-                        ext = base_name.rsplit('.', 1)[1].lower()
-                        filepath = os.path.join(PHOTOS_DIR, f"{clean_name}.{ext}")
-                        
-                        with open(filepath, 'wb') as f:
-                            f.write(zf.read(filename))
-                        conteggio += 1
-                        
-        return jsonify({"status": "success", "msg": f"{conteggio} foto scaricate da Drive ed estratte!"})
-    except urllib.error.HTTPError as e:
-        return jsonify({"status": "error", "msg": f"Accesso negato. Assicurati che il file Drive sia impostato su 'Chiunque abbia il link'."})
-    except Exception as e:
-        return jsonify({"status": "error", "msg": f"Errore durante l'elaborazione del link: {str(e)}"})
