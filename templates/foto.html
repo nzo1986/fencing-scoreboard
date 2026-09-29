@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestione Foto Atleti</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { background: #0f172a; color: white; font-family: sans-serif; padding-bottom: 40px; }
         .photo-card { 
@@ -61,18 +62,23 @@
 <body class="p-4 sm:p-6">
     <div class="max-w-7xl mx-auto">
         
-        <div class="flex flex-col sm:flex-row justify-between items-center mb-6 pb-4 border-b border-slate-700 gap-4">
+        <div class="flex flex-col xl:flex-row justify-between items-center mb-6 pb-4 border-b border-slate-700 gap-4">
             <h1 class="text-2xl sm:text-3xl font-bold text-slate-100 flex items-center gap-3">
                 📸 Fotografie Atleti
             </h1>
-            <div class="flex gap-3 w-full sm:w-auto">
-                <button onclick="loadFencers()" class="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-lg font-bold shadow-lg transition">Aggiorna Lista</button>
-                <button onclick="window.location.href='/settings'" class="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 border border-slate-600 px-5 py-2.5 rounded-lg font-bold shadow-lg transition">Indietro</button>
+            <div class="flex gap-2 flex-wrap w-full xl:w-auto justify-center">
+                <!-- Nuovi Pulsanti Azioni Massive -->
+                <a href="/api/download_photos" class="bg-green-600 hover:bg-green-500 px-4 py-2.5 rounded-lg font-bold shadow-lg transition text-sm flex items-center gap-2"><i class="fa-solid fa-download"></i> Backup ZIP</a>
+                <button onclick="openZipModal()" class="bg-purple-600 hover:bg-purple-500 px-4 py-2.5 rounded-lg font-bold shadow-lg transition text-sm flex items-center gap-2"><i class="fa-solid fa-file-zipper"></i> Importa ZIP/Drive</button>
+                
+                <!-- Pulsanti Originali -->
+                <button onclick="loadFencers()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2.5 rounded-lg font-bold shadow-lg transition text-sm flex items-center gap-2"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+                <button onclick="window.location.href='/settings'" class="bg-slate-700 hover:bg-slate-600 border border-slate-600 px-4 py-2.5 rounded-lg font-bold shadow-lg transition text-sm">Indietro</button>
             </div>
         </div>
         
         <div class="bg-slate-800/50 p-4 rounded-xl mb-8 border border-slate-700 text-slate-300 text-sm sm:text-base">
-            <span class="text-blue-400 font-bold">Istruzioni:</span> Clicca sul riquadro rettangolare di un atleta per caricare o sostituire la sua fotografia dalla memoria del telefono o PC. Se l'atleta sta attualmente tirando sul display principale, la sua foto <strong>si aggiornerà istantaneamente da sola</strong> senza bisogno di ricaricare nulla!
+            <span class="text-blue-400 font-bold">Istruzioni:</span> Clicca sul riquadro rettangolare di un atleta per caricare o sostituire la foto singolarmente. Usa il pulsante "Importa ZIP" in alto per caricare tutte le foto in blocco da una cartella compressa. Se l'atleta sta attualmente tirando sul display principale, la sua foto <strong>si aggiornerà istantaneamente</strong>.
         </div>
 
         <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
@@ -81,8 +87,30 @@
         
     </div>
 
-    <!-- Input nascosto per caricare i file -->
+    <!-- Input nascosto per caricare i file singolarmente -->
     <input type="file" id="file-input" accept="image/*" class="hidden">
+
+    <!-- POPUP MODALE PER IMPORTAZIONE MASSIVA (ZIP/DRIVE) -->
+    <div id="zip-modal" class="fixed inset-0 bg-black bg-opacity-80 hidden z-50 flex justify-center items-center p-4">
+        <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-md p-6 shadow-2xl relative">
+            <h2 class="text-xl font-bold text-purple-400 mb-4 border-b border-slate-700 pb-2"><i class="fa-solid fa-boxes-packing"></i> Importazione Massiva</h2>
+            <button onclick="closeZipModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-2xl">&times;</button>
+            
+            <div class="mb-6 bg-slate-900/50 p-4 rounded border border-slate-700">
+                <label class="block text-sm font-bold text-slate-300 mb-2">Metodo 1: Carica un file .ZIP dal dispositivo</label>
+                <input type="file" id="zip-input" accept=".zip" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-slate-300 mb-2">
+                <button onclick="uploadLocalZip()" class="w-full bg-purple-600 hover:bg-purple-500 font-bold py-2 rounded text-white transition shadow">Scompatta e Carica</button>
+            </div>
+
+            <div class="mb-4 bg-slate-900/50 p-4 rounded border border-slate-700">
+                <label class="block text-sm font-bold text-slate-300 mb-2">Metodo 2: Link Google Drive (di un file .ZIP)</label>
+                <input type="text" id="drive-link" placeholder="https://drive.google.com/file/d/..." class="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white mb-2 text-sm">
+                <button onclick="importFromDrive()" class="w-full bg-blue-600 hover:bg-blue-500 font-bold py-2 rounded text-white transition shadow">Scarica da Link</button>
+            </div>
+            
+            <div id="zip-status" class="text-center font-bold mt-4 min-h-[24px]"></div>
+        </div>
+    </div>
 
     <script>
         let currentFencer = '';
@@ -103,7 +131,6 @@
                     data.forEach(f => {
                         const card = document.createElement('div');
                         card.className = 'photo-card shadow-lg';
-                        // Usa l'URL dell'immagine restituito dall'API come sfondo
                         card.style.backgroundImage = `url('${f.photo}')`;
                         card.onclick = () => openPicker(f.name);
                         
@@ -120,6 +147,7 @@
                 });
         }
 
+        // --- Logica Foto Singola (Originale Mantenuta) ---
         function openPicker(name) {
             currentFencer = name;
             document.getElementById('file-input').click();
@@ -128,50 +156,109 @@
         document.getElementById('file-input').addEventListener('change', function(e) {
             if(this.files.length === 0) return;
             const file = this.files[0];
-            
             const formData = new FormData();
             formData.append('photo', file);
             formData.append('name', currentFencer);
 
-            // Trova la card cliccata e aggiungi l'effetto di caricamento
             const cards = document.querySelectorAll('.photo-card');
             let targetCard = null;
             cards.forEach(c => { 
-                if(c.querySelector('.name-overlay').innerText === currentFencer) {
-                    targetCard = c;
-                }
+                if(c.querySelector('.name-overlay').innerText === currentFencer) targetCard = c;
             });
-            
             if(targetCard) targetCard.classList.add('uploading');
 
-            // Manda l'immagine al server
-            fetch('/api/upload_photo', {
-                method: 'POST',
-                body: formData
-            })
+            fetch('/api/upload_photo', { method: 'POST', body: formData })
             .then(r => r.json())
             .then(res => {
-                if(res.status === 'success') {
-                    // Aggiorna l'immagine visualizzata
-                    if(targetCard) {
-                        targetCard.style.backgroundImage = `url('${res.url}')`;
-                        targetCard.classList.remove('uploading');
-                    }
-                } else {
+                if(res.status === 'success' && targetCard) {
+                    targetCard.style.backgroundImage = `url('${res.url}')`;
+                    targetCard.classList.remove('uploading');
+                } else if (targetCard) {
                     alert("Errore caricamento: " + res.msg);
-                    if(targetCard) targetCard.classList.remove('uploading');
+                    targetCard.classList.remove('uploading');
                 }
             })
             .catch(err => {
                 alert("Errore di connessione col server.");
                 if(targetCard) targetCard.classList.remove('uploading');
             })
-            .finally(() => {
-                this.value = ''; // Reset dell'input file per permettere di ricaricare la stessa immagine se necessario
-            });
+            .finally(() => { this.value = ''; });
         });
 
-        // Carica la griglia automaticamente all'apertura della pagina
+        // --- Nuova Logica: Modal ZIP & Google Drive ---
+        function openZipModal() {
+            document.getElementById('zip-modal').classList.remove('hidden');
+            const status = document.getElementById('zip-status');
+            status.innerText = "";
+            status.className = "text-center font-bold mt-4 min-h-[24px]";
+        }
+
+        function closeZipModal() {
+            document.getElementById('zip-modal').classList.add('hidden');
+        }
+
+        function uploadLocalZip() {
+            const fileInput = document.getElementById('zip-input');
+            if(fileInput.files.length === 0) return alert("Seleziona prima un file .ZIP dal tuo dispositivo!");
+            
+            const status = document.getElementById('zip-status');
+            status.innerText = "Scompattamento e salvataggio in corso... ⏳";
+            status.className = "text-center font-bold mt-4 min-h-[24px] text-yellow-400";
+
+            const formData = new FormData();
+            formData.append('zipfile', fileInput.files[0]);
+
+            fetch('/api/upload_zip_bulk', { method: 'POST', body: formData })
+            .then(r => r.json())
+            .then(res => {
+                if(res.status === 'success') {
+                    status.innerText = "Successo! " + res.msg;
+                    status.className = "text-center font-bold mt-4 min-h-[24px] text-green-400";
+                    setTimeout(() => { closeZipModal(); loadFencers(); }, 2000);
+                } else {
+                    status.innerText = "Errore: " + res.msg;
+                    status.className = "text-center font-bold mt-4 min-h-[24px] text-red-400";
+                }
+            }).catch(err => {
+                status.innerText = "Errore di connessione al server.";
+                status.className = "text-center font-bold mt-4 min-h-[24px] text-red-400";
+            }).finally(() => { fileInput.value = ''; });
+        }
+
+        function importFromDrive() {
+            const link = document.getElementById('drive-link').value.trim();
+            if(!link) return alert("Inserisci un link Google Drive valido!");
+
+            const status = document.getElementById('zip-status');
+            status.innerText = "Scaricamento da Google Drive in corso... ⏳";
+            status.className = "text-center font-bold mt-4 min-h-[24px] text-yellow-400 animate-pulse";
+
+            fetch('/api/import_drive_zip', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({link: link})
+            })
+            .then(r => r.json())
+            .then(res => {
+                if(res.status === 'success') {
+                    status.innerText = "Successo! " + res.msg;
+                    status.className = "text-center font-bold mt-4 min-h-[24px] text-green-400";
+                    setTimeout(() => { closeZipModal(); loadFencers(); }, 2000);
+                } else {
+                    status.innerText = "Errore: " + res.msg;
+                    status.className = "text-center font-bold mt-4 min-h-[24px] text-red-400";
+                }
+            }).catch(err => {
+                status.innerText = "Errore di rete.";
+                status.className = "text-center font-bold mt-4 min-h-[24px] text-red-400";
+            });
+        }
+
+        // Chiude il modal cliccando fuori
+        document.getElementById('zip-modal').addEventListener('click', function(e) {
+            if(e.target.id === 'zip-modal') closeZipModal();
+        });
+
         window.onload = loadFencers;
     </script>
 </body>
