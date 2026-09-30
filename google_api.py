@@ -12,6 +12,10 @@ def check_google():
     if not check_internet(): return "error"
     return "ok"
 
+# FIX: Lettura sicura da CSV troncati da Google
+def safe_get(lst, idx, default=""):
+    return lst[idx].strip() if idx < len(lst) else default
+
 def update_all_gironi_data(socketio):
     try:
         sid = current_state['settings'].get('google_sheet_id', '').strip()
@@ -32,13 +36,20 @@ def update_all_gironi_data(socketio):
             for girone in GIRONI_MAP_READ.keys():
                 g_cols = cols_map.get(girone)
                 if not g_cols: continue
-                idx_sx, idx_psx, idx_pdx, idx_dx = letter_to_index(g_cols['sx']), letter_to_index(g_cols['psx']), letter_to_index(g_cols['pdx']), letter_to_index(g_cols['dx'])
-                max_idx = max(idx_sx, idx_psx, idx_pdx, idx_dx)
                 
-                if len(p) > max_idx and p[idx_sx].strip() and p[idx_dx].strip():
-                    name_sx, name_dx = clean_fencer_name(p[idx_sx]), clean_fencer_name(p[idx_dx])
-                    if not name_sx or not name_dx or name_sx.isdigit() or name_dx.isdigit() or len(name_sx) < 2 or len(name_dx) < 2: continue
-                    new_cache[girone].append({"sx": name_sx, "p_sx": p[idx_psx].strip() if p[idx_psx].strip() else "0", "p_dx": p[idx_pdx].strip() if p[idx_pdx].strip() else "0", "dx": name_dx, "row": row_idx})
+                idx_sx = letter_to_index(g_cols['sx'])
+                idx_psx = letter_to_index(g_cols['psx'])
+                idx_pdx = letter_to_index(g_cols['pdx'])
+                idx_dx = letter_to_index(g_cols['dx'])
+                
+                # FIX: Estrazione sicura ignorando gli IndexErrors se la colonna è vuota nel CSV
+                name_sx = clean_fencer_name(safe_get(p, idx_sx))
+                name_dx = clean_fencer_name(safe_get(p, idx_dx))
+
+                if name_sx and name_dx and not name_sx.isdigit() and not name_dx.isdigit() and len(name_sx) >= 2 and len(name_dx) >= 2:
+                    p_sx = safe_get(p, idx_psx) or "0"
+                    p_dx = safe_get(p, idx_pdx) or "0"
+                    new_cache[girone].append({"sx": name_sx, "p_sx": p_sx, "p_dx": p_dx, "dx": name_dx, "row": row_idx})
         
         global gironi_cache
         gironi_cache.clear()
@@ -142,6 +153,7 @@ def process_background_upload(payload, girone, socketio):
         socketio.emit('upload_status', {'color': 'red'})
         return
 
+    # FIX: Logica di controllo caricamento rinforzata contro le stringhe vuote
     for wait_time in [10, 30, 60]:
         if wait_time > 10: socketio.emit('upload_status', {'color': 'yellow'})
         eventlet.sleep(wait_time)
@@ -149,7 +161,16 @@ def process_background_upload(payload, girone, socketio):
         match_data = next((m for m in gironi_cache.get(girone, []) if m['row'] == int(payload['row'])), None)
         if match_data:
             try:
-                if int(float(match_data['p_sx'])) == int(payload['val_sx']) and int(float(match_data['p_dx'])) == int(payload['val_dx']):
-                    socketio.emit('upload_status', {'color': 'green'}); eventlet.sleep(5); socketio.emit('upload_status', {'color': 'none'}); return
-            except: pass
+                msx = int(float(match_data.get('p_sx', '0') or '0'))
+                mdx = int(float(match_data.get('p_dx', '0') or '0'))
+                vsx = int(float(payload.get('val_sx', '0') or '0'))
+                vdx = int(float(payload.get('val_dx', '0') or '0'))
+                
+                if msx == vsx and mdx == vdx:
+                    socketio.emit('upload_status', {'color': 'green'})
+                    eventlet.sleep(5)
+                    socketio.emit('upload_status', {'color': 'none'})
+                    return
+            except Exception as e: pass
+            
     socketio.emit('upload_status', {'color': 'red'})
