@@ -19,9 +19,11 @@
     <!-- Toast Container -->
     <div id="toast-container" class="fixed top-5 left-1/2 transform -translate-x-1/2 flex flex-col gap-2 z-50 w-11/12 max-w-md pointer-events-none"></div>
 
-    <!-- Top Bar -->
-    <div class="bg-[#1f1f1f] py-3 text-center border-b border-[#333] cursor-pointer active:bg-[#222] flex-none" onclick="toggleMenu('menu-tempo')">
-        <span class="text-white font-bold text-lg">Modifica Tempo (<span id="timer-display-top">3:00</span>) ▼</span>
+    <!-- Top Bar modificata per ospitare l'indicatore di stato Google -->
+    <div class="bg-[#1f1f1f] py-3 px-4 flex justify-between items-center border-b border-[#333] cursor-pointer active:bg-[#222] flex-none" onclick="toggleMenu('menu-tempo')">
+        <span class="w-4 h-4 opacity-0"></span> <!-- Spacer -->
+        <span class="text-white font-bold text-lg">Tempo (<span id="timer-display-top">3:00</span>) ▼</span>
+        <div id="cloud-status" class="w-4 h-4 rounded-full bg-gray-600 shadow-[0_0_5px_#4b5563] transition-colors" title="Stato Google Sheets"></div>
     </div>
 
     <!-- Hidden Time Menu -->
@@ -49,7 +51,6 @@
 
     <!-- AVVIO Button -->
     <div class="w-full px-2 pt-2 pb-1 flex-none">
-        <!-- Cliccare AVVIO ora chiude anche tutti i menu aperti -->
         <button id="btn-avvio" class="w-full bg-[#16a34a] text-white text-4xl sm:text-5xl font-bold py-6 sm:py-8 rounded shadow-lg active:opacity-75 transition-colors" onclick="socket.emit('toggle_timer'); closeAllMenus();">AVVIO</button>
     </div>
 
@@ -98,7 +99,6 @@
         <div class="flex gap-2 min-h-[50px]">
             <button id="btn-left-b" class="flex-1 bg-[#000] text-white font-bold py-3 sm:py-4 rounded border-custom active:bg-[#222]" onclick="sendCard('left', 'B')">N</button>
             
-            <!-- Menu a tendina per scelta Girone -->
             <select id="girone-select" class="flex-[4] bg-[#27272a] text-white font-bold py-3 sm:py-4 rounded border-custom outline-none text-center text-base sm:text-lg" onchange="changeGirone()">
                 <option value="rosso">Girone: Rosso</option>
                 <option value="giallo">Girone: Giallo</option>
@@ -120,7 +120,7 @@
 
     </div>
 
-    <!-- Bottom Nav Bar con pulsanti espliciti (sempre visibili a fine schermo) -->
+    <!-- Bottom Nav Bar -->
     <div class="flex gap-2 p-3 bg-[#111] border-t border-[#333] mt-auto flex-none">
         <button class="flex-[2] bg-indigo-700 text-white font-bold py-3 text-sm rounded shadow active:bg-indigo-600" onclick="window.location.href='/inserisci_punti'">📝 Altri Gironi</button>
         <button class="flex-1 bg-gray-700 text-white font-bold py-3 text-sm rounded shadow active:bg-gray-600" onclick="window.location.href='/settings'">⚙️ Impost.</button>
@@ -131,10 +131,8 @@
         let allGironi = {};
         let priorityAnimTimer = null;
         
-        // Aggiunta gestione audio telecomando
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         
-        // Sblocca l'audio al primo tocco
         document.body.addEventListener('click', () => {
             if(audioCtx.state === 'suspended') audioCtx.resume();
         }, {once: true});
@@ -153,10 +151,9 @@
         }
 
         socket.on('time_expired', () => {
-            playBeep(500, 1.0); // Suono quando scade il tempo
+            playBeep(500, 1.0); 
         });
         
-        // Funzioni Gestione Menu a comparsa
         function closeAllMenus(except = null) {
             if (except !== 'menu-tempo') document.getElementById('menu-tempo').classList.add('hidden');
             if (except !== 'menu-reset') document.getElementById('menu-reset').classList.add('hidden');
@@ -165,13 +162,12 @@
         function toggleMenu(menuId) {
             const menu = document.getElementById(menuId);
             const isHidden = menu.classList.contains('hidden');
-            closeAllMenus(); // Chiudi gli altri prima di aprire questo
+            closeAllMenus();
             if (isHidden) {
                 menu.classList.remove('hidden');
             }
         }
 
-        // Gestione Logica Cartellini "P"
         let pMode = { left: false, right: false };
 
         function togglePMode(side) {
@@ -191,13 +187,12 @@
         function sendCard(side, baseCardType) {
             if (pMode[side]) {
                 socket.emit('card_action', {side: side, card: 'P_' + baseCardType});
-                togglePMode(side); // Torna alla normalità dopo l'invio
+                togglePMode(side);
             } else {
                 socket.emit('card_action', {side: side, card: baseCardType});
             }
         }
 
-        // Notifiche Toast
         function showToast(msg, type = 'info') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
@@ -216,27 +211,28 @@
             setTimeout(() => {
                 toast.classList.add('opacity-0');
                 setTimeout(() => toast.remove(), 300);
-            }, 1000); 
+            }, 2000); 
         }
 
         socket.on('action_feedback', d => {
             showToast(d.msg, d.status);
         });
 
-        // Sincronizza i dati all'avvio
+        // FIX: Ritorno grafico dello stato di upload in background di Google Sheets
+        socket.on('upload_status', data => {
+            const el = document.getElementById('cloud-status');
+            if(data.color === 'red') el.className = 'w-4 h-4 rounded-full bg-red-500 shadow-[0_0_10px_#ef4444] transition-colors';
+            else if(data.color === 'yellow') el.className = 'w-4 h-4 rounded-full bg-yellow-500 shadow-[0_0_10px_#eab308] transition-colors animate-pulse';
+            else if(data.color === 'green') el.className = 'w-4 h-4 rounded-full bg-green-500 shadow-[0_0_10px_#22c55e] transition-colors';
+            else if(data.color === 'none') el.className = 'w-4 h-4 rounded-full bg-gray-600 shadow-[0_0_5px_#4b5563] transition-colors';
+        });
+
         socket.on('connect', () => {
             socket.emit('fetch_sheet');
         });
 
-        // Aggiorna passivamente ogni 40s
         setInterval(() => { socket.emit('fetch_sheet'); }, 40000);
 
-        function promptTime() {
-            const t = prompt("Aggiungi o togli secondi dal tempo attuale (es. 10 o -10):", "0");
-            if(t && !isNaN(t)) { socket.emit('adjust_time', {delta: parseInt(t)}); }
-        }
-
-        // Cambia semplicemente i dati nella tendina senza forzare chiamate esterne (legge la cache allGironi)
         function changeGirone() {
             updateMatchDropdown();
         }
@@ -255,12 +251,11 @@
                     const p_sx_val = parseInt(m.p_sx) || 0;
                     const p_dx_val = parseInt(m.p_dx) || 0;
                     
-                    // Condizione per colorare e inserire indicatore visivo
                     if (p_sx_val !== 0 || p_dx_val !== 0) { 
-                        opt.style.color = '#ef4444'; // Rosso (funziona su Desktop/Alcuni Mobile)
+                        opt.style.color = '#ef4444'; 
                         opt.innerText = `🔴 ${m.sx} [${p_sx_val}] - [${p_dx_val}] ${m.dx}`;
                     } else {
-                        opt.style.color = '#22c55e'; // Verde (funziona su Desktop/Alcuni Mobile)
+                        opt.style.color = '#22c55e'; 
                         opt.innerText = `🟢 ${m.sx} [${p_sx_val}] - [${p_dx_val}] ${m.dx}`;
                     }
                     
@@ -275,7 +270,7 @@
                 const data = JSON.parse(val);
                 socket.emit('load_match', data);
                 document.getElementById('match-select').value = "";
-                closeAllMenus(); // Chiude tutto se era aperto
+                closeAllMenus();
             }
         }
 
