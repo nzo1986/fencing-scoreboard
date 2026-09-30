@@ -1,35 +1,130 @@
-ISTRUZIONI PER ABILITARE LA SCRITTURA PUNTEGGI SU GOOGLE SHEETS
+ISTRUZIONI PER ABILITARE LA SCRITTURA SU GOOGLE SHEETS E PULSANTI CUSTOM
 Apri il tuo Foglio Google dove tieni i gironi/assalti.
 Nel menu in alto, vai su Estensioni > Apps Script.
-Cancella tutto il codice che vedi nell'editor e incolla il seguente blocco:
-// --- INIZIO CODICE DA INCOLLARE ---
-function doPost(e) { var lock = LockService.getScriptLock(); try { // Aspetta fino a 10 secondi per evitare sovrapposizioni di scrittura lock.waitLock(10000);
-var jsonString = e.postData.contents;
-var data = JSON.parse(jsonString);
+Apri il file "macro.gs".
+Cerca la riga 71 e cancella la lettera "v" scritta per errore.
+Cancella l'attuale funzione "doPost(e)" e sostituiscila con questo blocco ibrido:
 
-var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(data.sheet_name);
-if (!sheet) {
-  return ContentService.createTextOutput(JSON.stringify({"status":"error", "message": "Foglio non trovato: " + data.sheet_name}));
+// --- INIZIO CODICE DA INCOLLARE ---
+function doPost(e) {
+var lock = LockService.getScriptLock();
+try {
+lock.waitLock(10000);
+
+// --- COMPATIBILITÀ CON LE TUE VECCHIE MACRO E PULSANTI (es. RESETALL) ---
+if (e && e.parameter) {
+  if (e.parameter.azione === 'reset') {
+    Reset2(); // <-- Qui viene richiamata la tua macro originale
+    return ContentService.createTextOutput("Reset eseguito con successo");
+  }
+  if (e.parameter.azione === 'leggi_tabellone') {
+    var sheetName = e.parameter.sheetName || 'display3gir';
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+    var data = sheet.getDataRange().getDisplayValues();
+    return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
-// Scrive i punteggi nelle celle indicate
-// Nota: data.row e data.col sono indici numerici (es. colonna A = 1)
-sheet.getRange(parseInt(data.row), parseInt(data.col_sx)).setValue(data.val_sx);
-sheet.getRange(parseInt(data.row), parseInt(data.col_dx)).setValue(data.val_dx);
+// --- LOGICA DEL TOTEM (Fencing Scoreboard) ---
+if (e && e.postData && e.postData.contents) {
+  var jsonString = e.postData.contents;
+  var data = JSON.parse(jsonString);
 
-return ContentService.createTextOutput(JSON.stringify({"status":"success"}));
+  // Azione 1: Aggiornamento Atleti (Bulk)
+  if (data.action === "update_atleti") {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(data.sheet_name);
+    if (!sheet) return ContentService.createTextOutput(JSON.stringify({"status":"error", "message": "Foglio non trovato."}));
+    
+    if (data.formula) {
+      sheet.getRange("O2").setValue(data.formula.squadre);
+      sheet.getRange("O3").setValue(data.formula.serpentone);
+      sheet.getRange("R1").setValue(data.formula.gir_da);
+    }
+    if (data.data && data.data.length > 0) {
+      for(var i=0; i<data.data.length; i++) {
+        var rowD = data.data[i];
+        sheet.getRange(rowD.row, 13).setValue(rowD.nome);
+        sheet.getRange(rowD.row, 15).setValue(rowD.girone);
+        sheet.getRange(rowD.row, 18).setValue(rowD.ed);
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({"status":"success"}));
+  }
+
+  // Azione 2: Gestione Foto Drive (Backup singolo)
+  if (data.action === "backup_single_photo") {
+    var folderId = extractFolderId(data.folder_url);
+    var folder = DriveApp.getFolderById(folderId);
+    var blob = Utilities.newBlob(Utilities.base64Decode(data.base64_data), "image/jpeg", data.filename);
+    
+    var existing = folder.getFilesByName(data.filename);
+    while(existing.hasNext()) { existing.next().setTrashed(true); }
+    
+    folder.createFile(blob);
+    return ContentService.createTextOutput(JSON.stringify({"status":"success"}));
+  }
+
+  // Azione 3: Lista Foto Drive (Import)
+  if (data.action === "list_drive_photos") {
+    var folderId = extractFolderId(data.folder_url);
+    var folder = DriveApp.getFolderById(folderId);
+    var files = folder.getFiles();
+    var fileList = [];
+    while(files.hasNext()) {
+      var file = files.next();
+      var name = file.getName().toLowerCase();
+      if(name.indexOf('.jpg') > -1 || name.indexOf('.png') > -1 || name.indexOf('.jpeg') > -1) {
+        fileList.push({id: file.getId(), name: file.getName()});
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({"status":"success", "files": fileList}));
+  }
+
+  // Azione 4: Get singola foto da Drive
+  if (data.action === "get_drive_photo") {
+    var file = DriveApp.getFileById(data.file_id);
+    var b64 = Utilities.base64Encode(file.getBlob().getBytes());
+    return ContentService.createTextOutput(JSON.stringify({"status":"success", "base64": b64}));
+  }
+
+  // Azione Default: Scrittura Punteggi (se c'è sheet_name, row, ma no action)
+  if (data.sheet_name && data.row && data.col_sx && data.col_dx) {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(data.sheet_name);
+    if (!sheet) return ContentService.createTextOutput(JSON.stringify({"status":"error", "message": "Foglio non trovato"}));
+    
+    sheet.getRange(parseInt(data.row), parseInt(data.col_sx)).setValue(data.val_sx);
+    sheet.getRange(parseInt(data.row), parseInt(data.col_dx)).setValue(data.val_dx);
+    
+    return ContentService.createTextOutput(JSON.stringify({"status":"success"}));
+  }
+}
+
+return ContentService.createTextOutput(JSON.stringify({"status":"error", "message": "Azione non riconosciuta"}));
 
 
-} catch (err) { return ContentService.createTextOutput(JSON.stringify({"status":"error", "message": err.toString()})); } finally { lock.releaseLock(); } }
+
+} catch (err) {
+return ContentService.createTextOutput(JSON.stringify({"status":"error", "message": err.toString()}));
+} finally {
+lock.releaseLock();
+}
+}
+
+function extractFolderId(url) {
+var match = url.match(/
+
+$$-\\w$$
+
+{25,}/);
+return match ? match
+
+$$0$$
+
+ : url;
+}
 // --- FINE CODICE DA INCOLLARE ---
-Clicca sull'icona del Floppy Disk (Salva) e dai un nome al progetto (es. "Segnapunti").
-Clicca sul pulsante blu in alto a destra "Esegui il deployment" > "Nuovo deployment".
-Clicca sull'icona dell'ingranaggio (Impostazioni) accanto a "Seleziona tipo" e scegli "Applicazione web".
-Configura così:
-Descrizione: (facoltativo, es. v1)
-Esegui come: "Me stesso" (la tua email)
-Chi può accedere: "Chiunque" (IMPORTANTE: Se metti "Solo io", il Raspberry non potrà scrivere).
-Clicca su "Esegui il deployment".
-Potrebbe chiederti di "Autorizzare l'accesso". Clicca "Rivedi autorizzazioni", scegli il tuo account, poi clicca su "Avanzate" (in piccolo) e infine su "Apri [Nome Progetto] (non sicura)". Infine clicca "Consenti".
-Copia l'URL sotto la voce "App web" (deve finire con /exec).
-Incolla questo URL nella pagina Impostazioni del tuo Segnapunti (icona ingranaggio sul telecomando).
+
+Clicca sull'icona del Floppy Disk (Salva).
+IMPORTANTE: Clicca sul pulsante blu in alto a destra "Esegui il deployment" > "Gestisci deployment".
+Clicca sulla matita (Modifica), alla voce "Versione" scegli "Nuova versione" e clicca "Esegui il deployment".
+(Non c'è bisogno di copiare e incollare l'URL di nuovo sul totem se fai in questo modo).
