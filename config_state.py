@@ -46,8 +46,17 @@ def get_system_fonts():
         return sorted(list(fonts))
     except: return ['Roboto Mono', 'Arial', 'Verdana']
 
-def letter_to_index(letter): return ord(letter.upper()) - 65 if letter else 0
-def letter_to_sheet_col(letter): return ord(letter.upper()) - 64 if letter else 1
+# FIX: Gestione corretta per colonne a doppia lettera (es. AA, AB, ecc.)
+def letter_to_sheet_col(letter):
+    if not letter: return 1
+    col = 0
+    for char in str(letter).upper().strip():
+        if 'A' <= char <= 'Z':
+            col = col * 26 + (ord(char) - 64)
+    return col if col > 0 else 1
+
+def letter_to_index(letter): 
+    return max(0, letter_to_sheet_col(letter) - 1)
 
 default_columns = {'rosso': {'sx': 'A', 'psx': 'B', 'pdx': 'C', 'dx': 'D'}, 'giallo': {'sx': 'F', 'psx': 'G', 'pdx': 'H', 'dx': 'I'}, 'blu': {'sx': 'K', 'psx': 'L', 'pdx': 'M', 'dx': 'N'}, 'verde': {'sx': 'P', 'psx': 'Q', 'pdx': 'R', 'dx': 'S'}, '32': {'sx': 'U', 'psx': 'V', 'pdx': 'W', 'dx': 'X'} }
 default_settings = {"weapon": "spada", "font_family": "Roboto Mono", "font_timer": 8.0, "font_score": 15.0, "font_name": 3.0, "font_list": 1.5, "col_center_width": 1.2, "list_padding": 0.5, "text_border": 0.0, "photo_size": 150, "time_match": 180, "time_break": 60, "time_medical": 300, "refresh_rate": 30, "buzzer_volume": 1.0, "default_name_left": "ATLETA SX", "default_name_right": "ATLETA DX", "google_script_url": "", "google_sheet_id": DEFAULT_SHEET_ID, "columns": copy.deepcopy(default_columns)}
