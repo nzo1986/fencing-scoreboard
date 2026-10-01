@@ -4,12 +4,7 @@ os.environ['EVENTLET_NO_GREENDNS'] = 'yes'
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-try:
-    import eventlet
-    eventlet.monkey_patch()
-    ASYNC_MODE = 'eventlet'
-except ImportError:
-    ASYNC_MODE = 'threading'
+ASYNC_MODE = 'threading'
 
 import sys, time, random, io, zipfile, subprocess, socket
 import base64, requests, urllib.request, urllib.error
