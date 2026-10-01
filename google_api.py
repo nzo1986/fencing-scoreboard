@@ -1,4 +1,4 @@
-import requests, csv, time, eventlet
+import requests, csv, time
 from config_state import current_state, gironi_cache, GIRONI_MAP_READ, default_columns, letter_to_index, clean_fencer_name, get_photo_url, save_state, DEFAULT_SHEET_ID
 
 def check_internet():
@@ -139,7 +139,7 @@ def update_all_gironi_data(socketio):
         current_state['match_list'] = gironi_cache.get(cg, [])
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
-        if updated_current: eventlet.spawn(save_state)
+        if updated_current: socketio.start_background_task(save_state)
     except Exception as e: print(f"Update error: {e}")
 
 def process_background_upload(payload, girone, socketio):
@@ -153,10 +153,10 @@ def process_background_upload(payload, girone, socketio):
         socketio.emit('upload_status', {'color': 'red'})
         return
 
-    # FIX: Logica di controllo caricamento rinforzata contro le stringhe vuote
+    # FIX: Logica di controllo caricamento rinforzata contro le stringhe vuote e rimosso eventlet
     for wait_time in [10, 30, 60]:
         if wait_time > 10: socketio.emit('upload_status', {'color': 'yellow'})
-        eventlet.sleep(wait_time)
+        socketio.sleep(wait_time)
         update_all_gironi_data(socketio)
         match_data = next((m for m in gironi_cache.get(girone, []) if m['row'] == int(payload['row'])), None)
         if match_data:
@@ -168,7 +168,7 @@ def process_background_upload(payload, girone, socketio):
                 
                 if msx == vsx and mdx == vdx:
                     socketio.emit('upload_status', {'color': 'green'})
-                    eventlet.sleep(5)
+                    socketio.sleep(5)
                     socketio.emit('upload_status', {'color': 'none'})
                     return
             except Exception as e: pass
