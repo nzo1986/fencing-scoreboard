@@ -1,4 +1,3 @@
-import eventlet
 from config_state import current_state, save_state
 
 def apply_card(side, card_type, socketio):
@@ -35,4 +34,4 @@ def apply_card(side, card_type, socketio):
 
     socketio.emit('state_update', current_state)
     socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
-    eventlet.spawn(save_state)
+    socketio.start_background_task(save_state)
