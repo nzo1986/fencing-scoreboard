@@ -6,6 +6,8 @@
     <title>Impostazioni</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <!-- Aggiunto FontAwesome per le icone -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { background: #111; color: #eee; font-family: sans-serif; touch-action: manipulation; padding-bottom: 30px; }
         .adjust-btn { width: 45px; height: 45px; font-size: 1.5rem; font-weight: bold; border-radius: 8px; border: none; display: flex; align-items: center; justify-content: center; }
@@ -29,7 +31,6 @@
         input[type="text"] { width: 100%; padding: 12px; background: #111; color: white; border: 1px solid #555; border-radius: 6px; margin-top: 8px; font-family: monospace; font-size: 1rem; }
         input[type="text"]:focus { border-color: #3b82f6; outline: none; }
         
-        /* Stile Console di Aggiornamento */
         .terminal-box { background-color: #000; border: 1px solid #444; border-radius: 6px; padding: 12px; font-family: monospace; font-size: 0.9rem; color: #4ade80; height: 180px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; box-shadow: inset 0 0 10px rgba(0,0,0,0.8); }
     </style>
 </head>
@@ -113,6 +114,23 @@
                         <button onclick="saveInput('google_script_url')" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-3 mt-2 rounded shadow transition-colors">Salva</button>
                     </div>
                 </div>
+                <div class="p-4 border-t border-gray-700">
+                    <label class="lbl font-bold block mb-1">📁 URL Google Drive (Foto Atleti):</label>
+                    <div class="flex gap-2 items-end">
+                        <input type="text" id="google_drive_photo_url" placeholder="https://drive.google.com/drive/folders/..." class="flex-1">
+                        <button onclick="saveInput('google_drive_photo_url')" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-3 mt-2 rounded shadow transition-colors">Salva</button>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-gray-700">
+                    <label class="lbl font-bold block mb-1 text-red-400">⚠️ URL Apps Script (Reset Dati Macro):</label>
+                    <div class="flex gap-2 items-end">
+                        <input type="text" id="google_reset_url" placeholder="https://script.google.com/macros/s/.../exec?azione=reset" class="flex-1 border-red-500/50">
+                        <button onclick="saveInput('google_reset_url')" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-3 mt-2 rounded shadow transition-colors">Salva</button>
+                    </div>
+                    <button id="btn-reset-dati" onclick="confirmReset()" class="w-full bg-red-700 hover:bg-red-600 text-white font-bold px-4 py-3 mt-4 rounded shadow transition-colors flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-triangle-exclamation"></i> Esegui Reset Dati Ora
+                    </button>
+                </div>
                 <div class="row-ctrl border-t border-gray-700 mt-2">
                     <span class="lbl font-bold">Aggiornamento Auto (sec)</span>
                     <div class="flex items-center gap-2"><button class="adjust-btn btn-minus" onclick="adj('refresh_rate',-5)">-</button><span class="val-display" id="val_refresh_rate">30</span><button class="adjust-btn btn-plus" onclick="adj('refresh_rate',5)">+</button></div>
@@ -157,7 +175,36 @@
         const socket = io();
         let settings = {};
 
-        // Funzione modificata per avviare il processo visivamente
+        // Funzione per eseguire il Reset Dati
+        function confirmReset() {
+            const resetUrl = document.getElementById('google_reset_url').value.trim();
+            if (!resetUrl) {
+                alert("Devi prima inserire e salvare l'URL per il reset nella casella qui sopra!");
+                return;
+            }
+            if (confirm("⚠️ ATTENZIONE! Sei sicuro di voler azzerare TUTTI i dati sul foglio Google?\nQuesta azione non può essere annullata.")) {
+                const btn = document.getElementById('btn-reset-dati');
+                const oldHtml = btn.innerHTML;
+                btn.innerHTML = "⏳ Comando inviato, attendere...";
+                btn.disabled = true;
+                btn.classList.add('opacity-75');
+                
+                fetch(resetUrl, { mode: 'no-cors' })
+                    .then(() => {
+                        alert("Reset eseguito con successo!");
+                    })
+                    .catch(err => {
+                        console.error("Errore fetch reset:", err);
+                        alert("Impossibile contattare lo script di reset.");
+                    })
+                    .finally(() => {
+                        btn.innerHTML = oldHtml;
+                        btn.disabled = false;
+                        btn.classList.remove('opacity-75');
+                    });
+            }
+        }
+
         function updateSystem() {
             if(confirm("Vuoi scaricare gli aggiornamenti da GitHub?")) {
                 const btn = document.getElementById('btn-update');
@@ -168,7 +215,6 @@
                 btn.classList.replace('border-green-500', 'border-gray-500');
                 btn.classList.remove('shadow-[0_0_15px_rgba(34,197,94,0.5)]');
 
-                // Mostra il terminale
                 document.getElementById('update-console-container').classList.remove('hidden');
                 const consoleDiv = document.getElementById('update-console');
                 consoleDiv.innerText = "> Avvio procedura di aggiornamento...\n";
@@ -180,7 +226,6 @@
             }
         }
 
-        // Funzione per il comando di Riavvio
         function rebootSystem() {
             const btn = document.getElementById('btn-reboot');
             btn.innerText = "⏳ Riavvio in corso...";
@@ -201,7 +246,6 @@
             });
         }
 
-        // Ricezione dei log in tempo reale dal Server (app.py)
         socket.on('update_log', data => {
             const consoleDiv = document.getElementById('update-console');
             if (consoleDiv) {
@@ -210,7 +254,6 @@
             }
         });
 
-        // Evento di completamento dell'aggiornamento
         socket.on('update_complete', () => {
             const consoleDiv = document.getElementById('update-console');
             if (consoleDiv) {
@@ -231,10 +274,8 @@
             btn.classList.replace('hover:bg-gray-600', 'hover:bg-blue-600');
             btn.classList.replace('border-gray-500', 'border-blue-500');
 
-            // 1. Mostra il pulsante di riavvio rosso
             document.getElementById('btn-reboot').classList.remove('hidden');
 
-            // 2. Chiede tramite popup se vuole riavviare subito
             setTimeout(() => {
                 if(confirm("Aggiornamento scaricato con successo!\nVuoi riavviare il sistema ora per applicare le modifiche?")) {
                     rebootSystem();
@@ -242,7 +283,6 @@
             }, 600);
         });
 
-        // Funzione per salvare esplicitamente i campi di testo lunghi
         function saveInput(id) {
             const val = document.getElementById(id).value;
             socket.emit('update_settings', {[id]: val.trim()});
@@ -266,15 +306,14 @@
                     if(e) e.innerText = settings[k]; 
                 });
                 
-                const sheetEl = document.getElementById('google_sheet_id');
-                const scriptEl = document.getElementById('google_script_url');
-                
-                if (document.activeElement !== sheetEl) {
-                    sheetEl.value = settings.google_sheet_id || '';
-                }
-                if (document.activeElement !== scriptEl) {
-                    scriptEl.value = settings.google_script_url || '';
-                }
+                // Aggiornamento dinamico di tutti gli input testuali di Google
+                const textInputs = ['google_sheet_id', 'google_script_url', 'google_drive_photo_url', 'google_reset_url'];
+                textInputs.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el && document.activeElement !== el) {
+                        el.value = settings[id] || '';
+                    }
+                });
 
                 loadFonts();
             }
