@@ -153,7 +153,7 @@ def process_background_upload(payload, girone, socketio):
         socketio.emit('upload_status', {'color': 'red'})
         return
 
-    # FIX: Logica di controllo caricamento rinforzata contro le stringhe vuote e rimosso eventlet
+    # FIX: Logica di controllo caricamento rinforzata contro le stringhe vuote
     for wait_time in [10, 30, 60]:
         if wait_time > 10: socketio.emit('upload_status', {'color': 'yellow'})
         socketio.sleep(wait_time)
