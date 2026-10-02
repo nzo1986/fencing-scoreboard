@@ -34,7 +34,9 @@
     <!-- Header -->
     <div class="flex flex-col sm:flex-row justify-between items-center mb-4 pb-3 border-b border-slate-700 gap-3">
         <h1 class="text-2xl font-bold text-slate-100 flex items-center gap-2">🤺 Gestione Atleti</h1>
-        <div class="flex gap-2 w-full sm:w-auto">
+        <div class="flex gap-2 w-full sm:w-auto flex-wrap justify-end">
+            <!-- NUOVO PULSANTE RESET -->
+            <button onclick="confirmReset()" class="flex-1 sm:flex-none bg-red-700 hover:bg-red-600 px-4 py-2.5 rounded-lg font-bold shadow transition text-sm flex items-center justify-center gap-2"><i class="fa-solid fa-triangle-exclamation"></i> Reset Dati</button>
             <button onclick="saveAll()" class="flex-1 sm:flex-none bg-green-600 hover:bg-green-500 px-5 py-2.5 rounded-lg font-bold shadow transition text-lg"><i class="fa-solid fa-floppy-disk"></i> Salva in Google</button>
             <button onclick="window.location.href='/telecomando'" class="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded-lg font-bold shadow transition text-sm">Indietro</button>
         </div>
@@ -376,6 +378,25 @@
             }
 
             socket.emit('save_bulk_atleti', { formula: formulaData, atleti: datiDaInviare });
+        }
+
+        // --- RESET TRAMITE LINK MACRO ---
+        function confirmReset() {
+            if (confirm("⚠️ ATTENZIONE! Sei sicuro di voler azzerare TUTTI i dati sul foglio Google?\nQuesta azione non può essere annullata.")) {
+                showToast("Comando di reset inviato, attendere...", "warning");
+                
+                const resetUrl = "https://script.google.com/macros/s/AKfycbwY3aw845ef8dD7C7a9v1eIfRhNx7Yp_mkCFlJQzIKLelq3pNxNHYBE_vRDU0-t3e1O/exec?azione=reset";
+                
+                fetch(resetUrl, { mode: 'no-cors' })
+                    .then(() => {
+                        showToast("Reset eseguito con successo! Sincronizzazione in corso...", "success");
+                        setTimeout(loadGoogleData, 2000); // Ricarica la tabella dopo 2 secondi
+                    })
+                    .catch(err => {
+                        console.error("Errore fetch reset:", err);
+                        showToast("Impossibile contattare lo script di reset.", "error");
+                    });
+            }
         }
 
         renderTable();
