@@ -34,18 +34,14 @@ def check_internet():
 
 def install_system_dependencies():
     print_step("Installazione dipendenze di sistema (apt)...")
-    packages = "git xserver-xorg x11-xserver-utils xinit openbox python3-pip python3-venv python3-dev chromium xdotool unclutter network-manager fontconfig wireless-tools"
+    # Aggiunti python3-pyqt5 e python3-pyqt5.qtwebengine, rimosso chromium
+    packages = "git xserver-xorg x11-xserver-utils xinit openbox python3-pip python3-venv python3-dev python3-pyqt5 python3-pyqt5.qtwebengine xdotool unclutter network-manager fontconfig wireless-tools"
     run_command("sudo apt-get update", ignore_errors=True)
     run_command(f"sudo apt-get install -y --no-install-recommends {packages}", ignore_errors=True)
 
 def fix_chromium_compatibility():
-    print_step("Verifica compatibilità Browser...")
-    browser_check = subprocess.call("which chromium-browser", shell=True, stdout=subprocess.DEVNULL)
-    if browser_check != 0:
-        chromium_check = subprocess.call("which chromium", shell=True, stdout=subprocess.DEVNULL)
-        if chromium_check == 0:
-            path = subprocess.check_output("which chromium", shell=True).decode().strip()
-            run_command(f"sudo ln -sf {path} /usr/bin/chromium-browser", ignore_errors=True)
+    # Funzione non più necessaria, ma la lasciamo per retrocompatibilità in caso di fallback
+    pass
 
 def setup_repository(has_internet):
     print_step("Sincronizzazione Codice da GitHub...")
@@ -85,7 +81,8 @@ def setup_repository(has_internet):
 
 def setup_python_environment():
     print_step("Configurazione Ambiente Python (venv)...")
-    if not os.path.exists(VENV_DIR): run_command(f"python3 -m venv {VENV_DIR}")
+    # ATTENZIONE: Abilitiamo il system-site-packages per usare PyQt5 installato con apt
+    if not os.path.exists(VENV_DIR): run_command(f"python3 -m venv --system-site-packages {VENV_DIR}")
     pip_bin = os.path.join(VENV_DIR, "bin", "pip")
     pkgs = "Flask Flask-SocketIO eventlet requests werkzeug simple-websocket"
     run_command(f"{pip_bin} install --upgrade {pkgs}", ignore_errors=True)
@@ -95,7 +92,7 @@ def ensure_local_dirs():
     if not os.path.exists(os.path.join(BASE_DIR, "static", "photos")): os.makedirs(os.path.join(BASE_DIR, "static", "photos"))
     if not os.path.exists(os.path.join(BASE_DIR, "pico_code")): os.makedirs(os.path.join(BASE_DIR, "pico_code"))
     
-    # Script Bash aggiornato con blocco Translate
+    # Script Bash aggiornato
     run_script_content = """#!/bin/bash
 export DISPLAY=:0
 
@@ -107,25 +104,20 @@ xset s noblank
 # 2. Nascondi il cursore del mouse
 unclutter -idle 0.5 -root &
 
-# --- FIX CRASH CHROMIUM (Sblocca il profilo se l'hostname e' cambiato) ---
-rm -rf ~/.config/chromium/Singleton*
-# -------------------------------------------------------------------------
-
 cd ~/fencing_scoreboard
 source venv/bin/activate
 python app.py &
-sleep 10
+sleep 5
 
-# 3. Avvia Chromium in background disabilitando Translate
-chromium-browser --kiosk --noerrdialogs --disable-infobars --disable-features=Translate --autoplay-policy=no-user-gesture-required http://127.0.0.1:5000 &
+# 3. Avvia App Nativa PyQt
+python kiosk_display.py &
 
-# 4. Attendi che Chromium carichi completamente la pagina
+# 4. Attendi
 sleep 8
 
-# 5. Simula un click del mouse al centro dello schermo (scavalca la richiesta di sblocco audio verde)
+# 5. Simula un click del mouse al centro dello schermo (scavalca la richiesta audio)
 xdotool mousemove 500 500 click 1
 
-# Mantiene in vita lo script bash
 wait
 """
     with open(Run_Script, "w") as f: f.write(run_script_content)
@@ -142,7 +134,7 @@ def configure_autostart():
 def restart_service():
     print_step("Riavvio Applicazione...")
     run_command("pkill -f 'python app.py'", ignore_errors=True)
-    run_command("pkill chromium", ignore_errors=True)
+    run_command("pkill -f 'python kiosk_display.py'", ignore_errors=True)
     time.sleep(2)
     subprocess.Popen(f"nohup {Run_Script} >/dev/null 2>&1 &", shell=True, preexec_fn=os.setpgrp)
 
