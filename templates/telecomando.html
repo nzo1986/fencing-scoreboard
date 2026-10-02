@@ -16,6 +16,9 @@
 </head>
 <body class="h-[100dvh] flex flex-col relative overflow-hidden">
 
+    <!-- OVERLAY: Scurisce lo schermo e blocca i tocchi quando il tempo è attivo -->
+    <div id="timer-overlay" class="fixed inset-0 bg-black/70 z-40 hidden transition-opacity duration-300"></div>
+
     <!-- Toast Container -->
     <div id="toast-container" class="fixed top-5 left-1/2 transform -translate-x-1/2 flex flex-col gap-2 z-50 w-11/12 max-w-md pointer-events-none"></div>
 
@@ -27,7 +30,7 @@
     </div>
 
     <!-- Hidden Time Menu -->
-    <div id="menu-tempo" class="hidden grid grid-cols-4 gap-2 bg-[#18181b] p-3 border-b border-[#333] shadow-inner flex-none">
+    <div id="menu-tempo" class="hidden grid grid-cols-4 gap-2 bg-[#18181b] p-3 border-b border-[#333] shadow-inner flex-none relative z-30">
         <button class="bg-[#27272a] text-green-400 py-3 rounded font-bold active:bg-[#444] border border-[#444] text-sm sm:text-base" onclick="socket.emit('adjust_time', {delta: 60})">+1 MIN</button>
         <button class="bg-[#27272a] text-red-400 py-3 rounded font-bold active:bg-[#444] border border-[#444] text-sm sm:text-base" onclick="socket.emit('adjust_time', {delta: -60})">-1 MIN</button>
         <button class="bg-[#27272a] text-green-400 py-3 rounded font-bold active:bg-[#444] border border-[#444] text-sm sm:text-base" onclick="socket.emit('adjust_time', {delta: 1})">+1 SEC</button>
@@ -49,8 +52,8 @@
         <div class="flex-1 text-center text-green-500 text-6xl font-bold" id="score-right">0</div>
     </div>
 
-    <!-- AVVIO Button -->
-    <div class="w-full px-2 pt-2 pb-1 flex-none">
+    <!-- AVVIO Button - Aggiunto relative e z-50 per stare SEMPRE sopra l'overlay -->
+    <div class="w-full px-2 pt-2 pb-1 flex-none relative z-50">
         <button id="btn-avvio" class="w-full bg-[#16a34a] text-white text-4xl sm:text-5xl font-bold py-6 sm:py-8 rounded shadow-lg active:opacity-75 transition-colors" onclick="socket.emit('toggle_timer'); closeAllMenus();">AVVIO</button>
     </div>
 
@@ -87,7 +90,7 @@
         </div>
 
         <!-- Hidden Reset Menu (Si chiude al click di un pulsante) -->
-        <div id="menu-reset" class="hidden grid grid-cols-2 gap-2 bg-[#18181b] p-3 rounded border border-[#444] shadow-inner mb-1">
+        <div id="menu-reset" class="hidden grid grid-cols-2 gap-2 bg-[#18181b] p-3 rounded border border-[#444] shadow-inner mb-1 relative z-30">
             <button class="bg-[#333] text-white py-3 rounded font-bold active:bg-[#555]" onclick="socket.emit('reset_scores'); closeAllMenus();">Azzera Punti</button>
             <button class="bg-[#333] text-white py-3 rounded font-bold active:bg-[#555]" onclick="socket.emit('reset_timer'); closeAllMenus();">Azzera Tempo</button>
             <button class="bg-[#222] text-white py-3 rounded font-bold col-span-2 border border-[#444] active:bg-[#444]" onclick="socket.emit('reset_all'); closeAllMenus();">Reset Totale</button>
@@ -121,7 +124,7 @@
     </div>
 
     <!-- Bottom Nav Bar -->
-    <div class="flex gap-2 p-3 bg-[#111] border-t border-[#333] mt-auto flex-none">
+    <div class="flex gap-2 p-3 bg-[#111] border-t border-[#333] mt-auto flex-none relative z-30">
         <button class="flex-[2] bg-indigo-700 text-white font-bold py-3 text-sm rounded shadow active:bg-indigo-600" onclick="window.location.href='/inserisci_punti'">📝 Altri Gironi</button>
         <button class="flex-1 bg-gray-700 text-white font-bold py-3 text-sm rounded shadow active:bg-gray-600" onclick="window.location.href='/settings'">⚙️ Impost.</button>
     </div>
@@ -218,7 +221,6 @@
             showToast(d.msg, d.status);
         });
 
-        // FIX: Ritorno grafico dello stato di upload in background di Google Sheets
         socket.on('upload_status', data => {
             const el = document.getElementById('cloud-status');
             if(data.color === 'red') el.className = 'w-4 h-4 rounded-full bg-red-500 shadow-[0_0_10px_#ef4444] transition-colors';
@@ -342,14 +344,20 @@
             }
 
             const btnAvvio = document.getElementById('btn-avvio');
+            const overlay = document.getElementById('timer-overlay');
+
             if(s.running) {
+                // IL TEMPO SCORRE: Mostriamo l'overlay per bloccare le altre funzionalità
                 btnAvvio.innerText = "ALT";
                 btnAvvio.classList.remove('bg-[#16a34a]');
                 btnAvvio.classList.add('bg-[#dc2626]');
+                overlay.classList.remove('hidden');
             } else {
+                // IL TEMPO È FERMO: Togliamo l'overlay
                 btnAvvio.innerText = "AVVIO";
                 btnAvvio.classList.remove('bg-[#dc2626]');
                 btnAvvio.classList.add('bg-[#16a34a]');
+                overlay.classList.add('hidden');
             }
 
             if (s.active_girone) {
