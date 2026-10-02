@@ -19,14 +19,18 @@ def get_local_ip():
         s.connect(('10.255.255.255',1))
         IP=s.getsockname()[0]
         s.close()
-    except: IP='127.0.0.1'
+    except: 
+        IP='127.0.0.1'
     return IP
 
 def get_current_ssid():
-    try: return subprocess.check_output("iwgetid -r", shell=True).decode().strip() or "Nessuna Rete"
-    except: return "Offline"
+    try: 
+        return subprocess.check_output("iwgetid -r", shell=True).decode().strip() or "Nessuna Rete"
+    except: 
+        return "Offline"
 
-def clean_fencer_name(raw_name): return " ".join(re.sub(r'[^a-zA-Z0-9 ]', '', raw_name).split()) if raw_name else ""
+def clean_fencer_name(raw_name): 
+    return " ".join(re.sub(r'[^a-zA-Z0-9 ]', '', raw_name).split()) if raw_name else ""
 
 def get_photo_url(name):
     if not name: return "/static/photos/default.png"
@@ -44,7 +48,8 @@ def get_system_fonts():
         output = subprocess.check_output(['fc-list', ':', 'family'], encoding='utf-8')
         fonts = set(f.strip() for line in output.splitlines() for f in line.split(',') if f.strip())
         return sorted(list(fonts))
-    except: return ['Roboto Mono', 'Arial', 'Verdana']
+    except: 
+        return ['Roboto Mono', 'Arial', 'Verdana']
 
 # FIX: Gestione corretta per colonne a doppia lettera (es. AA, AB, ecc.)
 def letter_to_sheet_col(letter):
