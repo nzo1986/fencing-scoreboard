@@ -1,41 +1,64 @@
 import requests, csv, time
-from config_state import current_state, gironi_cache, GIRONI_MAP_READ, default_columns, letter_to_index, clean_fencer_name, get_photo_url, save_state, DEFAULT_SHEET_ID
+from config_state import (
+    current_state,
+    gironi_cache,
+    GIRONI_MAP_READ,
+    default_columns,
+    letter_to_index,
+    clean_fencer_name,
+    get_photo_url,
+    save_state,
+    DEFAULT_SHEET_ID
+)
 
 def check_internet():
-    try: requests.get('https://www.google.com', timeout=2); return True
-    except: return False
+    try:
+        requests.get('https://www.google.com', timeout=2)
+        return True
+    except Exception:
+        return False
 
 def check_google():
     sid = current_state['settings'].get('google_sheet_id', '').strip()
-    if not sid: sid = DEFAULT_SHEET_ID
-    if not current_state['settings'].get('google_script_url'): return "missing"
-    if not check_internet(): return "error"
+    if not sid:
+        sid = DEFAULT_SHEET_ID
+    if not current_state['settings'].get('google_script_url'):
+        return "missing"
+    if not check_internet():
+        return "error"
     return "ok"
 
 # FIX: Lettura sicura da CSV troncati da Google
+
 def safe_get(lst, idx, default=""):
     return lst[idx].strip() if idx < len(lst) else default
 
 def update_all_gironi_data(socketio):
     try:
         sid = current_state['settings'].get('google_sheet_id', '').strip()
-        if not sid: sid = DEFAULT_SHEET_ID
-        r = requests.get(f"https://docs.google.com/spreadsheets/d/{sid}/gviz/tq?tqx=out:csv&sheet=display3gir&t={int(time.time())}", headers={'User-Agent': 'Mozilla/5.0'})
+        if not sid:
+            sid = DEFAULT_SHEET_ID
+        r = requests.get(
+            f"https://docs.google.com/spreadsheets/d/{sid}/gviz/tq?tqx=out:csv&sheet=display3gir&t={int(time.time())}",
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
         r.encoding = 'utf-8'
         lines = r.text.strip().split('\n')
-        
+
         new_cache = {k: [] for k in GIRONI_MAP_READ.keys()}
         cols_map = current_state['settings'].get('columns', default_columns)
         
         for i, line in enumerate(lines[1:]): 
             row_idx = i + 2
             parsed_line = list(csv.reader([line]))
-            if not parsed_line: continue
+            if not parsed_line:
+                continue
             p = parsed_line[0]
             
             for girone in GIRONI_MAP_READ.keys():
                 g_cols = cols_map.get(girone)
-                if not g_cols: continue
+                if not g_cols:
+                    continue
                 
                 idx_sx = letter_to_index(g_cols['sx'])
                 idx_psx = letter_to_index(g_cols['psx'])
@@ -71,7 +94,7 @@ def update_all_gironi_data(socketio):
                     try:
                         p_sx = int(float(m.get('p_sx', '0') or '0'))
                         p_dx = int(float(m.get('p_dx', '0') or '0'))
-                    except:
+                    except Exception:
                         p_sx, p_dx = 0, 0
                     
                     if p_sx != 0 or p_dx != 0:
@@ -94,7 +117,7 @@ def update_all_gironi_data(socketio):
                 try:
                     p_sx = int(float(m.get('p_sx', '0') or '0'))
                     p_dx = int(float(m.get('p_dx', '0') or '0'))
-                except:
+                except Exception:
                     p_sx, p_dx = 0, 0
                 if p_sx == 0 and p_dx == 0:
                     next_match = m
@@ -113,9 +136,9 @@ def update_all_gironi_data(socketio):
                 current_state['phase'] = 'MATCH'
                 current_state['running'] = False
                 current_state['priority'] = None
-                for s in ['left','right']:
-                    current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
-                    current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+                for s in ['left', 'right']:
+                    current_state[f'fencer_{s}']['cards'] = {"Y": False, "R": False, "B": False, "R_count": 0}
+                    current_state[f'fencer_{s}']['p_cards'] = {"Y": False, "R": False, "B": False}
                 updated_current = True
             elif current_match_completed:
                 current_state['current_row_idx'] = None
@@ -130,17 +153,19 @@ def update_all_gironi_data(socketio):
                 current_state['phase'] = 'MATCH'
                 current_state['running'] = False
                 current_state['priority'] = None
-                for s in ['left','right']:
-                    current_state[f'fencer_{s}']['cards'] = {"Y":False,"R":False,"B":False,"R_count":0}
-                    current_state[f'fencer_{s}']['p_cards'] = {"Y":False,"R":False,"B":False}
+                for s in ['left', 'right']:
+                    current_state[f'fencer_{s}']['cards'] = {"Y": False, "R": False, "B": False, "R_count": 0}
+                    current_state[f'fencer_{s}']['p_cards'] = {"Y": False, "R": False, "B": False}
                 updated_current = True
 
         cg = current_state.get('current_girone', 'rosso')
         current_state['match_list'] = gironi_cache.get(cg, [])
         socketio.emit('state_update', current_state)
         socketio.emit('timer_update', {'time': current_state['timer'], 'phase': current_state.get('phase')})
-        if updated_current: socketio.start_background_task(save_state)
-    except Exception as e: print(f"Update error: {e}")
+        if updated_current:
+            socketio.start_background_task(save_state)
+    except Exception as e:
+        print(f"Update error: {e}")
 
 def process_background_upload(payload, girone, socketio):
     try:
@@ -149,13 +174,14 @@ def process_background_upload(payload, girone, socketio):
         if r.status_code != 200 or "success" not in r.text:
             socketio.emit('upload_status', {'color': 'red'})
             return
-    except:
+    except Exception:
         socketio.emit('upload_status', {'color': 'red'})
         return
 
     # FIX: Logica di controllo caricamento rinforzata contro le stringhe vuote
     for wait_time in [10, 30, 60]:
-        if wait_time > 10: socketio.emit('upload_status', {'color': 'yellow'})
+        if wait_time > 10:
+            socketio.emit('upload_status', {'color': 'yellow'})
         socketio.sleep(wait_time)
         update_all_gironi_data(socketio)
         match_data = next((m for m in gironi_cache.get(girone, []) if m['row'] == int(payload['row'])), None)
@@ -171,6 +197,7 @@ def process_background_upload(payload, girone, socketio):
                     socketio.sleep(5)
                     socketio.emit('upload_status', {'color': 'none'})
                     return
-            except Exception as e: pass
+            except Exception:
+                pass
             
     socketio.emit('upload_status', {'color': 'red'})
