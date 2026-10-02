@@ -62,8 +62,7 @@
 
             <div class="mb-4 bg-slate-900/50 p-4 rounded border border-slate-700">
                 <label class="block text-sm font-bold text-slate-300 mb-2">Opzione 2: Sincronizza cartella Google Drive</label>
-                <input type="text" id="drive-link" placeholder="Incolla qui il link della cartella Drive..." class="w-full bg-slate-800 border border-slate-600 rounded p-3 text-white mb-3 text-sm">
-                
+                <p class="text-xs text-slate-400 mb-4">Il link della cartella Drive deve essere configurato nella pagina <strong>Impostazioni</strong>.</p>
                 <div class="flex gap-2">
                     <button onclick="syncDrive('import')" class="flex-1 bg-blue-600 hover:bg-blue-500 font-bold py-2 rounded text-white transition shadow text-sm"><i class="fa-solid fa-cloud-arrow-down"></i> Importa</button>
                     <button onclick="syncDrive('export')" class="flex-1 bg-green-600 hover:bg-green-500 font-bold py-2 rounded text-white transition shadow text-sm"><i class="fa-solid fa-cloud-arrow-up"></i> Esporta</button>
@@ -85,6 +84,14 @@
     <script>
         const socket = io();
         let currentFencer = '';
+        let driveLink = ''; // Memorizza il link ricevuto dal backend
+
+        // Riceve le impostazioni dal server all'avvio
+        socket.on('state_update', s => {
+            if (s.settings && s.settings.google_drive_photo_url) {
+                driveLink = s.settings.google_drive_photo_url;
+            }
+        });
 
         function loadFencers() {
             const grid = document.getElementById('grid');
@@ -144,7 +151,6 @@
             .finally(() => { this.value = ''; });
         });
 
-        // --- Logica Sincronizzazione in tempo reale (Socket) ---
         function openZipModal() {
             document.getElementById('zip-modal').classList.remove('hidden');
             document.getElementById('zip-status').innerText = "";
@@ -182,8 +188,9 @@
         }
 
         function syncDrive(direction) {
-            const link = document.getElementById('drive-link').value.trim();
-            if(!link) return alert("Inserisci un link Google Drive valido!");
+            if(!driveLink || driveLink.trim() === "") {
+                return alert("Attenzione: Inserisci il link della cartella Google Drive nella pagina Impostazioni prima di sincronizzare!");
+            }
 
             document.getElementById('sync-progress-container').classList.remove('hidden');
             document.getElementById('sync-progress-bar').style.width = '0%';
@@ -193,8 +200,8 @@
             status.innerText = "Avvio procedura... ⏳";
             status.className = "text-center font-bold mt-4 min-h-[40px] text-yellow-400";
 
-            // Avvia il comando asincrono via Socket.IO
-            socket.emit('start_drive_sync', {link: link, direction: direction});
+            // Avvia il comando asincrono via Socket.IO utilizzando il link salvato nelle impostazioni
+            socket.emit('start_drive_sync', {link: driveLink.trim(), direction: direction});
         }
 
         // Ascolto aggiornamenti in tempo reale dal Server
