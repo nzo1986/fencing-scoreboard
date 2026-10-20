@@ -62,8 +62,6 @@ def get_system_fonts():
     except Exception:
         return ['Roboto Mono', 'Arial', 'Verdana']
 
-# FIX: Gestione corretta per colonne a doppia lettera (es. AA, AB, ecc.)
-
 def letter_to_sheet_col(letter):
     if not letter:
         return 1
@@ -104,6 +102,8 @@ default_settings = {
     "default_name_right": "ATLETA DX",
     "google_script_url": "",
     "google_sheet_id": DEFAULT_SHEET_ID,
+    "google_drive_photo_url": "",
+    "google_reset_url": "",
     "columns": copy.deepcopy(default_columns)
 }
 
