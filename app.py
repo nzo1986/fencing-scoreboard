@@ -43,6 +43,10 @@ def foto_page(): return render_template('foto.html')
 @app.route('/download')
 def download_page(): return render_template('download.html')
 
+# === ROTTA PANNELLO UNIFICATO (ATLETI + GIRONI + RESET) ===
+@app.route('/pannello')
+def pannello_unificato(): return render_template('pannello_unificato.html')
+
 @app.route('/api/get_fencers')
 def get_fencers():
     names = set()
@@ -127,7 +131,6 @@ def upload_zip_bulk():
         return jsonify({"status": "success", "msg": f"{conteggio} foto estratte e salvate!"})
     except Exception as e: return jsonify({"status": "error", "msg": f"File ZIP non valido: {str(e)}"})
 
-# --- MOTORE SINCRONIZZAZIONE DRIVE IN BACKGROUND (UNA AD UNA) ---
 @socketio.on('start_drive_sync')
 def start_drive_sync(data):
     link = data.get('link', '')
@@ -214,7 +217,6 @@ def start_drive_sync(data):
         except Exception as e:
             socketio.emit('sync_status', {'status': 'error', 'msg': f'Errore Imprevisto: {str(e)}'})
 
-    # Lancia il processo lento in un thread parallelo per non bloccare Flask
     socketio.start_background_task(run_sync)
 
 @app.route('/api/scan_wifi')
@@ -249,18 +251,34 @@ def saved_wifi():
                     profile = line.split(":", 1)[1].strip()
                     if profile: saved.append(profile)
         except Exception: pass
+    else:
+        try:
+            out = subprocess.check_output("nmcli -t -f NAME,TYPE connection show", shell=True).decode()
+            for line in out.splitlines():
+                if "802-11-wireless" in line:
+                    saved.append(line.split(":")[0].strip())
+        except Exception: pass
     return jsonify(saved)
 
 @app.route('/api/connect_wifi', methods=['POST'])
 def connect_wifi():
     data = request.json or {}
     ssid = data.get('ssid', '')
+    password = data.get('password', '')
     if os.name == 'nt':
         try:
             subprocess.run(f'netsh wlan connect name="{ssid}"', shell=True)
             return jsonify({"status": "success", "ip": get_local_ip()})
         except Exception as e: return jsonify({"status": "error", "msg": str(e)})
-    return jsonify({"status": "success", "ip": get_local_ip()})
+    else:
+        try:
+            if password:
+                subprocess.run(['sudo', 'nmcli', 'dev', 'wifi', 'connect', ssid, 'password', password], check=True)
+            else:
+                subprocess.run(['sudo', 'nmcli', 'connection', 'up', ssid], check=True)
+            return jsonify({"status": "success", "ip": get_local_ip()})
+        except Exception as e:
+            return jsonify({"status": "error", "msg": str(e)})
 
 @app.route('/api/delete_wifi', methods=['POST'])
 def delete_wifi():
@@ -271,7 +289,12 @@ def delete_wifi():
             subprocess.run(f'netsh wlan delete profile name="{ssid}"', shell=True)
             return jsonify({"status": "success"})
         except Exception as e: return jsonify({"status": "error", "msg": str(e)})
-    return jsonify({"status": "success"})
+    else:
+        try:
+            subprocess.run(['sudo', 'nmcli', 'connection', 'delete', ssid], check=True)
+            return jsonify({"status": "success"})
+        except Exception as e:
+            return jsonify({"status": "error", "msg": str(e)})
 
 @app.route('/api/ota/<pico_name>/version')
 def ota_version(pico_name): return "9.0"
@@ -300,6 +323,14 @@ def update_system():
             socketio.emit('update_complete')
     socketio.start_background_task(run_update_process)
     return jsonify({"status": "updating"})
+
+@app.route('/api/reboot', methods=['POST'])
+def reboot_system():
+    try:
+        subprocess.Popen(['sudo', 'reboot'])
+        return jsonify({"status": "rebooting"})
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)})
 
 @socketio.on('connect')
 def handle_connect():
@@ -662,7 +693,7 @@ if __name__ == '__main__':
     print("   🤺 FENCING SCOREBOARD ATTIVO (CROSS-PLATFORM)")
     print("=" * 60)
     print(f" > Display Principale: http://localhost:5000")
+    print(f" > Pannello Unificato: http://localhost:5000/pannello")
     print(f" > Telecomando Smartphone: http://{local_ip}:5000/telecomando")
     print("=" * 60)
     socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
-
