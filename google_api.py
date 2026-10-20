@@ -28,8 +28,6 @@ def check_google():
         return "error"
     return "ok"
 
-# FIX: Lettura sicura da CSV troncati da Google
-
 def safe_get(lst, idx, default=""):
     return lst[idx].strip() if idx < len(lst) else default
 
@@ -65,7 +63,6 @@ def update_all_gironi_data(socketio):
                 idx_pdx = letter_to_index(g_cols['pdx'])
                 idx_dx = letter_to_index(g_cols['dx'])
                 
-                # FIX: Estrazione sicura ignorando gli IndexErrors se la colonna è vuota nel CSV
                 name_sx = clean_fencer_name(safe_get(p, idx_sx))
                 name_dx = clean_fencer_name(safe_get(p, idx_dx))
 
@@ -178,7 +175,6 @@ def process_background_upload(payload, girone, socketio):
         socketio.emit('upload_status', {'color': 'red'})
         return
 
-    # FIX: Logica di controllo caricamento rinforzata contro le stringhe vuote
     for wait_time in [10, 30, 60]:
         if wait_time > 10:
             socketio.emit('upload_status', {'color': 'yellow'})
