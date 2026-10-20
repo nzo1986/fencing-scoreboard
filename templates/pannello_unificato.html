@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gestione Atleti e Inserimento Punti Gironi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: #0f172a;
+            color: white;
+            font-family: sans-serif;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* --- STILI PANNELLO SINISTRO (Gestione Atleti) --- */
+        .table-container {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+        }
+        thead th {
+            position: sticky;
+            top: 0;
+            background-color: #1e293b;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .autocomplete-item {
+            padding: 12px 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #475569;
+            transition: background 0.1s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .autocomplete-item:hover, .autocomplete-item:active { background-color: #3b82f6; }
+        input, select { outline: none; transition: border-color 0.2s; }
+        input:focus, select:focus { border-color: #3b82f6; box-shadow: 0 0 0 1px #3b82f6; }
+
+        .group-0 { background-color: rgba(239, 68, 68, 0.10); }
+        .group-1 { background-color: rgba(59, 130, 246, 0.10); }
+        .group-2 { background-color: rgba(234, 179, 8, 0.10); }
+        .group-3 { background-color: rgba(34, 197, 94, 0.10); }
+        .group-4 { background-color: rgba(148, 163, 184, 0.10); }
+
+        /* --- STILI PANNELLO DESTRO (Inserimento Rapido) --- */
+        .matches-container {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .match-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #1e293b;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+        .score-input {
+            width: 48px;
+            text-align: center;
+            background: #0f172a;
+            color: white;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            padding: 6px 4px;
+            font-size: 1.15rem;
+            font-weight: bold;
+            appearance: textfield;
+        }
+        .score-input::-webkit-outer-spin-button,
+        .score-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .fencer-name {
+            flex: 1;
+            font-size: 0.95rem;
+            font-weight: bold;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body class="flex w-full h-screen">
+
+    <!-- Toast Container Unificato -->
+    <div id="toast-container" class="fixed top-5 left-1/2 transform -translate-x-1/2 flex flex-col gap-2 z-[60] w-11/12 max-w-md pointer-events-none"></div>
+
+    <!-- ========================================== -->
+    <!-- COLONNA SINISTRA: GESTIONE ATLETI          -->
+    <!-- ========================================== -->
+    <div class="w-1/2 h-full flex flex-col p-3 border-r-2 border-slate-700 bg-[#0f172a]">
+        
+        <!-- Header Sx -->
+        <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-700 flex-none">
+            <h1 class="text-xl font-bold text-slate-100 flex items-center gap-2">🤺 Gestione Atleti</h1>
+            <div class="flex gap-2">
+                <button onclick="saveAll()" class="bg-green-600 hover:bg-green-500 px-4 py-2 rounded-lg font-bold shadow transition text-sm flex items-center gap-1.5">
+                    <i class="fa-solid fa-floppy-disk"></i> Salva in Google
+                </button>
+                <button onclick="window.location.href='/telecomando'" class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg font-bold shadow transition text-sm">
+                    Indietro
+                </button>
+            </div>
+        </div>
+
+        <!-- Formula di Gara -->
+        <div class="bg-slate-800 p-3 rounded-lg mb-3 border border-slate-600 shadow-md flex-none">
+            <h2 class="text-sm font-bold text-blue-400 mb-2 border-b border-slate-600 pb-1">⚙️ Formula di Gara</h2>
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-400 mb-1">Squadre (O2)</label>
+                    <select id="squadre_val" class="w-full bg-slate-900 border border-slate-600 rounded p-1.5 text-white text-center text-sm font-bold">
+                        <option value="NO">NO</option>
+                        <option value="SI">SI</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-400 mb-1">Serpentone (O3)</label>
+                    <select id="serpentone_val" class="w-full bg-slate-900 border border-slate-600 rounded p-1.5 text-white text-center text-sm font-bold">
+                        <option value="Rnk">Rnk</option>
+                        <option value="NO">NO</option>
+                        <option value="SI">SI</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-400 mb-1">Gir da (R1)</label>
+                    <input type="number" id="gir_da_val" placeholder="Es: 6" class="w-full bg-slate-900 border border-slate-600 rounded p-1.5 text-white text-center text-sm font-bold">
+                </div>
+            </div>
+        </div>
+
+        <!-- Barra Info + Sincronizza Atleti -->
+        <div class="flex justify-between items-center mb-2 flex-none">
+            <span class="text-xs text-slate-400">Clicca sul nome per modificarlo.</span>
+            <button onclick="loadGoogleData()" class="bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded font-bold shadow text-xs flex items-center gap-1">
+                <i class="fa-solid fa-rotate"></i> Sincronizza
+            </button>
+        </div>
+
+        <!-- Tabella 40 Atleti -->
+        <div class="table-container bg-slate-900">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr>
+                        <th class="p-2.5 text-slate-300 w-10 text-center text-xs">#</th>
+                        <th class="p-2.5 text-slate-300 text-xs">NOME ATLETA</th>
+                        <th class="p-2.5 text-slate-300 w-14 text-center text-xs">RNK</th>
+                        <th class="p-2.5 text-slate-300 w-14 text-center text-xs">GIR</th>
+                        <th class="p-2.5 text-slate-300 w-14 text-center text-xs">ED</th>
+                    </tr>
+                </thead>
+                <tbody id="atleti-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- COLONNA DESTRA: INSERIMENTO RAPIDO + RESET -->
+    <!-- ========================================== -->
+    <div class="w-1/2 h-full flex flex-col p-3 bg-[#0f172a]">
+        
+        <!-- Header Dx -->
+        <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-700 flex-none">
+            <h1 class="text-xl font-bold text-slate-100 flex items-center gap-2">📝 Inserimento Rapido</h1>
+            <div class="flex gap-2">
+                <button onclick="window.location.href='/settings'" class="bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3 py-2 rounded-lg font-bold shadow transition text-sm" title="Impostazioni">
+                    ⚙️
+                </button>
+                <button onclick="window.location.href='/telecomando'" class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg font-bold shadow transition text-sm">
+                    Indietro
+                </button>
+            </div>
+        </div>
+
+        <!-- Selettore Girone -->
+        <div class="mb-3 flex-none">
+            <select id="girone-select" class="w-full bg-slate-800 text-white border border-slate-600 p-2.5 rounded-lg font-bold text-base text-center" onchange="renderMatches()">
+                <option value="rosso">Girone Rosso</option>
+                <option value="giallo">Girone Giallo</option>
+                <option value="blu">Girone Blu</option>
+                <option value="verde">Girone Verde</option>
+                <option value="32">Tabellone 32</option>
+            </select>
+        </div>
+
+        <!-- Pulsante Sincronizza con Google -->
+        <div class="mb-3 flex-none">
+            <button onclick="sincronizzaTutto()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg w-full shadow border border-indigo-400 text-sm">
+                🔄 Sincronizza con Google
+            </button>
+        </div>
+
+        <!-- Lista Assalti del Girone -->
+        <div id="match-list" class="flex flex-col matches-container">
+            <div class="text-center py-10 text-slate-400">In attesa dei dati dal server...</div>
+        </div>
+
+        <!-- Pulsante Rosso Reset Dati Macro in basso -->
+        <div class="pt-3 mt-2 border-t border-slate-800 flex-none">
+            <button id="btn-reset-dati" onclick="eseguiResetDati()" class="w-full bg-red-700 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition-colors flex items-center justify-center gap-2 text-sm border border-red-500">
+                <i class="fa-solid fa-triangle-exclamation"></i> Esegui Reset Dati Ora
+            </button>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- POPUP MODALE MODIFICA ATLETA               -->
+    <!-- ========================================== -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-80 hidden z-50 flex justify-center items-center p-4">
+        <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-md p-5 shadow-2xl relative">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-blue-400" id="modal-title">Modifica Riga</h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            
+            <input type="hidden" id="modal-row">
+            
+            <div class="mb-4 relative">
+                <label class="block text-sm font-bold text-slate-300 mb-1">Nome Atleta</label>
+                <input type="text" id="modal-nome" placeholder="Cerca nome..." class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white uppercase text-lg" oninput="handleModalInput()" onblur="this.value = this.value.toUpperCase()">
+                <div id="modal-autocomplete" class="absolute left-0 right-0 bg-slate-700 border border-slate-500 z-50 hidden max-h-48 overflow-y-auto rounded-b-lg shadow-xl"></div>
+            </div>
+            
+            <input type="hidden" id="modal-rank">
+
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                    <label class="block text-sm font-bold text-slate-300 mb-1">Girone (Pos)</label>
+                    <input type="number" id="modal-girone" placeholder="Es: 11" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white text-center text-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-300 mb-1">ED (1-5,32)</label>
+                    <input type="text" id="modal-ed" placeholder="Es: 32" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white text-center uppercase text-lg" onblur="this.value = this.value.toUpperCase()">
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <button onclick="saveModal()" class="flex-[2] bg-blue-600 hover:bg-blue-500 font-bold py-3 rounded-lg text-white transition text-lg">
+                    <i class="fa-solid fa-check"></i> Fatto
+                </button>
+                <button onclick="deleteModal()" class="flex-1 bg-red-700 hover:bg-red-600 font-bold py-3 rounded-lg text-white transition">
+                    <i class="fa-solid fa-trash"></i> Svuota
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let sheetId = "";
+        let resetUrl = "";
+        let scriptUrl = "";
+        let rankList = [];
+        let atletiData = {};
+        let allGironi = {};
+
+        for (let i = 1; i <= 40; i++) {
+            atletiData[i] = { row: i + 4, nome: '', rank: '', girone: '', ed: '' };
+        }
+
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            let bgColor = 'bg-blue-600', borderColor = 'border-blue-400';
+            if (type === 'error') { bgColor = 'bg-red-600'; borderColor = 'border-red-400'; }
+            if (type === 'success') { bgColor = 'bg-green-600'; borderColor = 'border-green-400'; }
+            if (type === 'warning') { bgColor = 'bg-yellow-600'; borderColor = 'border-yellow-400'; }
+
+            toast.className = `${bgColor} border ${borderColor} text-white px-4 py-3 rounded-lg shadow-xl font-bold text-center text-sm transition-opacity duration-300 opacity-0 pointer-events-auto`;
+            toast.innerText = msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('opacity-0'), 10);
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 2000);
+        }
+
+        socket.on('connect', () => {
+            socket.emit('fetch_sheet');
+        });
+
+        socket.on('state_update', s => {
+            if (s.settings) {
+                if (s.settings.google_reset_url !== undefined) {
+                    resetUrl = s.settings.google_reset_url;
+                }
+                if (s.settings.google_script_url !== undefined) {
+                    scriptUrl = s.settings.google_script_url;
+                }
+                if (s.settings.google_sheet_id && !sheetId) {
+                    sheetId = s.settings.google_sheet_id;
+                    loadGoogleData();
+                } else if (s.settings.google_sheet_id) {
+                    sheetId = s.settings.google_sheet_id;
+                }
+            }
+        });
+
+        socket.on('gironi_cache_update', cache => {
+            allGironi = cache;
+            renderMatches();
+        });
+
+        socket.on('action_feedback', d => {
+            showToast(d.msg, d.status);
+        });
+
+        function sincronizzaTutto() {
+            socket.emit('fetch_sheet');
+            if (sheetId) loadGoogleData();
+        }
+
+        // --- FUNZIONI GESTIONE ATLETI (SINISTRA) ---
+        function renderTable() {
+            const tbody = document.getElementById('atleti-tbody');
+            tbody.innerHTML = '';
+            
+            for (let i = 1; i <= 40; i++) {
+                const a = atletiData[i];
+                const groupIdx = Math.floor((i - 1) / 8);
+                
+                let btnHtml = '';
+                if (a.nome) {
+                    btnHtml = `<button onclick="openModal(${i})" class="w-full text-left bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded border border-slate-600 text-white font-bold truncate text-xs"><i class="fa-solid fa-pen text-slate-400 mr-2 text-[10px]"></i>${a.nome}</button>`;
+                } else {
+                    btnHtml = `<button onclick="openModal(${i})" class="w-full text-center bg-slate-800/50 hover:bg-slate-700 px-3 py-1.5 rounded border border-slate-600 border-dashed text-slate-400 font-bold text-xs"><i class="fa-solid fa-plus mr-1"></i>Inserisci</button>`;
+                }
+
+                tbody.innerHTML += `
+                    <tr class="group-${groupIdx} border-b border-slate-700/50">
+                        <td class="p-1.5 text-center text-slate-400 font-bold text-xs">${i}</td>
+                        <td class="p-1">${btnHtml}</td>
+                        <td class="p-1.5 text-center"><span class="${a.rank ? 'bg-indigo-900 text-indigo-200' : ''} px-1.5 py-0.5 rounded text-[11px] font-bold">${a.rank}</span></td>
+                        <td class="p-1.5 text-center font-mono text-slate-300 text-xs">${a.girone}</td>
+                        <td class="p-1.5 text-center font-mono text-slate-300 text-xs">${a.ed}</td>
+                    </tr>
+                `;
+            }
+        }
+
+        function loadGoogleData() {
+            if (!sheetId) return showToast("Manca ID Foglio Google nelle impostazioni!", "error");
+            showToast("Lettura dati in corso...", "warning");
+            
+            const rankUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Rank&range=E3:H400&t=${Date.now()}`;
+            fetch(rankUrl).then(r => r.text()).then(csv => {
+                rankList = parseCSV(csv).map(r => {
+                    let name = (r[0] || "").toUpperCase().trim();
+                    let val1 = r[1] || "";
+                    let val2 = r[2] || "";
+                    let rankVal = val1;
+                    let desc = "";
+                    if (isNaN(parseFloat(val1)) && val1 !== "") {
+                        desc = val1; rankVal = val2 || r[3] || "";
+                    } else if (val1 !== "") {
+                        desc = "P.ti: " + val1;
+                    }
+                    return { name: name, rank: rankVal, desc: desc };
+                }).filter(r => r.name !== "");
+            }).catch(e => console.log("Errore Rank:", e));
+
+            const atletiUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Atleti&range=M1:S44&t=${Date.now()}`;
+            fetch(atletiUrl).then(r => r.text()).then(csv => {
+                const rows = parseCSV(csv);
+                
+                if (rows[0] && rows[0][5] !== undefined) document.getElementById('gir_da_val').value = rows[0][5];
+                if (rows[1] && rows[1][2] !== undefined) document.getElementById('squadre_val').value = rows[1][2];
+                if (rows[2] && rows[2][2] !== undefined) document.getElementById('serpentone_val').value = rows[2][2];
+
+                window.originalAtleti = {};
+
+                for (let i = 4; i < rows.length; i++) {
+                    const idx = i - 3;
+                    if (idx <= 40) {
+                        const nome = (rows[i] && rows[i][0]) ? rows[i][0] : "";
+                        const rank = (rows[i] && rows[i][1]) ? rows[i][1] : "";
+                        const girone = (rows[i] && rows[i][3]) ? rows[i][3] : "";
+                        const ed = (rows[i] && rows[i][6]) ? rows[i][6] : "";
+
+                        atletiData[idx] = { row: idx + 4, nome, rank, girone, ed };
+                        window.originalAtleti[idx + 4] = { nome, rank, girone, ed };
+                    }
+                }
+                renderTable();
+                showToast("Dati sincronizzati con successo!", "success");
+            }).catch(e => showToast("Errore di lettura CSV Google.", "error"));
+        }
+
+        function parseCSV(str) {
+            const arr = []; let quote = false, row = [], col = '';
+            for (let c = 0; c < str.length; c++) {
+                let cc = str[c], nc = str[c+1];
+                if (cc === '"' && quote && nc === '"') { col += cc; ++c; continue; }
+                if (cc === '"') { quote = !quote; continue; }
+                if (cc === ',' && !quote) { row.push(col.trim()); col = ''; continue; }
+                if (cc === '\n' && !quote) { row.push(col.trim()); arr.push(row); row = []; col = ''; continue; }
+                col += cc;
+            }
+            if (col !== '' || row.length > 0) { row.push(col.trim()); arr.push(row); }
+            return arr;
+        }
+
+        function openModal(idx) {
+            const a = atletiData[idx];
+            document.getElementById('modal-title').innerText = `Riga ${idx} (Foglio riga ${a.row})`;
+            document.getElementById('modal-row').value = idx;
+            document.getElementById('modal-nome').value = a.nome;
+            document.getElementById('modal-rank').value = a.rank;
+            document.getElementById('modal-girone').value = a.girone;
+            document.getElementById('modal-ed').value = a.ed;
+            
+            document.getElementById('modal-autocomplete').classList.add('hidden');
+            document.getElementById('modal-overlay').classList.remove('hidden');
+            
+            if (!a.nome) setTimeout(() => document.getElementById('modal-nome').focus(), 100);
+        }
+
+        function closeModal() {
+            document.getElementById('modal-overlay').classList.add('hidden');
+        }
+
+        function deleteModal() {
+            const idx = document.getElementById('modal-row').value;
+            atletiData[idx].nome = '';
+            atletiData[idx].rank = '';
+            atletiData[idx].girone = '';
+            atletiData[idx].ed = '';
+            renderTable();
+            closeModal();
+        }
+
+        function saveModal() {
+            const idx = document.getElementById('modal-row').value;
+            atletiData[idx].nome = document.getElementById('modal-nome').value.trim().toUpperCase();
+            atletiData[idx].rank = document.getElementById('modal-rank').value;
+            atletiData[idx].girone = document.getElementById('modal-girone').value.trim();
+            atletiData[idx].ed = document.getElementById('modal-ed').value.trim().toUpperCase();
+            renderTable();
+            closeModal();
+        }
+
+        function handleModalInput() {
+            const inp = document.getElementById('modal-nome');
+            const val = inp.value.toUpperCase();
+            const listContainer = document.getElementById('modal-autocomplete');
+            
+            if (!val) {
+                listContainer.innerHTML = '';
+                listContainer.classList.add('hidden');
+                document.getElementById('modal-rank').value = '';
+                return;
+            }
+            
+            listContainer.innerHTML = '';
+            let count = 0;
+            
+            for (let i = 0; i < rankList.length; i++) {
+                if (rankList[i].name.includes(val)) {
+                    const item = document.createElement("div");
+                    item.className = "autocomplete-item";
+                    const startIdx = rankList[i].name.indexOf(val);
+                    
+                    item.innerHTML = `<span class="truncate pr-2 text-white">${rankList[i].name.substring(0, startIdx)}<strong class="text-blue-300">${val}</strong>${rankList[i].name.substring(startIdx + val.length)}</span>
+                                      <span class="text-slate-400 text-xs whitespace-nowrap">${rankList[i].desc}</span>`;
+                    
+                    item.dataset.name = rankList[i].name;
+                    item.dataset.rank = rankList[i].rank;
+                    
+                    const selectHandler = function(e) {
+                        e.preventDefault(); e.stopPropagation();
+                        inp.value = this.dataset.name;
+                        document.getElementById('modal-rank').value = this.dataset.rank;
+                        listContainer.classList.add('hidden');
+                    };
+
+                    item.addEventListener("mousedown", selectHandler);
+                    item.addEventListener("touchstart", selectHandler, {passive: false});
+
+                    listContainer.appendChild(item);
+                    listContainer.classList.remove('hidden');
+                    count++;
+                    if (count >= 8) break;
+                }
+            }
+            if (count === 0) listContainer.classList.add('hidden');
+        }
+
+        document.getElementById('modal-overlay').addEventListener('click', function(e) {
+            if (e.target.id === 'modal-overlay') closeModal();
+            else if (e.target.id !== 'modal-nome') document.getElementById('modal-autocomplete').classList.add('hidden');
+        });
+
+        function saveAll() {
+            const formulaData = {
+                squadre: document.getElementById('squadre_val').value,
+                serpentone: document.getElementById('serpentone_val').value,
+                gir_da: document.getElementById('gir_da_val').value
+            };
+
+            const datiDaInviare = [];
+            for (let i = 1; i <= 40; i++) {
+                const a = atletiData[i];
+                const orig = window.originalAtleti ? window.originalAtleti[a.row] : null;
+
+                if (!orig || orig.nome !== a.nome || orig.girone !== a.girone || orig.ed !== a.ed) {
+                    datiDaInviare.push({
+                        row: a.row,
+                        nome: a.nome,
+                        ranking: a.rank,
+                        girone: a.girone,
+                        ed: a.ed
+                    });
+                }
+            }
+
+            if (datiDaInviare.length === 0 && !confirm("Non risultano modifiche agli atleti. Vuoi forzare l'aggiornamento della sola formula di gara?")) {
+                return;
+            }
+
+            socket.emit('save_bulk_atleti', { formula: formulaData, atleti: datiDaInviare });
+            setTimeout(() => socket.emit('fetch_sheet'), 3000);
+        }
+
+        // --- FUNZIONI INSERIMENTO PUNTI GIRONI + RESET (DESTRA) ---
+        function renderMatches() {
+            const girone = document.getElementById('girone-select').value;
+            const matches = allGironi[girone] || [];
+            const container = document.getElementById('match-list');
+            container.innerHTML = '';
+            
+            let count = 0;
+            matches.forEach(m => {
+                if (!m.sx || !m.dx || m.sx.trim() === '' || m.dx.trim() === '') return;
+                count++;
+                
+                const html = `
+                <div class="match-row">
+                    <div class="fencer-name text-right pr-2 text-red-400">${m.sx}</div>
+                    <div class="flex items-center gap-1">
+                        <input type="number" id="sx_${m.row}" value="${m.p_sx}" class="score-input" 
+                               onfocus="this.dataset.old = this.value; this.value = '';" 
+                               onblur="if(this.value === '') this.value = this.dataset.old;">
+                        <span class="text-slate-500 font-bold">-</span>
+                        <input type="number" id="dx_${m.row}" value="${m.p_dx}" class="score-input"
+                               onfocus="this.dataset.old = this.value; this.value = '';" 
+                               onblur="if(this.value === '') this.value = this.dataset.old;">
+                    </div>
+                    <div class="fencer-name text-left pl-2 text-green-400">${m.dx}</div>
+                    <button onclick="sendScore('${girone}', ${m.row}, '${m.sx.replace(/'/g, "\\'")}', '${m.dx.replace(/'/g, "\\'")}')" class="ml-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-400 px-3 py-2 rounded-lg shadow font-bold border border-blue-400 text-sm">Invia</button>
+                </div>
+                `;
+                container.insertAdjacentHTML('beforeend', html);
+            });
+
+            if (count === 0) {
+                container.innerHTML = '<div class="text-center py-10 text-slate-400">Nessun assalto valido in questo girone.</div>';
+            }
+        }
+
+        function sendScore(girone, row, sxName, dxName) {
+            const val_sx = document.getElementById(`sx_${row}`).value;
+            const val_dx = document.getElementById(`dx_${row}`).value;
+            
+            if (val_sx === '' || val_dx === '') {
+                showToast("Errore: Inserisci entrambi i punteggi!", "error");
+                return;
+            }
+
+            socket.emit('send_background_result', { girone, row, sx: sxName, dx: dxName, val_sx, val_dx });
+        }
+
+        function eseguiResetDati() {
+            let targetResetUrl = resetUrl ? resetUrl.trim() : "";
+            if (!targetResetUrl && scriptUrl && scriptUrl.trim() !== "") {
+                targetResetUrl = scriptUrl.trim() + (scriptUrl.includes("?") ? "&azione=reset" : "?azione=reset");
+            }
+
+            if (!targetResetUrl) {
+                showToast("Configura l'URL Apps Script / Reset nelle Impostazioni (⚙️)!", "error");
+                return;
+            }
+
+            if (confirm("⚠️ ATTENZIONE! Sei sicuro di voler azzerare TUTTI i dati sul foglio Google?\nQuesta azione non può essere annullata.")) {
+                const btn = document.getElementById('btn-reset-dati');
+                const oldHtml = btn.innerHTML;
+                btn.innerHTML = "⏳ Reset in corso, attendere...";
+                btn.disabled = true;
+                btn.classList.add('opacity-75');
+
+                fetch(targetResetUrl, { mode: 'no-cors' })
+                    .then(() => {
+                        socket.emit('reset_all');
+                        showToast("Reset eseguito con successo! Ricarico dati...", "success");
+                        setTimeout(() => {
+                            loadGoogleData();
+                            socket.emit('fetch_sheet');
+                        }, 2000);
+                    })
+                    .catch(err => {
+                        console.error("Errore fetch reset:", err);
+                        showToast("Impossibile contattare lo script di reset.", "error");
+                    })
+                    .finally(() => {
+                        btn.innerHTML = oldHtml;
+                        btn.disabled = false;
+                        btn.classList.remove('opacity-75');
+                    });
+            }
+        }
+
+        renderTable();
+    </script>
+</body>
+</html>
