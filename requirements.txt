@@ -1,6 +1,5 @@
 Flask
 Flask-SocketIO
-eventlet>=0.35.2
 requests
 werkzeug
 simple-websocket
