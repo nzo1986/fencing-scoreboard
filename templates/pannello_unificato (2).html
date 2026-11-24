@@ -1,0 +1,1545 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pannello di Controllo Unificato</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;600;700&family=Inter:wght@400;600;700;800&display=swap');
+
+        body {
+            background: #0f172a;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* --- STILI PANNELLO SINISTRO (Gestione Atleti) --- */
+        .table-container {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+        }
+        thead th {
+            position: sticky;
+            top: 0;
+            background-color: #1e293b;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .autocomplete-item {
+            padding: 12px 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #475569;
+            transition: background 0.1s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .autocomplete-item:hover, .autocomplete-item:active { background-color: #3b82f6; }
+        input, select { outline: none; transition: border-color 0.2s; }
+        input:focus, select:focus { border-color: #3b82f6; box-shadow: 0 0 0 1px #3b82f6; }
+
+        .group-0 { background-color: rgba(239, 68, 68, 0.10); }
+        .group-1 { background-color: rgba(59, 130, 246, 0.10); }
+        .group-2 { background-color: rgba(234, 179, 8, 0.10); }
+        .group-3 { background-color: rgba(34, 197, 94, 0.10); }
+        .group-4 { background-color: rgba(148, 163, 184, 0.10); }
+
+        /* --- STILI PANNELLO DESTRO (Inserimento Rapido) --- */
+        .matches-container {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .match-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #1e293b;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+        .score-input {
+            width: 48px;
+            text-align: center;
+            background: #0f172a;
+            color: white;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            padding: 6px 4px;
+            font-size: 1.15rem;
+            font-weight: bold;
+            appearance: textfield;
+        }
+        .score-input::-webkit-outer-spin-button,
+        .score-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .fencer-name {
+            flex: 1;
+            font-size: 0.95rem;
+            font-weight: bold;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* ============================================================== */
+        /* TEMA WEBFENCE / 4FENCE CON COLORE GRANATA (#7A1224)             */
+        /* ============================================================== */
+        :root {
+            --granata-main: #7a1224;
+            --granata-dark: #580b18;
+            --granata-light: #9e1b32;
+            --granata-soft: #f9ebed;
+            --wf-bg: #f8f9fa;
+            --wf-row-even: #ffffff;
+            --wf-row-odd: #e9ecef;
+            --wf-diag: #9e9e9e;
+            --wf-seed-bg: #b8b8b8;
+            --wf-bar-bg: #ececec;
+            --wf-score-lose: #b8b8b8;
+            --wf-line: #a0a0a0;
+        }
+
+        .wf-modal-bg {
+            background-color: #f4f4f6;
+            color: #1f2937;
+        }
+
+        .wf-top-banner {
+            background: #d4d4d8;
+            border-bottom: 3px solid var(--granata-main);
+            box-shadow: 0 2px 0 #e5b3bc, 0 4px 10px rgba(0,0,0,0.08);
+        }
+
+        .wf-filter-btn {
+            background: #ffffff;
+            color: #374151;
+            border: 1px solid #d1d5db;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 12px;
+            transition: all 0.15s;
+        }
+        .wf-filter-btn:hover {
+            border-color: var(--granata-main);
+            color: var(--granata-main);
+        }
+        .wf-filter-btn.active {
+            background: var(--granata-main) !important;
+            color: #ffffff !important;
+            border-color: var(--granata-dark) !important;
+            box-shadow: 0 2px 6px rgba(122, 18, 36, 0.35);
+        }
+
+        /* Barra Intestazione Girone stile 4Fence ma Granata */
+        .wf-pool-header {
+            background: linear-gradient(90deg, var(--granata-main) 0%, var(--granata-light) 100%);
+            color: #ffffff;
+            padding: 8px 14px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+        }
+
+        .wf-pool-subhdr {
+            background: var(--granata-soft);
+            color: var(--granata-dark);
+            font-family: 'Roboto Mono', monospace;
+            font-size: 11px;
+            font-weight: 700;
+            border-bottom: 2px solid var(--granata-main);
+        }
+
+        .wf-pool-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 12px;
+            background: #ffffff;
+        }
+        .wf-pool-table th, .wf-pool-table td {
+            padding: 5px 6px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .wf-pool-row-even { background-color: var(--wf-row-even); }
+        .wf-pool-row-odd  { background-color: var(--wf-row-odd); }
+        .wf-pool-diag {
+            background-color: var(--wf-diag) !important;
+            border-left: 1px solid #888;
+            border-right: 1px solid #888;
+        }
+        .wf-bout-cell {
+            text-align: center;
+            width: 30px;
+            font-weight: 700;
+            color: #111827;
+        }
+        .wf-bout-win {
+            color: var(--granata-main);
+            font-weight: 800;
+        }
+
+        /* Stile Albero Eliminazione Diretta WebFence Granata */
+        .wf-bracket-match {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            width: 100%;
+            font-family: 'Roboto Mono', monospace;
+        }
+        .wf-fencer-slot {
+            display: flex;
+            align-items: stretch;
+            height: 24px;
+            background: var(--wf-bar-bg);
+            border-radius: 0 13px 13px 0;
+            overflow: hidden;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+        }
+        .wf-seed-box {
+            width: 26px;
+            background: var(--wf-seed-bg);
+            color: #111827;
+            font-size: 11px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .wf-name-box {
+            flex: 1;
+            padding: 0 8px;
+            font-size: 11.5px;
+            color: #1f2937;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-weight: 600;
+        }
+        .wf-score-pill {
+            width: 30px;
+            font-size: 11.5px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            background: var(--wf-score-lose);
+            color: #111827;
+        }
+        .wf-fencer-slot.top-slot .wf-score-pill {
+            border-top-right-radius: 12px;
+        }
+        .wf-fencer-slot.bot-slot .wf-score-pill {
+            border-bottom-right-radius: 12px;
+        }
+        .wf-score-pill.winner {
+            background: var(--granata-main) !important;
+            color: #ffffff !important;
+        }
+        .wf-name-box.winner-text {
+            color: #000000;
+            font-weight: 800;
+        }
+    </style>
+</head>
+<body class="flex w-full h-screen">
+
+    <!-- Toast Container Unificato -->
+    <div id="toast-container" class="fixed top-5 left-1/2 transform -translate-x-1/2 flex flex-col gap-2 z-[95] w-11/12 max-w-md pointer-events-none"></div>
+
+    <!-- ========================================== -->
+    <!-- COLONNA SINISTRA: GESTIONE ATLETI          -->
+    <!-- ========================================== -->
+    <div class="w-1/2 h-full flex flex-col p-3 border-r-2 border-slate-700 bg-[#0f172a]">
+        
+        <!-- Header Sx -->
+        <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-700 flex-none">
+            <h1 class="text-xl font-bold text-slate-100 flex items-center gap-2">
+                <i class="fa-solid fa-person-fencing text-blue-400"></i> Gestione Atleti
+            </h1>
+            <div class="flex gap-2">
+                <button onclick="saveAll()" class="bg-green-600 hover:bg-green-500 px-4 py-2 rounded-lg font-bold shadow transition text-sm flex items-center gap-1.5">
+                    <i class="fa-solid fa-floppy-disk"></i> Salva in Google
+                </button>
+                <button onclick="window.location.href='/telecomando'" class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg font-bold shadow transition text-sm">
+                    Indietro
+                </button>
+            </div>
+        </div>
+
+        <!-- Formula di Gara -->
+        <div class="bg-slate-800 p-3 rounded-lg mb-3 border border-slate-600 shadow-md flex-none">
+            <h2 class="text-sm font-bold text-blue-400 mb-2 border-b border-slate-600 pb-1">⚙️ Formula di Gara</h2>
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-400 mb-1">Squadre (O2)</label>
+                    <select id="squadre_val" class="w-full bg-slate-900 border border-slate-600 rounded p-1.5 text-white text-center text-sm font-bold">
+                        <option value="NO">NO</option>
+                        <option value="SI">SI</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-400 mb-1">Serpentone (O3)</label>
+                    <select id="serpentone_val" class="w-full bg-slate-900 border border-slate-600 rounded p-1.5 text-white text-center text-sm font-bold">
+                        <option value="Rnk">Rnk</option>
+                        <option value="NO">NO</option>
+                        <option value="SI">SI</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-slate-400 mb-1">Gir da (R1)</label>
+                    <input type="number" id="gir_da_val" placeholder="Es: 6" class="w-full bg-slate-900 border border-slate-600 rounded p-1.5 text-white text-center text-sm font-bold">
+                </div>
+            </div>
+        </div>
+
+        <!-- Barra Info + Sincronizza Atleti -->
+        <div class="flex justify-between items-center mb-2 flex-none">
+            <span class="text-xs text-slate-400">Clicca sul nome per modificarlo.</span>
+            <button onclick="loadGoogleData()" class="bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded font-bold shadow text-xs flex items-center gap-1">
+                <i class="fa-solid fa-rotate"></i> Sincronizza
+            </button>
+        </div>
+
+        <!-- Tabella 40 Atleti -->
+        <div class="table-container bg-slate-900">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr>
+                        <th class="p-2.5 text-slate-300 w-10 text-center text-xs">#</th>
+                        <th class="p-2.5 text-slate-300 text-xs">NOME ATLETA</th>
+                        <th class="p-2.5 text-slate-300 w-14 text-center text-xs">RNK</th>
+                        <th class="p-2.5 text-slate-300 w-14 text-center text-xs">GIR</th>
+                        <th class="p-2.5 text-slate-300 w-14 text-center text-xs">ED</th>
+                    </tr>
+                </thead>
+                <tbody id="atleti-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- COLONNA DESTRA: INSERIMENTO RAPIDO + RESET -->
+    <!-- ========================================== -->
+    <div class="w-1/2 h-full flex flex-col p-3 bg-[#0f172a]">
+        
+        <!-- Header Dx con Pulsante Dirette / Tabellone Granata -->
+        <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-700 flex-none gap-2">
+            <h1 class="text-xl font-bold text-slate-100 flex items-center gap-2 truncate">
+                <i class="fa-solid fa-bolt text-amber-400"></i> Inserimento Rapido
+            </h1>
+            <div class="flex gap-2 items-center flex-none">
+                <button onclick="openTabelloneModal()" style="background-color:#7a1224; border-color:#a8243b;" class="hover:opacity-90 text-white px-3.5 py-2 rounded-lg font-extrabold shadow-lg transition text-sm flex items-center gap-1.5 border">
+                    <i class="fa-solid fa-sitemap"></i> Tabellone & Dirette
+                </button>
+                <button onclick="window.location.href='/settings'" class="bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3 py-2 rounded-lg font-bold shadow transition text-sm" title="Impostazioni">
+                    ⚙️
+                </button>
+                <button onclick="window.location.href='/telecomando'" class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg font-bold shadow transition text-sm">
+                    Indietro
+                </button>
+            </div>
+        </div>
+
+        <!-- Selettore Girone -->
+        <div class="mb-3 flex-none">
+            <select id="girone-select" class="w-full bg-slate-800 text-white border border-slate-600 p-2.5 rounded-lg font-bold text-base text-center" onchange="renderMatches()">
+                <option value="rosso">Girone Rosso</option>
+                <option value="giallo">Girone Giallo</option>
+                <option value="blu">Girone Blu</option>
+                <option value="verde">Girone Verde</option>
+                <option value="32">Tabellone 32</option>
+            </select>
+        </div>
+
+        <!-- Pulsante Sincronizza con Google -->
+        <div class="mb-3 flex-none">
+            <button onclick="sincronizzaTutto()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg w-full shadow border border-indigo-400 text-sm">
+                🔄 Sincronizza con Google
+            </button>
+        </div>
+
+        <!-- Lista Assalti del Girone -->
+        <div id="match-list" class="flex flex-col matches-container">
+            <div class="text-center py-10 text-slate-400">In attesa dei dati dal server...</div>
+        </div>
+
+        <!-- Pulsante Rosso Reset Dati Macro in basso -->
+        <div class="pt-3 mt-2 border-t border-slate-800 flex-none">
+            <button id="btn-reset-dati" onclick="richiediConfermaReset()" class="w-full bg-red-700 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition-colors flex items-center justify-center gap-2 text-sm border border-red-500">
+                <i class="fa-solid fa-triangle-exclamation"></i> Esegui Reset Dati Ora
+            </button>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- POPUP FULL-SCREEN SOLA LETTURA: WEBFENCE / 4FENCE STILE GRANATA        -->
+    <!-- ===================================================================== -->
+    <div id="tabellone-modal" class="fixed inset-0 wf-modal-bg hidden z-[70] flex flex-col select-none">
+        
+        <!-- Top Banner Stile 4Fence Granata -->
+        <div class="wf-top-banner px-4 py-2.5 flex flex-wrap justify-between items-center gap-3 flex-none">
+            <div class="flex items-center gap-3">
+                <button onclick="closeTabelloneModal()" style="background-color:#7a1224;" class="hover:opacity-90 text-white font-bold px-4 py-2 rounded shadow flex items-center gap-2 text-sm transition">
+                    <i class="fa-solid fa-arrow-left"></i> Torna al Pannello
+                </button>
+                <div>
+                    <div class="text-sm sm:text-base font-extrabold text-neutral-800 tracking-tight flex items-center gap-2">
+                        <span>TABELLONE GARA - GIRONI & ELIMINAZIONE DIRETTA</span>
+                        <span class="text-[11px] font-semibold px-2 py-0.5 rounded bg-[#7a1224]/15 text-[#7a1224] border border-[#7a1224]/30">SOLA LETTURA</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Barra Selettori Vista -->
+            <div class="flex flex-wrap items-center gap-1.5">
+                <button id="tab-view-all" onclick="setTabelloneView('all')" class="wf-filter-btn active">
+                    📋 Gironi + Dirette (Tutti)
+                </button>
+                <button id="tab-view-gironi" onclick="setTabelloneView('gironi')" class="wf-filter-btn">
+                    🤺 Solo Gironi
+                </button>
+                <button id="tab-view-dirette" onclick="setTabelloneView('dirette')" class="wf-filter-btn">
+                    ⚔️ Solo Dirette Gironi
+                </button>
+                <button id="tab-view-rosso" onclick="setTabelloneView('rosso')" class="wf-filter-btn">
+                    🔴 Gir. Rosso
+                </button>
+                <button id="tab-view-blu" onclick="setTabelloneView('blu')" class="wf-filter-btn">
+                    🔵 Gir. Blu
+                </button>
+                <button id="tab-view-giallo" onclick="setTabelloneView('giallo')" class="wf-filter-btn">
+                    🟡 Gir. Giallo
+                </button>
+                <button id="tab-view-verde" onclick="setTabelloneView('verde')" class="wf-filter-btn">
+                    🟢 Gir. Verde
+                </button>
+                <button id="tab-view-grigio" onclick="setTabelloneView('grigio')" class="wf-filter-btn">
+                    ⚪ Gir. Grigio
+                </button>
+                <button id="tab-view-ed32" onclick="setTabelloneView('ed32')" class="wf-filter-btn">
+                    🏆 Diretta a 32
+                </button>
+            </div>
+
+            <!-- Timestamp + Pulsante Aggiorna -->
+            <div class="flex items-center gap-3">
+                <span id="tabellone-last-update" class="text-xs text-neutral-600 font-mono">Ultimo aggiornamento: --:--:--</span>
+                <button onclick="loadTabelloneData(true)" style="background-color:#7a1224;" class="hover:opacity-90 text-white font-bold px-3 py-1.5 rounded shadow text-xs flex items-center gap-1.5">
+                    <i id="tabellone-spin-icon" class="fa-solid fa-rotate"></i> Aggiorna
+                </button>
+            </div>
+        </div>
+
+        <!-- Contenuto Scrollabile -->
+        <div id="tabellone-content" class="flex-1 overflow-auto p-3 sm:p-5 space-y-6">
+            <div class="text-center py-16 text-neutral-500 font-semibold">Caricamento dati da Google Sheets...</div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- POPUP MODALE MODIFICA ATLETA               -->
+    <!-- ========================================== -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-80 hidden z-50 flex justify-center items-center p-4">
+        <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-md p-5 shadow-2xl relative">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-blue-400" id="modal-title">Modifica Riga</h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            
+            <input type="hidden" id="modal-row">
+            
+            <div class="mb-4 relative">
+                <label class="block text-sm font-bold text-slate-300 mb-1">Nome Atleta</label>
+                <input type="text" id="modal-nome" placeholder="Cerca nome..." class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white uppercase text-lg" oninput="handleModalInput()" onblur="this.value = this.value.toUpperCase()">
+                <div id="modal-autocomplete" class="absolute left-0 right-0 bg-slate-700 border border-slate-500 z-50 hidden max-h-48 overflow-y-auto rounded-b-lg shadow-xl"></div>
+            </div>
+            
+            <input type="hidden" id="modal-rank">
+
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                    <label class="block text-sm font-bold text-slate-300 mb-1">Girone (Pos)</label>
+                    <input type="number" id="modal-girone" placeholder="Es: 11" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white text-center text-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-300 mb-1">ED (1-5,32)</label>
+                    <input type="text" id="modal-ed" placeholder="Es: 32" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white text-center uppercase text-lg" onblur="this.value = this.value.toUpperCase()">
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <button onclick="saveModal()" class="flex-[2] bg-blue-600 hover:bg-blue-500 font-bold py-3 rounded-lg text-white transition text-lg">
+                    <i class="fa-solid fa-check"></i> Fatto
+                </button>
+                <button onclick="deleteModal()" class="flex-1 bg-red-700 hover:bg-red-600 font-bold py-3 rounded-lg text-white transition">
+                    <i class="fa-solid fa-trash"></i> Svuota
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- POPUP CONFERMA AZIONI                      -->
+    <!-- ========================================== -->
+    <div id="confirm-modal" class="fixed inset-0 bg-black/80 hidden z-[85] flex justify-center items-center p-4">
+        <div class="bg-slate-800 border border-slate-600 rounded-xl w-full max-w-md p-6 shadow-2xl text-center">
+            <div class="text-amber-400 text-4xl mb-3"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <h3 id="confirm-title" class="text-lg font-bold text-white mb-2">Conferma Operazione</h3>
+            <p id="confirm-msg" class="text-sm text-slate-300 mb-6"></p>
+            <div class="flex gap-3">
+                <button onclick="closeConfirmModal()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 rounded-lg transition">
+                    Annulla
+                </button>
+                <button id="confirm-ok-btn" class="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-lg transition">
+                    Conferma
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- LOGICA JAVASCRIPT UNIFICATA                -->
+    <!-- ========================================== -->
+    <script>
+        const socket = io();
+        let sheetId = "";
+        let resetUrl = "";
+        let scriptUrl = "";
+        let rankList = [];
+        let atletiData = {};
+        let allGironi = {};
+
+        // Stato Tabellone & Dirette Popup
+        let currentTabelloneView = 'all';
+        let pubRowsCache = [];
+        let ed32RowsCache = [];
+        let tabelloneAutoRefreshTimer = null;
+
+        for (let i = 1; i <= 40; i++) {
+            atletiData[i] = { row: i + 4, nome: '', rank: '', girone: '', ed: '' };
+        }
+
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            let bgColor = 'bg-blue-600', borderColor = 'border-blue-400';
+            if (type === 'error') { bgColor = 'bg-red-600'; borderColor = 'border-red-400'; }
+            if (type === 'success') { bgColor = 'bg-green-600'; borderColor = 'border-green-400'; }
+            if (type === 'warning') { bgColor = 'bg-yellow-600'; borderColor = 'border-yellow-400'; }
+
+            toast.className = `${bgColor} border ${borderColor} text-white px-4 py-3 rounded-lg shadow-xl font-bold text-center text-sm transition-opacity duration-300 opacity-0 pointer-events-auto`;
+            toast.innerText = msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('opacity-0'), 10);
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 2200);
+        }
+
+        function openConfirmModal(title, msg, onConfirm) {
+            document.getElementById('confirm-title').innerText = title;
+            document.getElementById('confirm-msg').innerText = msg;
+            const okBtn = document.getElementById('confirm-ok-btn');
+            okBtn.onclick = () => {
+                closeConfirmModal();
+                onConfirm();
+            };
+            document.getElementById('confirm-modal').classList.remove('hidden');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirm-modal').classList.add('hidden');
+        }
+
+        socket.on('connect', () => {
+            socket.emit('fetch_sheet');
+        });
+
+        socket.on('state_update', s => {
+            if (s.settings) {
+                if (s.settings.google_reset_url !== undefined) resetUrl = s.settings.google_reset_url;
+                if (s.settings.google_script_url !== undefined) scriptUrl = s.settings.google_script_url;
+                if (s.settings.google_sheet_id && !sheetId) {
+                    sheetId = s.settings.google_sheet_id;
+                    loadGoogleData();
+                } else if (s.settings.google_sheet_id) {
+                    sheetId = s.settings.google_sheet_id;
+                }
+            }
+        });
+
+        socket.on('gironi_cache_update', cache => {
+            allGironi = cache;
+            renderMatches();
+        });
+
+        socket.on('action_feedback', d => {
+            showToast(d.msg, d.status);
+        });
+
+        function sincronizzaTutto() {
+            socket.emit('fetch_sheet');
+            if (sheetId) loadGoogleData();
+        }
+
+        // ==========================================
+        // LOGICA: GESTIONE ATLETI (Pannello SX)
+        // ==========================================
+        function renderTable() {
+            const tbody = document.getElementById('atleti-tbody');
+            tbody.innerHTML = '';
+            
+            for (let i = 1; i <= 40; i++) {
+                const a = atletiData[i];
+                const groupIdx = Math.floor((i - 1) / 8);
+                
+                let btnHtml = '';
+                if (a.nome) {
+                    btnHtml = `<button onclick="openModal(${i})" class="w-full text-left bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded border border-slate-600 text-white font-bold truncate text-xs"><i class="fa-solid fa-pen text-slate-400 mr-2 text-[10px]"></i>${a.nome}</button>`;
+                } else {
+                    btnHtml = `<button onclick="openModal(${i})" class="w-full text-center bg-slate-800/50 hover:bg-slate-700 px-3 py-1.5 rounded border border-slate-600 border-dashed text-slate-400 font-bold text-xs"><i class="fa-solid fa-plus mr-1"></i>Inserisci</button>`;
+                }
+
+                tbody.innerHTML += `
+                    <tr class="group-${groupIdx} border-b border-slate-700/50">
+                        <td class="p-1.5 text-center text-slate-400 font-bold text-xs">${i}</td>
+                        <td class="p-1">${btnHtml}</td>
+                        <td class="p-1.5 text-center"><span class="${a.rank ? 'bg-indigo-900 text-indigo-200' : ''} px-1.5 py-0.5 rounded text-[11px] font-bold">${a.rank}</span></td>
+                        <td class="p-1.5 text-center font-mono text-slate-300 text-xs">${a.girone}</td>
+                        <td class="p-1.5 text-center font-mono text-slate-300 text-xs">${a.ed}</td>
+                    </tr>
+                `;
+            }
+        }
+
+        function loadGoogleData() {
+            if (!sheetId) return showToast("Manca ID Foglio Google nelle impostazioni!", "error");
+            showToast("Lettura dati in corso...", "warning");
+            
+            const rankUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Rank&range=E3:H400&t=${Date.now()}`;
+            fetch(rankUrl).then(r => r.text()).then(csv => {
+                rankList = parseCSV(csv).map(r => {
+                    let name = (r[0] || "").toUpperCase().trim();
+                    let val1 = r[1] || "";
+                    let val2 = r[2] || "";
+                    let rankVal = val1;
+                    let desc = "";
+                    if (isNaN(parseFloat(val1)) && val1 !== "") {
+                        desc = val1; rankVal = val2 || r[3] || "";
+                    } else if (val1 !== "") {
+                        desc = "P.ti: " + val1;
+                    }
+                    return { name: name, rank: rankVal, desc: desc };
+                }).filter(r => r.name !== "");
+            }).catch(e => console.log("Errore Rank:", e));
+
+            const atletiUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Atleti&range=M1:S44&t=${Date.now()}`;
+            fetch(atletiUrl).then(r => r.text()).then(csv => {
+                const rows = parseCSV(csv);
+                
+                if (rows[0] && rows[0][5] !== undefined) document.getElementById('gir_da_val').value = rows[0][5];
+                if (rows[1] && rows[1][2] !== undefined) document.getElementById('squadre_val').value = rows[1][2];
+                if (rows[2] && rows[2][2] !== undefined) document.getElementById('serpentone_val').value = rows[2][2];
+
+                window.originalAtleti = {};
+
+                for (let i = 4; i < rows.length; i++) {
+                    const idx = i - 3;
+                    if (idx <= 40) {
+                        const nome = (rows[i] && rows[i][0]) ? rows[i][0] : "";
+                        const rank = (rows[i] && rows[i][1]) ? rows[i][1] : "";
+                        const girone = (rows[i] && rows[i][3]) ? rows[i][3] : "";
+                        const ed = (rows[i] && rows[i][6]) ? rows[i][6] : "";
+
+                        atletiData[idx] = { row: idx + 4, nome, rank, girone, ed };
+                        window.originalAtleti[idx + 4] = { nome, rank, girone, ed };
+                    }
+                }
+                renderTable();
+                showToast("Dati Atleti sincronizzati!", "success");
+            }).catch(e => showToast("Errore di lettura CSV Atleti.", "error"));
+        }
+
+        function parseCSV(str) {
+            const arr = []; let quote = false, row = [], col = '';
+            for (let c = 0; c < str.length; c++) {
+                let cc = str[c], nc = str[c+1];
+                if (cc === '"' && quote && nc === '"') { col += cc; ++c; continue; }
+                if (cc === '"') { quote = !quote; continue; }
+                if (cc === ',' && !quote) { row.push(col.trim()); col = ''; continue; }
+                if (cc === '\r' && !quote) { continue; }
+                if (cc === '\n' && !quote) { row.push(col.trim()); arr.push(row); row = []; col = ''; continue; }
+                col += cc;
+            }
+            if (col !== '' || row.length > 0) { row.push(col.trim()); arr.push(row); }
+            return arr;
+        }
+
+        function openModal(idx) {
+            const a = atletiData[idx];
+            document.getElementById('modal-title').innerText = `Riga ${idx} (Foglio riga ${a.row})`;
+            document.getElementById('modal-row').value = idx;
+            document.getElementById('modal-nome').value = a.nome;
+            document.getElementById('modal-rank').value = a.rank;
+            document.getElementById('modal-girone').value = a.girone;
+            document.getElementById('modal-ed').value = a.ed;
+            
+            document.getElementById('modal-autocomplete').classList.add('hidden');
+            document.getElementById('modal-overlay').classList.remove('hidden');
+            
+            if (!a.nome) setTimeout(() => document.getElementById('modal-nome').focus(), 100);
+        }
+
+        function closeModal() {
+            document.getElementById('modal-overlay').classList.add('hidden');
+        }
+
+        function deleteModal() {
+            const idx = document.getElementById('modal-row').value;
+            atletiData[idx].nome = '';
+            atletiData[idx].rank = '';
+            atletiData[idx].girone = '';
+            atletiData[idx].ed = '';
+            renderTable();
+            closeModal();
+        }
+
+        function saveModal() {
+            const idx = document.getElementById('modal-row').value;
+            atletiData[idx].nome = document.getElementById('modal-nome').value.trim().toUpperCase();
+            atletiData[idx].rank = document.getElementById('modal-rank').value;
+            atletiData[idx].girone = document.getElementById('modal-girone').value.trim();
+            atletiData[idx].ed = document.getElementById('modal-ed').value.trim().toUpperCase();
+            renderTable();
+            closeModal();
+        }
+
+        function handleModalInput() {
+            const inp = document.getElementById('modal-nome');
+            const val = inp.value.toUpperCase();
+            const listContainer = document.getElementById('modal-autocomplete');
+            
+            if (!val) {
+                listContainer.innerHTML = '';
+                listContainer.classList.add('hidden');
+                document.getElementById('modal-rank').value = '';
+                return;
+            }
+            
+            listContainer.innerHTML = '';
+            let count = 0;
+            
+            for (let i = 0; i < rankList.length; i++) {
+                if (rankList[i].name.includes(val)) {
+                    const item = document.createElement("div");
+                    item.className = "autocomplete-item";
+                    const startIdx = rankList[i].name.indexOf(val);
+                    
+                    item.innerHTML = `<span class="truncate pr-2 text-white">${rankList[i].name.substring(0, startIdx)}<strong class="text-blue-300">${val}</strong>${rankList[i].name.substring(startIdx + val.length)}</span>
+                                      <span class="text-slate-400 text-xs whitespace-nowrap">${rankList[i].desc}</span>`;
+                    
+                    item.dataset.name = rankList[i].name;
+                    item.dataset.rank = rankList[i].rank;
+                    
+                    const selectHandler = function(e) {
+                        e.preventDefault(); e.stopPropagation();
+                        inp.value = this.dataset.name;
+                        document.getElementById('modal-rank').value = this.dataset.rank;
+                        listContainer.classList.add('hidden');
+                    };
+
+                    item.addEventListener("mousedown", selectHandler);
+                    item.addEventListener("touchstart", selectHandler, {passive: false});
+
+                    listContainer.appendChild(item);
+                    listContainer.classList.remove('hidden');
+                    count++;
+                    if (count >= 8) break;
+                }
+            }
+            if (count === 0) listContainer.classList.add('hidden');
+        }
+
+        document.getElementById('modal-overlay').addEventListener('click', function(e) {
+            if (e.target.id === 'modal-overlay') closeModal();
+            else if (e.target.id !== 'modal-nome') document.getElementById('modal-autocomplete').classList.add('hidden');
+        });
+
+        function saveAll() {
+            const formulaData = {
+                squadre: document.getElementById('squadre_val').value,
+                serpentone: document.getElementById('serpentone_val').value,
+                gir_da: document.getElementById('gir_da_val').value
+            };
+
+            const datiDaInviare = [];
+            for (let i = 1; i <= 40; i++) {
+                const a = atletiData[i];
+                const orig = window.originalAtleti ? window.originalAtleti[a.row] : null;
+
+                if (!orig || orig.nome !== a.nome || orig.girone !== a.girone || orig.ed !== a.ed) {
+                    datiDaInviare.push({
+                        row: a.row,
+                        nome: a.nome,
+                        ranking: a.rank,
+                        girone: a.girone,
+                        ed: a.ed
+                    });
+                }
+            }
+
+            const proceedSave = () => {
+                socket.emit('save_bulk_atleti', { formula: formulaData, atleti: datiDaInviare });
+                setTimeout(() => socket.emit('fetch_sheet'), 3000);
+            };
+
+            if (datiDaInviare.length === 0) {
+                openConfirmModal(
+                    "Aggiorna Formula di Gara",
+                    "Non risultano modifiche agli atleti. Vuoi forzare l'aggiornamento della sola formula di gara?",
+                    proceedSave
+                );
+                return;
+            }
+            proceedSave();
+        }
+
+        // ==========================================
+        // LOGICA: INSERIMENTO PUNTI (Pannello DX)
+        // ==========================================
+        function renderMatches() {
+            const girone = document.getElementById('girone-select').value;
+            const matches = allGironi[girone] || [];
+            const container = document.getElementById('match-list');
+            container.innerHTML = '';
+            
+            let count = 0;
+            matches.forEach(m => {
+                if (!m.sx || !m.dx || m.sx.trim() === '' || m.dx.trim() === '') return;
+                count++;
+                
+                const html = `
+                <div class="match-row">
+                    <div class="fencer-name text-right pr-2 text-red-400">${m.sx}</div>
+                    <div class="flex items-center gap-1">
+                        <input type="number" id="sx_${m.row}" value="${m.p_sx}" class="score-input" 
+                               onfocus="this.dataset.old = this.value; this.value = '';" 
+                               onblur="if(this.value === '') this.value = this.dataset.old;">
+                        <span class="text-slate-500 font-bold">-</span>
+                        <input type="number" id="dx_${m.row}" value="${m.p_dx}" class="score-input"
+                               onfocus="this.dataset.old = this.value; this.value = '';" 
+                               onblur="if(this.value === '') this.value = this.dataset.old;">
+                    </div>
+                    <div class="fencer-name text-left pl-2 text-green-400">${m.dx}</div>
+                    <button onclick="sendScore('${girone}', ${m.row}, '${m.sx.replace(/'/g, "\\'")}', '${m.dx.replace(/'/g, "\\'")}')" class="ml-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-400 px-3 py-2 rounded-lg shadow font-bold border border-blue-400 text-sm">Invia</button>
+                </div>
+                `;
+                container.insertAdjacentHTML('beforeend', html);
+            });
+
+            if (count === 0) {
+                container.innerHTML = '<div class="text-center py-10 text-slate-400">Nessun assalto valido in questo girone.</div>';
+            }
+        }
+
+        function sendScore(girone, row, sxName, dxName) {
+            const val_sx = document.getElementById(`sx_${row}`).value;
+            const val_dx = document.getElementById(`dx_${row}`).value;
+            
+            if (val_sx === '' || val_dx === '') {
+                showToast("Errore: Inserisci entrambi i punteggi!", "error");
+                return;
+            }
+
+            socket.emit('send_background_result', { girone, row, sx: sxName, dx: dxName, val_sx, val_dx });
+        }
+
+        function richiediConfermaReset() {
+            openConfirmModal(
+                "⚠️ Esegui Reset Dati Ora",
+                "Sei sicuro di voler azzerare TUTTI i dati sul foglio Google? Questa azione attiverà la Macro di Reset e non può essere annullata.",
+                eseguiResetDati
+            );
+        }
+
+        function eseguiResetDati() {
+            let targetResetUrl = resetUrl ? resetUrl.trim() : "";
+            if (!targetResetUrl && scriptUrl && scriptUrl.trim() !== "") {
+                targetResetUrl = scriptUrl.trim() + (scriptUrl.includes("?") ? "&azione=reset" : "?azione=reset");
+            }
+
+            const btn = document.getElementById('btn-reset-dati');
+            const oldHtml = btn.innerHTML;
+            btn.innerHTML = "⏳ Reset in corso, attendere...";
+            btn.disabled = true;
+            btn.classList.add('opacity-75');
+
+            if (targetResetUrl) {
+                fetch(targetResetUrl, { mode: 'no-cors' })
+                    .then(() => {
+                        socket.emit('reset_all');
+                        showToast("Reset eseguito con successo! Ricarico dati...", "success");
+                        setTimeout(() => {
+                            loadGoogleData();
+                            socket.emit('fetch_sheet');
+                        }, 2000);
+                    })
+                    .catch(() => {
+                        showToast("Impossibile contattare lo script di reset.", "error");
+                    })
+                    .finally(() => {
+                        btn.innerHTML = oldHtml;
+                        btn.disabled = false;
+                        btn.classList.remove('opacity-75');
+                    });
+            } else {
+                socket.emit('reset_all');
+                showToast("Reset locale inviato (Configura URL Script in ⚙️ per il foglio Google).", "warning");
+                btn.innerHTML = oldHtml;
+                btn.disabled = false;
+                btn.classList.remove('opacity-75');
+            }
+        }
+
+        // =========================================================================
+        // LOGICA TABELLONE WEBFENCE / 4FENCE STILE GRANATA (SOLA VISUALIZZAZIONE)
+        // =========================================================================
+        // Mappa precisa basata sugli screenshot del foglio Pub (Righe 1-55):
+        // Nel foglio Pub:
+        // - L'Eliminazione Diretta (Colonne S..Z) inizia SEMPRE 1 riga SOPRA gli atleti del girone:
+        //   Es. Girone Rosso:
+        //     Riga 1 (idx 0): Titolo "Girone Rosso" | "CLASSIFICA DOPO I GIRONI" | "ELIMINAZIONE DIRETTA"
+        //     Riga 2 (idx 1): Header "Nomi | Cognome | 1..8"  <-- Qui in Col S..U c'è già il 1° quarto (1 ELISA F)!
+        //     Riga 3..10 (idx 2..9): Atleti 1..8 del Girone (Col A..P), Class. Gironi 1..8 (Col Q..R), Class. Finale 1..8 (Col AA..AB)
+        //     Riga 2..9  (idx 1..8): Quarti (Col S..U), Semifinali su idx 2,4,6,8 (Col V..W), Finale su idx 3,7 (Col X..Y), Vincitore su idx 5 (Col Z)
+        const GIRONI_META = [
+            { key: 'rosso',  num: 1, pedana: 'Rossa',  searchLabel: 'girone rosso',  defaultTitleIdx: 0 },
+            { key: 'blu',    num: 2, pedana: 'Blu',    searchLabel: 'girone blu',    defaultTitleIdx: 11 },
+            { key: 'giallo', num: 3, pedana: 'Gialla', searchLabel: 'girone giallo', defaultTitleIdx: 22 },
+            { key: 'verde',  num: 4, pedana: 'Verde',  searchLabel: 'girone verde',  defaultTitleIdx: 33 },
+            { key: 'grigio', num: 5, pedana: 'Grigia', searchLabel: 'girone grigio', defaultTitleIdx: 44 }
+        ];
+
+        function cellVal(rows, r, c) {
+            if (!rows || r < 0 || r >= rows.length || !rows[r] || rows[r][c] === undefined || rows[r][c] === null) return "";
+            return String(rows[r][c]).trim();
+        }
+
+        // Trova in modo chirurgico e INDIPENDENTE:
+        // 1) athletesStartRow: la riga esatta in cui inizia l'Atleta 1 del Girone (Col A = "1" o Col Q = "1" o Col AA = "1")
+        // 2) edStartRow: la riga esatta in cui inizia il Seme 1 dell'Eliminazione Diretta (Col S = "1" seguito da "8" sotto)
+        function locateBlockAnchors(rows, meta, blockIndex) {
+            // 1. Cerca la riga del titolo ("Girone Rosso", "Girone Blu", ecc.)
+            let titleRow = -1;
+            for (let r = 0; r < rows.length; r++) {
+                const rowStr = (cellVal(rows, r, 0) + " " + cellVal(rows, r, 1) + " " + cellVal(rows, r, 2)).toLowerCase();
+                if (rowStr.includes(meta.searchLabel)) {
+                    titleRow = r;
+                    break;
+                }
+            }
+
+            // Se non trova il titolo per testo, usa la scansione per blocchi di Col S = "1" -> "8"
+            if (titleRow === -1) {
+                const edCandidates = [];
+                for (let r = 0; r < rows.length - 1; r++) {
+                    if (cellVal(rows, r, 18) === "1" && cellVal(rows, r + 1, 18) === "8") {
+                        edCandidates.push(r);
+                    }
+                }
+                if (edCandidates[blockIndex] !== undefined) {
+                    const edRow = edCandidates[blockIndex];
+                    titleRow = Math.max(0, edRow - 1);
+                } else {
+                    titleRow = meta.defaultTitleIdx;
+                }
+            }
+
+            // 2. Trova edStartRow (la riga dove Colonna S [indice 18] è "1" e la riga successiva è "8")
+            let edStartRow = titleRow + 1;
+            for (let r = Math.max(0, titleRow - 1); r <= Math.min(rows.length - 2, titleRow + 4); r++) {
+                if (cellVal(rows, r, 18) === "1" && cellVal(rows, r + 1, 18) === "8") {
+                    edStartRow = r;
+                    break;
+                }
+            }
+
+            // 3. Trova athletesStartRow (la riga dove inizia il #1 del Girone / Classifica Gironi / Classifica Finale)
+            // Nel foglio Pub standard è edStartRow + 1 (es. Riga 3 su Excel -> indice 2)
+            let athletesStartRow = edStartRow + 1;
+            for (let r = titleRow; r <= Math.min(rows.length - 2, titleRow + 5); r++) {
+                const cA  = cellVal(rows, r, 0);
+                const cQ  = cellVal(rows, r, 16);
+                const cAA = cellVal(rows, r, 26);
+                const nextCA  = cellVal(rows, r + 1, 0);
+                const nextCQ  = cellVal(rows, r + 1, 16);
+                const nextCAA = cellVal(rows, r + 1, 26);
+
+                if ((cA === "1" && nextCA === "2") || (cQ === "1" && nextCQ === "2") || (cAA === "1" && nextCAA === "2")) {
+                    athletesStartRow = r;
+                    break;
+                }
+            }
+
+            return { titleRow, edStartRow, athletesStartRow };
+        }
+
+        function openTabelloneModal() {
+            document.getElementById('tabellone-modal').classList.remove('hidden');
+            loadTabelloneData(true);
+            if (tabelloneAutoRefreshTimer) clearInterval(tabelloneAutoRefreshTimer);
+            tabelloneAutoRefreshTimer = setInterval(() => loadTabelloneData(false), 15000);
+        }
+
+        function closeTabelloneModal() {
+            document.getElementById('tabellone-modal').classList.add('hidden');
+            if (tabelloneAutoRefreshTimer) {
+                clearInterval(tabelloneAutoRefreshTimer);
+                tabelloneAutoRefreshTimer = null;
+            }
+        }
+
+        function setTabelloneView(view) {
+            currentTabelloneView = view;
+            const views = ['all', 'gironi', 'dirette', 'rosso', 'blu', 'giallo', 'verde', 'grigio', 'ed32'];
+            views.forEach(v => {
+                const btn = document.getElementById(`tab-view-${v}`);
+                if (btn) {
+                    if (v === view) btn.classList.add('active');
+                    else btn.classList.remove('active');
+                }
+            });
+
+            if (view === 'ed32' && ed32RowsCache.length === 0) {
+                loadTabelloneData(true);
+            } else {
+                renderTabelloneContent();
+            }
+        }
+
+        // Scarica il CSV preservando le righe vuote (prima prova /export?format=csv&gid=1631445181, poi fallback gviz headers=0)
+        async function fetchSheetCSVPreservingRows(targetSheetId, sheetName, gid = null) {
+            if (gid) {
+                try {
+                    const exportUrl = `https://docs.google.com/spreadsheets/d/${targetSheetId}/export?format=csv&gid=${gid}&t=${Date.now()}`;
+                    const res = await fetch(exportUrl);
+                    if (res.ok) {
+                        const txt = await res.text();
+                        if (txt && !txt.trim().startsWith("<!DOCTYPE")) {
+                            return parseCSV(txt);
+                        }
+                    }
+                } catch (e) {}
+            }
+            const gvizUrl = `https://docs.google.com/spreadsheets/d/${targetSheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}&headers=0&t=${Date.now()}`;
+            const res = await fetch(gvizUrl);
+            const txt = await res.text();
+            return parseCSV(txt);
+        }
+
+        async function loadTabelloneData(showFeedback = false) {
+            const targetSheetId = sheetId || "179tfN2PDrSTYtiAdVeFQKXF9OtwZj4k4EbQ1dWXH5Yg";
+            const spinIcon = document.getElementById('tabellone-spin-icon');
+            if (spinIcon) spinIcon.classList.add('fa-spin');
+
+            try {
+                if (currentTabelloneView === 'ed32') {
+                    ed32RowsCache = await fetchSheetCSVPreservingRows(targetSheetId, 'ED32', null);
+                    updateTimestamp();
+                    renderTabelloneContent();
+                    if (showFeedback) showToast("Diretta a 32 aggiornata!", "success");
+                } else {
+                    // gid=1631445181 è il GID del foglio Pub visibile dal tuo screenshot!
+                    pubRowsCache = await fetchSheetCSVPreservingRows(targetSheetId, 'Pub', '1631445181');
+                    updateTimestamp();
+                    renderTabelloneContent();
+                    if (showFeedback) showToast("Tabellone aggiornato!", "success");
+                }
+            } catch (e) {
+                showToast("Errore lettura dati Tabellone da Google.", "error");
+            } finally {
+                if (spinIcon) spinIcon.classList.remove('fa-spin');
+            }
+        }
+
+        function updateTimestamp() {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: '2-digit' });
+            const timeStr = now.toLocaleTimeString('it-IT');
+            const el = document.getElementById('tabellone-last-update');
+            if (el) el.innerText = `Ultimo aggiornamento - ${dateStr} - ${timeStr}`;
+        }
+
+        function renderTabelloneContent() {
+            const container = document.getElementById('tabellone-content');
+            if (!container) return;
+
+            if (currentTabelloneView === 'ed32') {
+                container.innerHTML = renderED32WebFence(ed32RowsCache);
+                return;
+            }
+
+            if (!pubRowsCache || pubRowsCache.length === 0) {
+                container.innerHTML = '<div class="text-center py-16 text-neutral-500">Nessun dato disponibile dal foglio Pub.</div>';
+                return;
+            }
+
+            let selectedBlocks = GIRONI_META.map((m, idx) => ({ meta: m, idx }));
+
+            if (['rosso', 'blu', 'giallo', 'verde', 'grigio'].includes(currentTabelloneView)) {
+                selectedBlocks = selectedBlocks.filter(item => item.meta.key === currentTabelloneView);
+            } else {
+                // Nella vista Tutti mostra i primi 4 gironi + il Grigio se contiene atleti
+                const grigioAnchors = locateBlockAnchors(pubRowsCache, GIRONI_META[4], 4);
+                const grigioHasFencers = cellVal(pubRowsCache, grigioAnchors.athletesStartRow, 1) !== "";
+                if (!grigioHasFencers) {
+                    selectedBlocks = selectedBlocks.slice(0, 4);
+                }
+            }
+
+            const showPool = currentTabelloneView !== 'dirette';
+            const showDiretta = currentTabelloneView !== 'gironi';
+
+            container.innerHTML = selectedBlocks
+                .map(item => renderWebFenceGironeCard(pubRowsCache, item.meta, item.idx, showPool, showDiretta))
+                .join('');
+        }
+
+        // Helper per creare il singolo box incontro in stile 4Fence / WebFence Granata
+        function buildMatchHTML(seedA, nameA, scoreA, seedB, nameB, scoreB) {
+            const cleanNameA = (nameA && nameA !== "-") ? nameA : "";
+            const cleanNameB = (nameB && nameB !== "-") ? nameB : "";
+            const numA = parseFloat(String(scoreA).replace(',', '.'));
+            const numB = parseFloat(String(scoreB).replace(',', '.'));
+            const hasScores = !isNaN(numA) && !isNaN(numB) && (numA > 0 || numB > 0);
+            const winA = hasScores && numA > numB;
+            const winB = hasScores && numB > numA;
+
+            const dispScoreA = (cleanNameA !== "" || (scoreA !== "" && scoreA !== "0")) ? scoreA : "";
+            const dispScoreB = (cleanNameB !== "" || (scoreB !== "" && scoreB !== "0")) ? scoreB : "";
+
+            return `
+                <div class="wf-bracket-match">
+                    <div class="wf-fencer-slot top-slot">
+                        ${seedA !== null ? `<div class="wf-seed-box">${seedA}</div>` : ''}
+                        <div class="wf-name-box ${winA ? 'winner-text' : ''}">${cleanNameA}</div>
+                        <div class="wf-score-pill ${winA ? 'winner' : ''}">${dispScoreA}</div>
+                    </div>
+                    <div class="wf-fencer-slot bot-slot">
+                        ${seedB !== null ? `<div class="wf-seed-box">${seedB}</div>` : ''}
+                        <div class="wf-name-box ${winB ? 'winner-text' : ''}">${cleanNameB}</div>
+                        <div class="wf-score-pill ${winB ? 'winner' : ''}">${dispScoreB}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Renderizza un blocco Girone + Classifica + Tabellone Diretta usando le ancore indipendenti
+        function renderWebFenceGironeCard(rows, meta, blockIndex, showPool, showDiretta) {
+            const { edStartRow, athletesStartRow } = locateBlockAnchors(rows, meta, blockIndex);
+
+            // 1. GIRONE (8 righe a partire da athletesStartRow: es. Righe Excel 3..10 per il Rosso)
+            const fencers = [];
+            for (let i = 0; i < 8; i++) {
+                const r = athletesStartRow + i;
+                const num = cellVal(rows, r, 0) || String(i + 1);
+                const nome = cellVal(rows, r, 1);
+                const cognome = cellVal(rows, r, 2);
+                const bouts = [];
+                for (let k = 0; k < 8; k++) {
+                    bouts.push(cellVal(rows, r, 3 + k)); // Col D..K -> indici 3..10
+                }
+                const vitt = cellVal(rows, r, 11); // Col L
+                const diff = cellVal(rows, r, 12); // Col M
+                const date = cellVal(rows, r, 13); // Col N
+                const ric  = cellVal(rows, r, 14); // Col O
+                const clas = cellVal(rows, r, 15); // Col P
+
+                fencers.push({
+                    idx: i + 1,
+                    num,
+                    nome,
+                    cognome,
+                    bouts,
+                    vitt,
+                    diff,
+                    date,
+                    ric,
+                    clas,
+                    active: (nome !== "" && nome !== "-")
+                });
+            }
+
+            let maxActiveIdx = 0;
+            fencers.forEach(f => { if (f.active && f.idx > maxActiveIdx) maxActiveIdx = f.idx; });
+            const poolSize = Math.max(maxActiveIdx, 6);
+
+            // 2. CLASSIFICA DOPO I GIRONI (Col Q=16, R=17 sulle 8 righe da athletesStartRow)
+            const classGironi = [];
+            for (let i = 0; i < 8; i++) {
+                const r = athletesStartRow + i;
+                const pos = cellVal(rows, r, 16) || String(i + 1);
+                const ath = cellVal(rows, r, 17);
+                classGironi.push({ pos, ath });
+            }
+
+            // 3. CLASSIFICA FINALE (Col AA=26, AB=27 sulle 8 righe da athletesStartRow)
+            const classFinale = [];
+            for (let i = 0; i < 8; i++) {
+                const r = athletesStartRow + i;
+                const pos = cellVal(rows, r, 26) || String(i + 1);
+                const ath = cellVal(rows, r, 27);
+                classFinale.push({ pos, ath });
+            }
+
+            // 4. ELIMINAZIONE DIRETTA (Ancorata a edStartRow, che nel tuo foglio inizia 1 riga SOPRA athletesStartRow!):
+            // Es. Per Girone Rosso: edStartRow = Riga 2 (indice 1):
+            // - Quarto 1 (1 vs 8): edStartRow + 0 (Riga 2) e edStartRow + 1 (Riga 3)
+            // - Quarto 2 (5 vs 4): edStartRow + 2 (Riga 4) e edStartRow + 3 (Riga 5)
+            // - Quarto 3 (3 vs 6): edStartRow + 5 (Riga 7) e edStartRow + 6 (Riga 8)  <-- NOTA: Riga 6 (edStartRow + 4) nel tuo foglio è la riga grigia divisoria tra metà alta e metà bassa del tabellone!
+            // - Quarto 4 (7 vs 2): edStartRow + 7 (Riga 9) e edStartRow + 8 (Riga 10)
+            // Verifichiamo dinamicamente se c'è la riga divisoria a edStartRow + 4 (come mostrato nello screenshot: Riga 6 è vuota in Col S e Riga 7 ha il seed "3"):
+            const hasMiddleGap = (cellVal(rows, edStartRow + 5, 18) === "3" || cellVal(rows, edStartRow + 4, 18) === "");
+            const q3Offset = hasMiddleGap ? 5 : 4;
+            const q4Offset = hasMiddleGap ? 7 : 6;
+
+            const qfMatches = [
+                {
+                    sA: cellVal(rows, edStartRow + 0, 18) || '1', nA: cellVal(rows, edStartRow + 0, 19), pA: cellVal(rows, edStartRow + 0, 20),
+                    sB: cellVal(rows, edStartRow + 1, 18) || '8', nB: cellVal(rows, edStartRow + 1, 19), pB: cellVal(rows, edStartRow + 1, 20)
+                },
+                {
+                    sA: cellVal(rows, edStartRow + 2, 18) || '5', nA: cellVal(rows, edStartRow + 2, 19), pA: cellVal(rows, edStartRow + 2, 20),
+                    sB: cellVal(rows, edStartRow + 3, 18) || '4', nB: cellVal(rows, edStartRow + 3, 19), pB: cellVal(rows, edStartRow + 3, 20)
+                },
+                {
+                    sA: cellVal(rows, edStartRow + q3Offset, 18)     || '3', nA: cellVal(rows, edStartRow + q3Offset, 19),     pA: cellVal(rows, edStartRow + q3Offset, 20),
+                    sB: cellVal(rows, edStartRow + q3Offset + 1, 18) || '6', nB: cellVal(rows, edStartRow + q3Offset + 1, 19), pB: cellVal(rows, edStartRow + q3Offset + 1, 20)
+                },
+                {
+                    sA: cellVal(rows, edStartRow + q4Offset, 18)     || '7', nA: cellVal(rows, edStartRow + q4Offset, 19),     pA: cellVal(rows, edStartRow + q4Offset, 20),
+                    sB: cellVal(rows, edStartRow + q4Offset + 1, 18) || '2', nB: cellVal(rows, edStartRow + q4Offset + 1, 19), pB: cellVal(rows, edStartRow + q4Offset + 1, 20)
+                }
+            ];
+
+            // Semifinali (Col V=21, W=22):
+            // Dallo screenshot:
+            // - Semifinale 1: Riga 3 (edStartRow + 1) e Riga 5 (edStartRow + 3)
+            // - Semifinale 2: Riga 7 (edStartRow + q3Offset) e Riga 9 (edStartRow + q4Offset)
+            const sfMatches = [
+                {
+                    nA: cellVal(rows, edStartRow + 1, 21), pA: cellVal(rows, edStartRow + 1, 22),
+                    nB: cellVal(rows, edStartRow + 3, 21), pB: cellVal(rows, edStartRow + 3, 22)
+                },
+                {
+                    nA: cellVal(rows, edStartRow + q3Offset, 21), pA: cellVal(rows, edStartRow + q3Offset, 22),
+                    nB: cellVal(rows, edStartRow + q4Offset, 21), pB: cellVal(rows, edStartRow + q4Offset, 22)
+                }
+            ];
+
+            // Finale (Col X=23, Y=24):
+            // Dallo screenshot:
+            // - Finalista 1: Riga 4 (edStartRow + 2)
+            // - Finalista 2: Riga 8 (edStartRow + q3Offset + 1)
+            const finMatch = {
+                nA: cellVal(rows, edStartRow + 2, 23),            pA: cellVal(rows, edStartRow + 2, 24),
+                nB: cellVal(rows, edStartRow + q3Offset + 1, 23), pB: cellVal(rows, edStartRow + q3Offset + 1, 24)
+            };
+
+            // Vincitore (Col Z=25):
+            // Dallo screenshot: Riga 6 (edStartRow + 4)
+            const winnerName = cellVal(rows, edStartRow + 4, 25);
+
+            // Costruzione HTML Card
+            let html = `<div class="bg-white rounded-lg shadow-md border border-neutral-300 overflow-hidden">`;
+
+            html += `
+                <div class="wf-pool-header">
+                    <div>
+                        Girone <strong>${meta.num}</strong> &nbsp;&nbsp; Pedana <strong>${meta.pedana}</strong>
+                    </div>
+                    <div class="text-xs opacity-90 font-sans font-semibold">
+                        ${maxActiveIdx > 0 ? `${maxActiveIdx} Atleti in gara` : 'In attesa atleti'}
+                    </div>
+                </div>
+            `;
+
+            // Sezione 1: Tabella Girone
+            if (showPool) {
+                html += `<div class="overflow-x-auto">`;
+                html += `<table class="wf-pool-table">`;
+                html += `<thead><tr class="wf-pool-subhdr">`;
+                html += `<th class="text-center w-8">#</th>`;
+                html += `<th class="text-left">ATLETA</th>`;
+                html += `<th class="text-center w-20">CAT/SOC</th>`;
+                for (let c = 1; c <= poolSize; c++) {
+                    html += `<th class="text-center w-8">${c}</th>`;
+                }
+                html += `<th class="text-center w-14" title="Vittorie / Assalti">V/M</th>`;
+                html += `<th class="text-center w-12" title="Differenza">DIFF</th>`;
+                html += `<th class="text-center w-12" title="Stoccate Date">DATE</th>`;
+                html += `<th class="text-center w-12" title="Stoccate Ricevute">RIC</th>`;
+                html += `<th class="text-center w-14">CLASS</th>`;
+                html += `</tr></thead><tbody>`;
+
+                for (let i = 0; i < poolSize; i++) {
+                    const f = fencers[i];
+                    const rowClass = (i % 2 === 0) ? 'wf-pool-row-even' : 'wf-pool-row-odd';
+                    html += `<tr class="${rowClass}">`;
+                    html += `<td class="text-center font-bold text-neutral-500">${f.idx}</td>`;
+                    html += `<td class="font-bold text-neutral-900">${f.active ? f.nome : '<span class="text-neutral-400">-</span>'}</td>`;
+                    html += `<td class="text-center text-neutral-600">${f.cognome}</td>`;
+
+                    for (let c = 1; c <= poolSize; c++) {
+                        if (c === f.idx) {
+                            html += `<td class="wf-pool-diag"></td>`;
+                        } else {
+                            const bVal = f.bouts[c - 1] || "";
+                            const isWin = bVal.toUpperCase().startsWith('V');
+                            html += `<td class="wf-bout-cell ${isWin ? 'wf-bout-win' : ''}">${bVal}</td>`;
+                        }
+                    }
+
+                    html += `<td class="text-center text-neutral-700">${f.vitt}</td>`;
+                    html += `<td class="text-center font-semibold text-neutral-800">${f.diff}</td>`;
+                    html += `<td class="text-center text-neutral-700">${f.date}</td>`;
+                    html += `<td class="text-center text-neutral-700">${f.ric}</td>`;
+                    html += `<td class="text-center font-extrabold text-[#7a1224]">${f.clas}</td>`;
+                    html += `</tr>`;
+                }
+
+                html += `</tbody></table></div>`;
+            }
+
+            // Sezione 2: Eliminazione Diretta + Classifiche
+            if (showDiretta) {
+                html += `
+                <div class="p-4 bg-[#f8f9fa] border-t border-neutral-200 overflow-x-auto">
+                    <div class="min-w-[920px] grid grid-cols-12 gap-4 items-stretch">
+                        
+                        <!-- Colonna Classifica dopo i Gironi (2 col) -->
+                        <div class="col-span-2 bg-white rounded border border-neutral-300 overflow-hidden flex flex-col">
+                            <div class="bg-[#7a1224] text-white text-[11px] font-bold px-2.5 py-1.5 text-center uppercase tracking-wider">
+                                Class. Gironi
+                            </div>
+                            <div class="divide-y divide-neutral-200 flex-1 font-mono text-xs">
+                                ${classGironi.map((cg, idx) => `
+                                    <div class="flex items-center px-2 py-1.5 ${idx % 2 === 0 ? 'bg-white' : 'bg-neutral-100'}">
+                                        <span class="w-5 font-bold text-neutral-500">${cg.pos}</span>
+                                        <span class="font-bold text-neutral-800 truncate">${(cg.ath && cg.ath !== '-') ? cg.ath : '-'}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Albero Eliminazione Diretta: Quarti -> Semifinali -> Finale -> Vincitore (8 col) -->
+                        <div class="col-span-8 bg-white rounded border border-neutral-300 p-3 flex flex-col">
+                            <div class="grid grid-cols-4 text-center text-xs font-bold text-neutral-500 mb-3 border-b border-neutral-200 pb-1.5 font-mono">
+                                <div>Quarti</div>
+                                <div>Semifinali</div>
+                                <div>Finale</div>
+                                <div>Vincitore</div>
+                            </div>
+
+                            <div class="grid grid-cols-4 gap-3 flex-1 items-center">
+                                <!-- QUARTI -->
+                                <div class="flex flex-col justify-between h-full space-y-3">
+                                    ${qfMatches.map(m => buildMatchHTML(m.sA, m.nA, m.pA, m.sB, m.nB, m.pB)).join('')}
+                                </div>
+
+                                <!-- SEMIFINALI -->
+                                <div class="flex flex-col justify-around h-full py-4">
+                                    ${sfMatches.map(m => buildMatchHTML(null, m.nA, m.pA, null, m.nB, m.pB)).join('')}
+                                </div>
+
+                                <!-- FINALE -->
+                                <div class="flex flex-col justify-center h-full">
+                                    ${buildMatchHTML(null, finMatch.nA, finMatch.pA, null, finMatch.nB, finMatch.pB)}
+                                </div>
+
+                                <!-- VINCITORE -->
+                                <div class="flex flex-col justify-center items-center h-full">
+                                    <div class="w-full rounded-lg border-2 border-[#7a1224] bg-[#f9ebed] p-3 text-center shadow-sm">
+                                        <div class="text-[10px] font-bold uppercase tracking-widest text-[#7a1224] mb-1">
+                                            🏆 Vincitore
+                                        </div>
+                                        <div class="font-mono font-extrabold text-sm text-neutral-900 truncate">
+                                            ${(winnerName && winnerName !== '-') ? winnerName : 'In corso'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Colonna Classifica Finale (2 col) -->
+                        <div class="col-span-2 bg-white rounded border border-neutral-300 overflow-hidden flex flex-col">
+                            <div class="bg-[#7a1224] text-white text-[11px] font-bold px-2.5 py-1.5 text-center uppercase tracking-wider">
+                                Class. Finale
+                            </div>
+                            <div class="divide-y divide-neutral-200 flex-1 font-mono text-xs">
+                                ${classFinale.map((cf, idx) => `
+                                    <div class="flex items-center px-2 py-1.5 ${idx === 0 ? 'bg-[#f9ebed]' : (idx % 2 === 0 ? 'bg-white' : 'bg-neutral-100')}">
+                                        <span class="w-5 font-extrabold ${idx < 3 ? 'text-[#7a1224]' : 'text-neutral-500'}">${cf.pos}</span>
+                                        <span class="font-bold text-neutral-900 truncate">${(cf.ath && cf.ath !== '-') ? cf.ath : '-'}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                    </div>
+                </div>`;
+            }
+
+            html += `</div>`;
+            return html;
+        }
+
+        // Renderizzatore dedicato per il Tabellone Diretta a 32 (Foglio ED32 / Incontri) in stile WebFence Granata
+        function renderED32WebFence(rows) {
+            if (!rows || rows.length === 0) {
+                return `<div class="text-center py-16 text-neutral-500 font-semibold">Nessun dato trovato nel foglio ED32. Premi "Aggiorna".</div>`;
+            }
+
+            let startRow = 0;
+            for (let r = 0; r < Math.min(rows.length - 1, 10); r++) {
+                if (cellVal(rows, r, 14) === "1" && cellVal(rows, r + 1, 14) === "32") {
+                    startRow = r;
+                    break;
+                }
+            }
+
+            const r32Matches = [];
+            for (let m = 0; m < 16; m++) {
+                const rA = startRow + m * 2;
+                const rB = startRow + m * 2 + 1;
+                r32Matches.push({
+                    sA: cellVal(rows, rA, 14), nA: cellVal(rows, rA, 15), pA: cellVal(rows, rA, 16),
+                    sB: cellVal(rows, rB, 14), nB: cellVal(rows, rB, 15), pB: cellVal(rows, rB, 16)
+                });
+            }
+
+            const r16Matches = [];
+            for (let m = 0; m < 8; m++) {
+                const rA = startRow + m * 4;
+                const rB = startRow + m * 4 + 2;
+                r16Matches.push({
+                    sA: cellVal(rows, rA, 17), nA: cellVal(rows, rA, 18), pA: cellVal(rows, rA, 19),
+                    sB: cellVal(rows, rB, 17), nB: cellVal(rows, rB, 18), pB: cellVal(rows, rB, 19)
+                });
+            }
+
+            const qfMatches = [];
+            for (let m = 0; m < 4; m++) {
+                const rA = startRow + m * 8 + 1;
+                const rB = startRow + m * 8 + 5;
+                qfMatches.push({
+                    nA: cellVal(rows, rA, 20), pA: cellVal(rows, rA, 21),
+                    nB: cellVal(rows, rB, 20), pB: cellVal(rows, rB, 21)
+                });
+            }
+
+            const sfMatches = [];
+            for (let m = 0; m < 2; m++) {
+                const rA = startRow + m * 16 + 3;
+                const rB = startRow + m * 16 + 11;
+                sfMatches.push({
+                    nA: cellVal(rows, rA, 22), pA: cellVal(rows, rA, 23),
+                    nB: cellVal(rows, rB, 22), pB: cellVal(rows, rB, 23)
+                });
+            }
+
+            const finMatch = {
+                nA: cellVal(rows, startRow + 7, 24),  pA: cellVal(rows, startRow + 7, 25),
+                nB: cellVal(rows, startRow + 23, 24), pB: cellVal(rows, startRow + 23, 25)
+            };
+
+            const winner32 = cellVal(rows, startRow + 15, 26);
+
+            return `
+                <div class="bg-white rounded-lg shadow-md border border-neutral-300 overflow-hidden">
+                    <div class="wf-pool-header">
+                        <div>TABELLONE ELIMINAZIONE DIRETTA DA 32</div>
+                        <div class="text-xs opacity-90 font-sans font-semibold">Sola Lettura • Stile WebFence Granata</div>
+                    </div>
+                    <div class="p-4 overflow-x-auto bg-[#f8f9fa]">
+                        <div class="min-w-[1250px]">
+                            <div class="grid grid-cols-6 text-center text-xs font-bold text-neutral-600 mb-4 border-b border-neutral-300 pb-2 font-mono">
+                                <div>Tabellone dei 32</div>
+                                <div>Tabellone dei 16</div>
+                                <div>Quarti</div>
+                                <div>Semifinali</div>
+                                <div>Finale</div>
+                                <div>Vincitore</div>
+                            </div>
+                            <div class="grid grid-cols-6 gap-4 items-stretch" style="min-height: 980px;">
+                                <div class="flex flex-col justify-between space-y-2">
+                                    ${r32Matches.map(m => buildMatchHTML(m.sA, m.nA, m.pA, m.sB, m.nB, m.pB)).join('')}
+                                </div>
+                                <div class="flex flex-col justify-around py-4">
+                                    ${r16Matches.map(m => buildMatchHTML(m.sA || null, m.nA, m.pA, m.sB || null, m.nB, m.pB)).join('')}
+                                </div>
+                                <div class="flex flex-col justify-around py-10">
+                                    ${qfMatches.map(m => buildMatchHTML(null, m.nA, m.pA, null, m.nB, m.pB)).join('')}
+                                </div>
+                                <div class="flex flex-col justify-around py-24">
+                                    ${sfMatches.map(m => buildMatchHTML(null, m.nA, m.pA, null, m.nB, m.pB)).join('')}
+                                </div>
+                                <div class="flex flex-col justify-center">
+                                    ${buildMatchHTML(null, finMatch.nA, finMatch.pA, null, finMatch.nB, finMatch.pB)}
+                                </div>
+                                <div class="flex flex-col justify-center items-center">
+                                    <div class="w-full rounded-lg border-2 border-[#7a1224] bg-[#f9ebed] p-4 text-center shadow">
+                                        <div class="text-xs font-bold uppercase tracking-widest text-[#7a1224] mb-1">🏆 Vincitore</div>
+                                        <div class="font-mono font-extrabold text-base text-neutral-900 truncate">
+                                            ${(winner32 && winner32 !== '-') ? winner32 : 'In corso'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeTabelloneModal();
+                closeModal();
+                closeConfirmModal();
+            }
+        });
+
+        renderTable();
+    </script>
+</body>
+</html>
