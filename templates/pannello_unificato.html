@@ -296,7 +296,7 @@
 
         <!-- Formula di Gara -->
         <div class="bg-slate-800 p-3 rounded-lg mb-3 border border-slate-600 shadow-md flex-none">
-            <h2 class="text-sm font-bold text-blue-400 mb-2 border-b border-slate-600 pb-1">âš™ï¸ Formula di Gara</h2>
+            <h2 class="text-sm font-bold text-blue-400 mb-2 border-b border-slate-600 pb-1">⚙️ Formula di Gara</h2>
             <div class="grid grid-cols-3 gap-3">
                 <div>
                     <label class="block text-[11px] font-bold text-slate-400 mb-1">Squadre (O2)</label>
@@ -360,7 +360,7 @@
                     <i class="fa-solid fa-sitemap"></i> Tabellone & Dirette
                 </button>
                 <button onclick="window.location.href='/settings'" class="bg-slate-800 hover:bg-slate-700 border border-slate-600 px-3 py-2 rounded-lg font-bold shadow transition text-sm" title="Impostazioni">
-                    âš™ï¸
+                    ⚙️
                 </button>
                 <button onclick="window.location.href='/telecomando'" class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg font-bold shadow transition text-sm">
                     Indietro
@@ -382,7 +382,7 @@
         <!-- Pulsante Sincronizza con Google -->
         <div class="mb-3 flex-none">
             <button onclick="sincronizzaTutto()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg w-full shadow border border-indigo-400 text-sm">
-                ðŸ”„ Sincronizza con Google
+                🔄 Sincronizza con Google
             </button>
         </div>
 
@@ -421,31 +421,31 @@
             <!-- Barra Selettori Vista -->
             <div class="flex flex-wrap items-center gap-1.5">
                 <button id="tab-view-all" onclick="setTabelloneView('all')" class="wf-filter-btn active">
-                    ðŸ“‹ Gironi + Dirette (Tutti)
+                    📋 Gironi + Dirette (Tutti)
                 </button>
                 <button id="tab-view-gironi" onclick="setTabelloneView('gironi')" class="wf-filter-btn">
-                    ðŸ¤º Solo Gironi
+                    🤺 Solo Gironi
                 </button>
                 <button id="tab-view-dirette" onclick="setTabelloneView('dirette')" class="wf-filter-btn">
-                    âš”ï¸ Solo Dirette Gironi
+                    ⚔️ Solo Dirette Gironi
                 </button>
                 <button id="tab-view-rosso" onclick="setTabelloneView('rosso')" class="wf-filter-btn">
-                    ðŸ”´ Gir. Rosso
+                    🔴 Gir. Rosso
                 </button>
                 <button id="tab-view-blu" onclick="setTabelloneView('blu')" class="wf-filter-btn">
-                    ðŸ”µ Gir. Blu
+                    🔵 Gir. Blu
                 </button>
                 <button id="tab-view-giallo" onclick="setTabelloneView('giallo')" class="wf-filter-btn">
-                    ðŸŸ¡ Gir. Giallo
+                    🟡 Gir. Giallo
                 </button>
                 <button id="tab-view-verde" onclick="setTabelloneView('verde')" class="wf-filter-btn">
-                    ðŸŸ¢ Gir. Verde
+                    🟢 Gir. Verde
                 </button>
                 <button id="tab-view-grigio" onclick="setTabelloneView('grigio')" class="wf-filter-btn">
-                    âšª Gir. Grigio
+                    ⚪ Gir. Grigio
                 </button>
                 <button id="tab-view-ed32" onclick="setTabelloneView('ed32')" class="wf-filter-btn">
-                    ðŸ† Diretta a 32
+                    🏆 Diretta a 32
                 </button>
             </div>
 
@@ -885,8 +885,8 @@
 
         function richiediConfermaReset() {
             openConfirmModal(
-                "âš ï¸ Esegui Reset Dati Ora",
-                "Sei sicuro di voler azzerare TUTTI i dati sul foglio Google? Questa azione attiverÃ  la Macro di Reset e non puÃ² essere annullata.",
+                "⚠️ Esegui Reset Dati Ora",
+                "Sei sicuro di voler azzerare TUTTI i dati sul foglio Google? Questa azione attiverà la Macro di Reset e non può essere annullata.",
                 eseguiResetDati
             );
         }
@@ -899,7 +899,7 @@
 
             const btn = document.getElementById('btn-reset-dati');
             const oldHtml = btn.innerHTML;
-            btn.innerHTML = "â³ Reset in corso, attendere...";
+            btn.innerHTML = "⏳ Reset in corso, attendere...";
             btn.disabled = true;
             btn.classList.add('opacity-75');
 
@@ -923,7 +923,7 @@
                     });
             } else {
                 socket.emit('reset_all');
-                showToast("Reset locale inviato (Configura URL Script in âš™ï¸ per il foglio Google).", "warning");
+                showToast("Reset locale inviato (Configura URL Script in ⚙️ per il foglio Google).", "warning");
                 btn.innerHTML = oldHtml;
                 btn.disabled = false;
                 btn.classList.remove('opacity-75');
@@ -938,7 +938,7 @@
         // - L'Eliminazione Diretta (Colonne S..Z) inizia SEMPRE 1 riga SOPRA gli atleti del girone:
         //   Es. Girone Rosso:
         //     Riga 1 (idx 0): Titolo "Girone Rosso" | "CLASSIFICA DOPO I GIRONI" | "ELIMINAZIONE DIRETTA"
-        //     Riga 2 (idx 1): Header "Nomi | Cognome | 1..8"  <-- Qui in Col S..U c'Ã¨ giÃ  il 1Â° quarto (1 ELISA F)!
+        //     Riga 2 (idx 1): Header "Nomi | Cognome | 1..8"  <-- Qui in Col S..U c'è già il 1° quarto (1 ELISA F)!
         //     Riga 3..10 (idx 2..9): Atleti 1..8 del Girone (Col A..P), Class. Gironi 1..8 (Col Q..R), Class. Finale 1..8 (Col AA..AB)
         //     Riga 2..9  (idx 1..8): Quarti (Col S..U), Semifinali su idx 2,4,6,8 (Col V..W), Finale su idx 3,7 (Col X..Y), Vincitore su idx 5 (Col Z)
         const GIRONI_META = [
@@ -984,7 +984,7 @@
                 }
             }
 
-            // 2. Trova edStartRow (la riga dove Colonna S [indice 18] Ã¨ "1" e la riga successiva Ã¨ "8")
+            // 2. Trova edStartRow (la riga dove Colonna S [indice 18] è "1" e la riga successiva è "8")
             let edStartRow = titleRow + 1;
             for (let r = Math.max(0, titleRow - 1); r <= Math.min(rows.length - 2, titleRow + 4); r++) {
                 if (cellVal(rows, r, 18) === "1" && cellVal(rows, r + 1, 18) === "8") {
@@ -994,7 +994,7 @@
             }
 
             // 3. Trova athletesStartRow (la riga dove inizia il #1 del Girone / Classifica Gironi / Classifica Finale)
-            // Nel foglio Pub standard Ã¨ edStartRow + 1 (es. Riga 3 su Excel -> indice 2)
+            // Nel foglio Pub standard è edStartRow + 1 (es. Riga 3 su Excel -> indice 2)
             let athletesStartRow = edStartRow + 1;
             for (let r = titleRow; r <= Math.min(rows.length - 2, titleRow + 5); r++) {
                 const cA  = cellVal(rows, r, 0);
@@ -1078,7 +1078,7 @@
                     renderTabelloneContent();
                     if (showFeedback) showToast("Diretta a 32 aggiornata!", "success");
                 } else {
-                    // gid=1631445181 Ã¨ il GID del foglio Pub visibile dal tuo screenshot!
+                    // gid=1631445181 è il GID del foglio Pub visibile dal tuo screenshot!
                     pubRowsCache = await fetchSheetCSVPreservingRows(targetSheetId, 'Pub', '1631445181');
                     updateTimestamp();
                     renderTabelloneContent();
@@ -1225,9 +1225,9 @@
             // Es. Per Girone Rosso: edStartRow = Riga 2 (indice 1):
             // - Quarto 1 (1 vs 8): edStartRow + 0 (Riga 2) e edStartRow + 1 (Riga 3)
             // - Quarto 2 (5 vs 4): edStartRow + 2 (Riga 4) e edStartRow + 3 (Riga 5)
-            // - Quarto 3 (3 vs 6): edStartRow + 5 (Riga 7) e edStartRow + 6 (Riga 8)  <-- NOTA: Riga 6 (edStartRow + 4) nel tuo foglio Ã¨ la riga grigia divisoria tra metÃ  alta e metÃ  bassa del tabellone!
+            // - Quarto 3 (3 vs 6): edStartRow + 5 (Riga 7) e edStartRow + 6 (Riga 8)  <-- NOTA: Riga 6 (edStartRow + 4) nel tuo foglio è la riga grigia divisoria tra metà alta e metà bassa del tabellone!
             // - Quarto 4 (7 vs 2): edStartRow + 7 (Riga 9) e edStartRow + 8 (Riga 10)
-            // Verifichiamo dinamicamente se c'Ã¨ la riga divisoria a edStartRow + 4 (come mostrato nello screenshot: Riga 6 Ã¨ vuota in Col S e Riga 7 ha il seed "3"):
+            // Verifichiamo dinamicamente se c'è la riga divisoria a edStartRow + 4 (come mostrato nello screenshot: Riga 6 è vuota in Col S e Riga 7 ha il seed "3"):
             const hasMiddleGap = (cellVal(rows, edStartRow + 5, 18) === "3" || cellVal(rows, edStartRow + 4, 18) === "");
             const q3Offset = hasMiddleGap ? 5 : 4;
             const q4Offset = hasMiddleGap ? 7 : 6;
@@ -1390,7 +1390,7 @@
                                 <div class="flex flex-col justify-center items-center h-full">
                                     <div class="w-full rounded-lg border-2 border-[#7a1224] bg-[#f9ebed] p-3 text-center shadow-sm">
                                         <div class="text-[10px] font-bold uppercase tracking-widest text-[#7a1224] mb-1">
-                                            ðŸ† Vincitore
+                                            🏆 Vincitore
                                         </div>
                                         <div class="font-mono font-extrabold text-sm text-neutral-900 truncate">
                                             ${(winnerName && winnerName !== '-') ? winnerName : 'In corso'}
@@ -1488,7 +1488,7 @@
                 <div class="bg-white rounded-lg shadow-md border border-neutral-300 overflow-hidden">
                     <div class="wf-pool-header">
                         <div>TABELLONE ELIMINAZIONE DIRETTA DA 32</div>
-                        <div class="text-xs opacity-90 font-sans font-semibold">Sola Lettura â€¢ Stile WebFence Granata</div>
+                        <div class="text-xs opacity-90 font-sans font-semibold">Sola Lettura • Stile WebFence Granata</div>
                     </div>
                     <div class="p-4 overflow-x-auto bg-[#f8f9fa]">
                         <div class="min-w-[1250px]">
@@ -1518,7 +1518,7 @@
                                 </div>
                                 <div class="flex flex-col justify-center items-center">
                                     <div class="w-full rounded-lg border-2 border-[#7a1224] bg-[#f9ebed] p-4 text-center shadow">
-                                        <div class="text-xs font-bold uppercase tracking-widest text-[#7a1224] mb-1">ðŸ† Vincitore</div>
+                                        <div class="text-xs font-bold uppercase tracking-widest text-[#7a1224] mb-1">🏆 Vincitore</div>
                                         <div class="font-mono font-extrabold text-base text-neutral-900 truncate">
                                             ${(winner32 && winner32 !== '-') ? winner32 : 'In corso'}
                                         </div>
