@@ -1930,3 +1930,144 @@
             html += `</div>`; // Fine card girone
             return html;
         }
+
+        // Renderizzatore dedicato per il Tabellone Diretta a 32 (Foglio ED32 / Incontri) in stile WebFence Granata
+        function renderED32WebFence(rows) {
+            const stats32 = getGironeBoutsStats('32');
+            const sidebar32Html = buildExternalBoutsSidebar('32', '32', stats32);
+
+            if (!rows || rows.length === 0) {
+                return `
+                    <div class="bg-white rounded-lg shadow-md border border-neutral-300 overflow-hidden">
+                        <div class="wf-pool-header">
+                            <div>TABELLONE ELIMINAZIONE DIRETTA DA 32</div>
+                            <div class="text-xs opacity-90 font-sans font-semibold">Stile WebFence Granata</div>
+                        </div>
+                        <div class="p-6 text-center text-neutral-500 font-semibold">Nessun dato trovato nel foglio ED32. Premi "Aggiorna".</div>
+                    </div>
+                `;
+            }
+
+            let startRow = 0;
+            for (let r = 0; r < Math.min(rows.length - 1, 10); r++) {
+                if (cellVal(rows, r, 14) === "1" && cellVal(rows, r + 1, 14) === "32") {
+                    startRow = r;
+                    break;
+                }
+            }
+
+            const r32Matches = [];
+            for (let m = 0; m < 16; m++) {
+                const rA = startRow + m * 2;
+                const rB = startRow + m * 2 + 1;
+                r32Matches.push({
+                    sA: cellVal(rows, rA, 14), nA: cellVal(rows, rA, 15), pA: cellVal(rows, rA, 16),
+                    sB: cellVal(rows, rB, 14), nB: cellVal(rows, rB, 15), pB: cellVal(rows, rB, 16)
+                });
+            }
+
+            const r16Matches = [];
+            for (let m = 0; m < 8; m++) {
+                const rA = startRow + m * 4;
+                const rB = startRow + m * 4 + 2;
+                r16Matches.push({
+                    sA: cellVal(rows, rA, 17), nA: cellVal(rows, rA, 18), pA: cellVal(rows, rA, 19),
+                    sB: cellVal(rows, rB, 17), nB: cellVal(rows, rB, 18), pB: cellVal(rows, rB, 19)
+                });
+            }
+
+            const qfMatches = [];
+            for (let m = 0; m < 4; m++) {
+                const rA = startRow + m * 8 + 1;
+                const rB = startRow + m * 8 + 5;
+                qfMatches.push({
+                    nA: cellVal(rows, rA, 20), pA: cellVal(rows, rA, 21),
+                    nB: cellVal(rows, rB, 20), pB: cellVal(rows, rB, 21)
+                });
+            }
+
+            const sfMatches = [];
+            for (let m = 0; m < 2; m++) {
+                const rA = startRow + m * 16 + 3;
+                const rB = startRow + m * 16 + 11;
+                sfMatches.push({
+                    nA: cellVal(rows, rA, 22), pA: cellVal(rows, rA, 23),
+                    nB: cellVal(rows, rB, 22), pB: cellVal(rows, rB, 23)
+                });
+            }
+
+            const finMatch = {
+                nA: cellVal(rows, startRow + 7, 24),  pA: cellVal(rows, startRow + 7, 25),
+                nB: cellVal(rows, startRow + 23, 24), pB: cellVal(rows, startRow + 23, 25)
+            };
+
+            const winner32 = cellVal(rows, startRow + 15, 26);
+
+            return `
+                <div class="bg-white rounded-lg shadow-md border border-neutral-300 overflow-hidden">
+                    <div class="wf-pool-header">
+                        <div>TABELLONE ELIMINAZIONE DIRETTA DA 32</div>
+                        <div class="text-xs opacity-90 font-sans font-semibold">Stile WebFence Granata</div>
+                    </div>
+                    <table class="w-full border-collapse table-fixed">
+                        <tbody>
+                            <tr>
+                                <td class="align-top p-4 overflow-x-auto bg-[#f8f9fa]">
+                                    <div class="min-w-[1080px]">
+                                        <div class="grid grid-cols-6 text-center text-xs font-bold text-neutral-600 mb-4 border-b border-neutral-300 pb-2 font-mono">
+                                            <div>Tabellone dei 32</div>
+                                            <div>Tabellone dei 16</div>
+                                            <div>Quarti</div>
+                                            <div>Semifinali</div>
+                                            <div>Finale</div>
+                                            <div>Vincitore</div>
+                                        </div>
+                                        <div class="grid grid-cols-6 gap-3 items-stretch" style="min-height: 980px;">
+                                            <div class="flex flex-col justify-between space-y-2">
+                                                ${r32Matches.map(m => buildMatchHTML(m.sA, m.nA, m.pA, m.sB, m.nB, m.pB)).join('')}
+                                            </div>
+                                            <div class="flex flex-col justify-around py-4">
+                                                ${r16Matches.map(m => buildMatchHTML(m.sA || null, m.nA, m.pA, m.sB || null, m.nB, m.pB)).join('')}
+                                            </div>
+                                            <div class="flex flex-col justify-around py-10">
+                                                ${qfMatches.map(m => buildMatchHTML(null, m.nA, m.pA, null, m.nB, m.pB)).join('')}
+                                            </div>
+                                            <div class="flex flex-col justify-around py-24">
+                                                ${sfMatches.map(m => buildMatchHTML(null, m.nA, m.pA, null, m.nB, m.pB)).join('')}
+                                            </div>
+                                            <div class="flex flex-col justify-center">
+                                                ${buildMatchHTML(null, finMatch.nA, finMatch.pA, null, finMatch.nB, finMatch.pB)}
+                                            </div>
+                                            <div class="flex flex-col justify-center items-center">
+                                                <div class="w-full rounded-lg border-2 border-[#7a1224] bg-[#f9ebed] p-4 text-center shadow">
+                                                    <div class="text-xs font-bold uppercase tracking-widest text-[#7a1224] mb-1">🏆 Vincitore</div>
+                                                    <div class="font-mono font-extrabold text-base text-neutral-900 truncate">
+                                                        ${(winner32 && winner32 !== '-') ? winner32 : 'In corso'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="align-top p-0 w-[430px] border-l-2 border-neutral-300 bg-[#f8f9fa]">
+                                    ${sidebar32Html}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeTabelloneModal();
+                closeModal();
+                closeConfirmModal();
+            }
+        });
+
+        renderTable();
+    </script>
+</body>
+</html>
