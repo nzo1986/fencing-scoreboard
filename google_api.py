@@ -28,6 +28,16 @@ def check_google():
         return "error"
     return "ok"
 
+def parse_score_info(val):
+    s = str(val or '').strip().upper()
+    has_v = s.startswith('V')
+    num_str = s[1:].strip() if has_v else s
+    try:
+        num = int(float(num_str)) if num_str != '' else 0
+    except Exception:
+        num = 0
+    return num, has_v, s
+
 def safe_get(lst, idx, default=""):
     return lst[idx].strip() if idx < len(lst) else default
 
@@ -36,22 +46,43 @@ def update_all_gironi_data(socketio):
         sid = current_state['settings'].get('google_sheet_id', '').strip()
         if not sid:
             sid = DEFAULT_SHEET_ID
-        r = requests.get(
-            f"https://docs.google.com/spreadsheets/d/{sid}/gviz/tq?tqx=out:csv&sheet=display3gir&t={int(time.time())}",
-            headers={'User-Agent': 'Mozilla/5.0'}
-        )
-        r.encoding = 'utf-8'
-        lines = r.text.strip().split('\n')
+        rows_data = None
+        script_url = current_state['settings'].get('google_script_url', '').strip()
+        if script_url:
+            try:
+                sep = '&' if '?' in script_url else '?'
+                r_js = requests.get(
+                    f"{script_url}{sep}azione=leggi_tabellone&sheetName=display3gir&t={int(time.time())}",
+                    headers={'User-Agent': 'Mozilla/5.0'},
+                    timeout=8
+                )
+                if r_js.status_code == 200:
+                    parsed_json = r_js.json()
+                    if isinstance(parsed_json, list) and len(parsed_json) > 1:
+                        rows_data = parsed_json
+            except Exception:
+                rows_data = None
+
+        if rows_data is None:
+            r = requests.get(
+                f"https://docs.google.com/spreadsheets/d/{sid}/gviz/tq?tqx=out:csv&sheet=display3gir&t={int(time.time())}",
+                headers={'User-Agent': 'Mozilla/5.0'},
+                timeout=8
+            )
+            r.encoding = 'utf-8'
+            lines = r.text.strip().split('\n')
+            rows_data = []
+            for line in lines:
+                parsed_line = list(csv.reader([line]))
+                rows_data.append(parsed_line[0] if parsed_line else [])
 
         new_cache = {k: [] for k in GIRONI_MAP_READ.keys()}
         cols_map = current_state['settings'].get('columns', default_columns)
         
-        for i, line in enumerate(lines[1:]): 
+        for i, p in enumerate(rows_data[1:37]):  # Si ferma esattamente alla riga 37 
             row_idx = i + 2
-            parsed_line = list(csv.reader([line]))
-            if not parsed_line:
+            if not p:
                 continue
-            p = parsed_line[0]
             
             for girone in GIRONI_MAP_READ.keys():
                 g_cols = cols_map.get(girone)
@@ -88,13 +119,9 @@ def update_all_gironi_data(socketio):
             for m in matches_in_gir:
                 if m['row'] == curr_row:
                     match_found = True
-                    try:
-                        p_sx = int(float(m.get('p_sx', '0') or '0'))
-                        p_dx = int(float(m.get('p_dx', '0') or '0'))
-                    except Exception:
-                        p_sx, p_dx = 0, 0
-                    
-                    if p_sx != 0 or p_dx != 0:
+                    p_sx, v_sx, _ = parse_score_info(m.get('p_sx', '0'))
+                    p_dx, v_dx, _ = parse_score_info(m.get('p_dx', '0'))
+                    if p_sx != 0 or p_dx != 0 or v_sx or v_dx:
                         current_match_completed = True
                     else:
                         target_l, target_r = (m['dx'], m['sx']) if current_state.get('swapped', False) else (m['sx'], m['dx'])
@@ -111,12 +138,9 @@ def update_all_gironi_data(socketio):
         if current_match_completed or (not curr_row and current_state['fencer_left']['name'] == current_state['settings']['default_name_left']):
             next_match = None
             for m in matches_in_gir:
-                try:
-                    p_sx = int(float(m.get('p_sx', '0') or '0'))
-                    p_dx = int(float(m.get('p_dx', '0') or '0'))
-                except Exception:
-                    p_sx, p_dx = 0, 0
-                if p_sx == 0 and p_dx == 0:
+                p_sx, v_sx, _ = parse_score_info(m.get('p_sx', '0'))
+                p_dx, v_dx, _ = parse_score_info(m.get('p_dx', '0'))
+                if p_sx == 0 and p_dx == 0 and not v_sx and not v_dx:
                     next_match = m
                     break
             
@@ -183,12 +207,12 @@ def process_background_upload(payload, girone, socketio):
         match_data = next((m for m in gironi_cache.get(girone, []) if m['row'] == int(payload['row'])), None)
         if match_data:
             try:
-                msx = int(float(match_data.get('p_sx', '0') or '0'))
-                mdx = int(float(match_data.get('p_dx', '0') or '0'))
-                vsx = int(float(payload.get('val_sx', '0') or '0'))
-                vdx = int(float(payload.get('val_dx', '0') or '0'))
+                msx, mvsx, _ = parse_score_info(match_data.get('p_sx', '0'))
+                mdx, mvdx, _ = parse_score_info(match_data.get('p_dx', '0'))
+                vsx, vvsx, _ = parse_score_info(payload.get('val_sx', '0'))
+                vdx, vvdx, _ = parse_score_info(payload.get('val_dx', '0'))
                 
-                if msx == vsx and mdx == vdx:
+                if msx == vsx and mdx == vdx and mvsx == vvsx and mvdx == vvdx:
                     socketio.emit('upload_status', {'color': 'green'})
                     socketio.sleep(5)
                     socketio.emit('upload_status', {'color': 'none'})

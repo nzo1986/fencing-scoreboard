@@ -88,11 +88,13 @@
                 <div class="match-row">
                     <div class="fencer-name text-right pr-2 text-red-400">${m.sx}</div>
                     <div class="flex items-center gap-1">
-                        <input type="number" id="sx_${m.row}" value="${m.p_sx}" class="score-input" 
+                        <input type="text" maxlength="4" id="sx_${m.row}" value="${m.p_sx}" class="score-input uppercase" 
+                               oninput="this.value = this.value.toUpperCase();"
                                onfocus="this.dataset.old = this.value; this.value = '';" 
                                onblur="if(this.value === '') this.value = this.dataset.old;">
                         <span class="text-slate-500 font-bold">-</span>
-                        <input type="number" id="dx_${m.row}" value="${m.p_dx}" class="score-input"
+                        <input type="text" maxlength="4" id="dx_${m.row}" value="${m.p_dx}" class="score-input uppercase"
+                               oninput="this.value = this.value.toUpperCase();"
                                onfocus="this.dataset.old = this.value; this.value = '';" 
                                onblur="if(this.value === '') this.value = this.dataset.old;">
                     </div>
@@ -107,11 +109,17 @@
         }
 
         function sendScore(girone, row, sxName, dxName) {
-            const val_sx = document.getElementById(`sx_${row}`).value;
-            const val_dx = document.getElementById(`dx_${row}`).value;
+            const val_sx = document.getElementById(`sx_${row}`).value.trim().toUpperCase();
+            const val_dx = document.getElementById(`dx_${row}`).value.trim().toUpperCase();
+            document.getElementById(`sx_${row}`).value = val_sx;
+            document.getElementById(`dx_${row}`).value = val_dx;
             
             if(val_sx === '' || val_dx === '') {
                 showToast("Errore: Inserisci entrambi i punteggi!", "error");
+                return;
+            }
+            if(!/^(V?\d+|V)$/i.test(val_sx) || !/^(V?\d+|V)$/i.test(val_dx)) {
+                showToast("Formato non valido! Usa numeri o V + numero (es. V4 e 4).", "error");
                 return;
             }
 

@@ -928,12 +928,14 @@
                     ${labelBadge}
                     <div class="fencer-name text-right pr-2 text-red-400">${m.sx}</div>
                     <div class="flex items-center gap-1">
-                        <input type="number" id="sx_${m.row}" value="${m.p_sx}" class="score-input" 
+                        <input type="text" maxlength="4" id="sx_${m.row}" value="${String(m.p_sx ?? '').toUpperCase()}" class="score-input uppercase" 
+                               oninput="this.value = this.value.toUpperCase();"
                                onfocus="onScoreInputFocus(); this.dataset.old = this.value; this.value = '';" 
                                onblur="onScoreInputBlur(); if(this.value === '') this.value = this.dataset.old;"
                                onkeydown="if(event.key==='Enter'){ sendScore('${girone}', ${m.row}, '${m.sx.replace(/'/g, "\\'")}', '${m.dx.replace(/'/g, "\\'")}'); }">
                         <span class="text-slate-500 font-bold">-</span>
-                        <input type="number" id="dx_${m.row}" value="${m.p_dx}" class="score-input"
+                        <input type="text" maxlength="4" id="dx_${m.row}" value="${String(m.p_dx ?? '').toUpperCase()}" class="score-input uppercase"
+                               oninput="this.value = this.value.toUpperCase();"
                                onfocus="onScoreInputFocus(); this.dataset.old = this.value; this.value = '';" 
                                onblur="onScoreInputBlur(); if(this.value === '') this.value = this.dataset.old;"
                                onkeydown="if(event.key==='Enter'){ sendScore('${girone}', ${m.row}, '${m.sx.replace(/'/g, "\\'")}', '${m.dx.replace(/'/g, "\\'")}'); }">
@@ -981,12 +983,33 @@
             }
         }
 
+        function parseBoutScore(raw) {
+            const str = String(raw ?? '').trim().toUpperCase();
+            const hasV = str.startsWith('V');
+            const numPart = hasV ? str.slice(1).trim() : str;
+            const num = numPart === '' ? 0 : (parseInt(numPart, 10) || 0);
+            const isPlayed = (str !== '' && str !== '0') || hasV;
+            return { raw: str, num, hasV, isPlayed };
+        }
+
+        function isValidBoutInput(val) {
+            return /^(V?\d+|V)$/i.test(String(val ?? '').trim());
+        }
+
         function sendScore(girone, row, sxName, dxName) {
-            const val_sx = document.getElementById(`sx_${row}`).value;
-            const val_dx = document.getElementById(`dx_${row}`).value;
+            const elSx = document.getElementById(`sx_${row}`);
+            const elDx = document.getElementById(`dx_${row}`);
+            const val_sx = elSx.value.trim().toUpperCase();
+            const val_dx = elDx.value.trim().toUpperCase();
+            elSx.value = val_sx;
+            elDx.value = val_dx;
             
             if (val_sx === '' || val_dx === '') {
                 showToast("Errore: Inserisci entrambi i punteggi!", "error");
+                return;
+            }
+            if (!isValidBoutInput(val_sx) || !isValidBoutInput(val_dx)) {
+                showToast("Formato non valido! Usa numeri o V + numero (es. V4 e 4).", "error");
                 return;
             }
 
@@ -1109,6 +1132,7 @@
 
         function manualRefreshTabellone() {
             forceResumeTabelloneRefresh();
+            socket.emit('fetch_sheet');
             loadTabelloneData(true);
         }
 
@@ -1129,11 +1153,12 @@
         }
 
         // Verifica se un assalto è effettivamente concluso oppure ancora da svolgere / incompleto
-        function isBoutCompleted(phase, pSx, pDx, row) {
-            if (pSx === 0 && pDx === 0) return false;
-            if (pSx === pDx) return false;
+        function isBoutCompleted(phase, infoSx, infoDx, row) {
+            if (!infoSx.isPlayed && !infoDx.isPlayed) return false;
+            if (infoSx.hasV !== infoDx.hasV) return true;
+            if (infoSx.num === infoDx.num) return false;
 
-            const maxP = Math.max(pSx, pDx);
+            const maxP = Math.max(infoSx.num, infoDx.num);
             if (phase === 'GIRONE') {
                 return maxP >= 4;
             } else {
@@ -1154,18 +1179,19 @@
                 const all32 = [];
                 const pending32 = [];
                 validMatches.forEach((m, idx) => {
-                    const pSx = parseInt(m.p_sx) || 0;
-                    const pDx = parseInt(m.p_dx) || 0;
-                    const completed = isBoutCompleted('32', pSx, pDx, m.row);
+                    const infoSx = parseBoutScore(m.p_sx);
+                    const infoDx = parseBoutScore(m.p_dx);
+                    const completed = isBoutCompleted('32', infoSx, infoDx, m.row);
                     const item = {
                         order: `${idx + 1}°`,
                         phase: '32',
                         row: m.row,
                         sx: m.sx.trim(),
                         dx: m.dx.trim(),
-                        p_sx: pSx,
-                        p_dx: pDx,
-                        isPartial: (!completed && (pSx > 0 || pDx > 0)),
+                        p_sx: infoSx.raw || "0",
+                        p_dx: infoDx.raw || "0",
+                        isPlayed: (infoSx.isPlayed || infoDx.isPlayed),
+                        isPartial: (!completed && (infoSx.isPlayed || infoDx.isPlayed)),
                         isCompleted: completed
                     };
                     all32.push(item);
@@ -1188,18 +1214,19 @@
             const poolFormatted = [];
             const poolPending = [];
             poolAll.forEach((m, idx) => {
-                const pSx = parseInt(m.p_sx) || 0;
-                const pDx = parseInt(m.p_dx) || 0;
-                const completed = isBoutCompleted('GIRONE', pSx, pDx, m.row);
+                const infoSx = parseBoutScore(m.p_sx);
+                const infoDx = parseBoutScore(m.p_dx);
+                const completed = isBoutCompleted('GIRONE', infoSx, infoDx, m.row);
                 const item = {
                     order: `${idx + 1}°`,
                     phase: 'GIRONE',
                     row: m.row,
                     sx: m.sx.trim(),
                     dx: m.dx.trim(),
-                    p_sx: pSx,
-                    p_dx: pDx,
-                    isPartial: (!completed && (pSx > 0 || pDx > 0)),
+                    p_sx: infoSx.raw || "0",
+                    p_dx: infoDx.raw || "0",
+                    isPlayed: (infoSx.isPlayed || infoDx.isPlayed),
+                    isPartial: (!completed && (infoSx.isPlayed || infoDx.isPlayed)),
                     isCompleted: completed
                 };
                 poolFormatted.push(item);
@@ -1209,21 +1236,22 @@
             const deFormatted = [];
             const dePending = [];
             deAll.forEach((m) => {
-                const pSx = parseInt(m.p_sx) || 0;
-                const pDx = parseInt(m.p_dx) || 0;
+                const infoSx = parseBoutScore(m.p_sx);
+                const infoDx = parseBoutScore(m.p_dx);
                 const sxClean = m.sx.trim();
                 const dxClean = m.dx.trim();
                 if (sxClean !== '-' && dxClean !== '-') {
-                    const completed = isBoutCompleted('DIRETTA', pSx, pDx, m.row);
+                    const completed = isBoutCompleted('DIRETTA', infoSx, infoDx, m.row);
                     const item = {
                         order: getDeRoundLabel(Number(m.row)),
                         phase: 'DIRETTA',
                         row: m.row,
                         sx: sxClean,
                         dx: dxClean,
-                        p_sx: pSx,
-                        p_dx: pDx,
-                        isPartial: (!completed && (pSx > 0 || pDx > 0)),
+                        p_sx: infoSx.raw || "0",
+                        p_dx: infoDx.raw || "0",
+                        isPlayed: (infoSx.isPlayed || infoDx.isPlayed),
+                        isPartial: (!completed && (infoSx.isPlayed || infoDx.isPlayed)),
                         isCompleted: completed
                     };
                     deFormatted.push(item);
@@ -1247,11 +1275,17 @@
             const elDx = document.getElementById(`tb_dx_${gironeKey}_${row}`);
             if (!elSx || !elDx) return;
 
-            const val_sx = elSx.value.trim();
-            const val_dx = elDx.value.trim();
+            const val_sx = elSx.value.trim().toUpperCase();
+            const val_dx = elDx.value.trim().toUpperCase();
+            elSx.value = val_sx;
+            elDx.value = val_dx;
 
             if (val_sx === '' || val_dx === '') {
                 showToast("Inserisci entrambi i punteggi!", "error");
+                return;
+            }
+            if (!isValidBoutInput(val_sx) || !isValidBoutInput(val_dx)) {
+                showToast("Formato non valido! Usa numeri o V + numero (es. V4 e 4).", "error");
                 return;
             }
 
@@ -1525,8 +1559,8 @@
                 const safeSx = b.sx.replace(/'/g, "\\'");
                 const safeDx = b.dx.replace(/'/g, "\\'");
                 const draft = draftTabelloneScores[`${gironeKey}_${b.row}`];
-                const valSx = draft ? draft.sx : ((b.p_sx > 0 || b.p_dx > 0) ? String(b.p_sx) : "");
-                const valDx = draft ? draft.dx : ((b.p_sx > 0 || b.p_dx > 0) ? String(b.p_dx) : "");
+                const valSx = draft ? draft.sx : (b.isPlayed ? String(b.p_sx) : "");
+                const valDx = draft ? draft.dx : (b.isPlayed ? String(b.p_dx) : "");
                 const isDe = (b.phase === 'DIRETTA');
                 const badgeClass = isDe
                     ? "bg-[#7a1224] text-white"
@@ -1539,23 +1573,23 @@
                 return `
                     <div class="flex items-center justify-between gap-1.5 px-2.5 py-2 ${b.isPartial ? 'bg-amber-50/70' : 'bg-white'} hover:bg-[#f9ebed]/60 transition border-b border-neutral-200 last:border-b-0">
                         <span class="text-[10px] font-mono font-extrabold ${badgeClass} px-1.5 py-0.5 rounded min-w-[38px] text-center flex-none" title="${isDe ? 'Eliminazione Diretta' : 'Assalto Girone'}">${b.order}</span>
-                        <div class="flex-1 text-right text-xs font-extrabold text-neutral-800 truncate" title="${b.sx}">${b.sx}</div>
+                        <div class="flex-1 text-right text-xs font-extrabold text-neutral-800 whitespace-nowrap" title="${b.sx}">${b.sx}</div>
                         <div class="flex items-center gap-1 flex-none">
-                            <input type="number" min="0" max="99" id="tb_sx_${gironeKey}_${b.row}" value="${valSx}" placeholder="0"
-                                class="wf-mini-input"
+                            <input type="text" maxlength="4" id="tb_sx_${gironeKey}_${b.row}" value="${valSx}" placeholder="0"
+                                class="wf-mini-input uppercase"
                                 onfocus="onScoreInputFocus('${gironeKey}', ${b.row})"
-                                oninput="onScoreInputChange('${gironeKey}', ${b.row})"
+                                oninput="this.value = this.value.toUpperCase(); onScoreInputChange('${gironeKey}', ${b.row})"
                                 onblur="onScoreInputBlur()"
                                 onkeydown="if(event.key==='Enter'){ sendQuickBoutFromTabellone('${gironeKey}', ${b.row}, '${safeSx}', '${safeDx}'); }">
                             <span class="text-neutral-400 font-bold text-xs">-</span>
-                            <input type="number" min="0" max="99" id="tb_dx_${gironeKey}_${b.row}" value="${valDx}" placeholder="0"
-                                class="wf-mini-input"
+                            <input type="text" maxlength="4" id="tb_dx_${gironeKey}_${b.row}" value="${valDx}" placeholder="0"
+                                class="wf-mini-input uppercase"
                                 onfocus="onScoreInputFocus('${gironeKey}', ${b.row})"
-                                oninput="onScoreInputChange('${gironeKey}', ${b.row})"
+                                oninput="this.value = this.value.toUpperCase(); onScoreInputChange('${gironeKey}', ${b.row})"
                                 onblur="onScoreInputBlur()"
                                 onkeydown="if(event.key==='Enter'){ sendQuickBoutFromTabellone('${gironeKey}', ${b.row}, '${safeSx}', '${safeDx}'); }">
                         </div>
-                        <div class="flex-1 text-left text-xs font-extrabold text-neutral-800 truncate" title="${b.dx}">${b.dx}</div>
+                        <div class="flex-1 text-left text-xs font-extrabold text-neutral-800 whitespace-nowrap" title="${b.dx}">${b.dx}</div>
                         ${statusTag}
                         <button onclick="sendQuickBoutFromTabellone('${gironeKey}', ${b.row}, '${safeSx}', '${safeDx}')"
                             style="background-color:#7a1224;"
@@ -1768,8 +1802,8 @@
                     gironeCellHtml += `<table class="wf-pool-table">`;
                     gironeCellHtml += `<thead><tr class="wf-pool-subhdr">`;
                     gironeCellHtml += `<th class="text-center w-8">#</th>`;
-                    gironeCellHtml += `<th class="text-left">ATLETA</th>`;
-                    gironeCellHtml += `<th class="text-center w-20">CAT/SOC</th>`;
+                    gironeCellHtml += `<th class="text-left whitespace-nowrap">ATLETA</th>`;
+                    gironeCellHtml += `<th class="text-center whitespace-nowrap px-3">CAT/SOC</th>`;
                     for (let c = 1; c <= poolSize; c++) {
                         gironeCellHtml += `<th class="text-center w-8">${c}</th>`;
                     }
@@ -1785,8 +1819,8 @@
                         const rowClass = (i % 2 === 0) ? 'wf-pool-row-even' : 'wf-pool-row-odd';
                         gironeCellHtml += `<tr class="${rowClass}">`;
                         gironeCellHtml += `<td class="text-center font-bold text-neutral-500">${f.idx}</td>`;
-                        gironeCellHtml += `<td class="font-bold text-neutral-900">${f.active ? f.nome : '<span class="text-neutral-400">-</span>'}</td>`;
-                        gironeCellHtml += `<td class="text-center text-neutral-600">${f.cognome}</td>`;
+                        gironeCellHtml += `<td class="font-bold text-neutral-900 whitespace-nowrap">${f.active ? f.nome : '<span class="text-neutral-400">-</span>'}</td>`;
+                        gironeCellHtml += `<td class="text-center text-neutral-600 whitespace-nowrap px-3">${f.cognome}</td>`;
 
                         for (let c = 1; c <= poolSize; c++) {
                             if (c === f.idx) {
@@ -1914,7 +1948,7 @@
                             <td class="align-top p-0">
                                 ${gironeCellHtml}
                             </td>
-                            <td rowspan="2" class="align-top p-0 w-[430px] border-l-2 border-neutral-300 bg-[#f8f9fa]">
+                            <td rowspan="2" class="align-top p-0 w-[520px] border-l-2 border-neutral-300 bg-[#f8f9fa]">
                                 ${sidebarHtml}
                             </td>
                         </tr>
@@ -2049,7 +2083,7 @@
                                         </div>
                                     </div>
                                 </td>
-                                <td class="align-top p-0 w-[430px] border-l-2 border-neutral-300 bg-[#f8f9fa]">
+                                <td class="align-top p-0 w-[520px] border-l-2 border-neutral-300 bg-[#f8f9fa]">
                                     ${sidebar32Html}
                                 </td>
                             </tr>

@@ -250,15 +250,16 @@
                     const opt = document.createElement('option');
                     opt.value = JSON.stringify({girone: g, row: m.row, sx: m.sx, dx: m.dx, p_sx: m.p_sx, p_dx: m.p_dx});
                     
-                    const p_sx_val = parseInt(m.p_sx) || 0;
-                    const p_dx_val = parseInt(m.p_dx) || 0;
+                    const rawSx = String(m.p_sx || '0').trim().toUpperCase();
+                    const rawDx = String(m.p_dx || '0').trim().toUpperCase();
+                    const isPlayed = (rawSx !== '' && rawSx !== '0') || (rawDx !== '' && rawDx !== '0');
                     
-                    if (p_sx_val !== 0 || p_dx_val !== 0) { 
+                    if (isPlayed) { 
                         opt.style.color = '#ef4444'; 
-                        opt.innerText = `🔴 ${m.sx} [${p_sx_val}] - [${p_dx_val}] ${m.dx}`;
+                        opt.innerText = `🔴 ${m.sx} [${rawSx || '0'}] - [${rawDx || '0'}] ${m.dx}`;
                     } else {
                         opt.style.color = '#22c55e'; 
-                        opt.innerText = `🟢 ${m.sx} [${p_sx_val}] - [${p_dx_val}] ${m.dx}`;
+                        opt.innerText = `🟢 ${m.sx} [0] - [0] ${m.dx}`;
                     }
                     
                     sel.appendChild(opt);

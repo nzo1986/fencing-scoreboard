@@ -490,10 +490,13 @@ def l_match(d):
     current_state['fencer_right']['name'] = clean_fencer_name(d['dx'])
     current_state['fencer_left']['photo'] = get_photo_url(current_state['fencer_left']['name'])
     current_state['fencer_right']['photo'] = get_photo_url(current_state['fencer_right']['name'])
-    try: current_state['fencer_left']['score'] = int(float(d['p_sx']))
-    except Exception: current_state['fencer_left']['score'] = 0
-    try: current_state['fencer_right']['score'] = int(float(d['p_dx']))
-    except Exception: current_state['fencer_right']['score'] = 0
+    def _num_score(v):
+        s = str(v or '').strip().upper()
+        if s.startswith('V'): s = s[1:].strip()
+        try: return int(float(s)) if s else 0
+        except Exception: return 0
+    current_state['fencer_left']['score'] = _num_score(d.get('p_sx'))
+    current_state['fencer_right']['score'] = _num_score(d.get('p_dx'))
     current_state['timer'] = float(current_state['settings']['time_match'])
     current_state['phase'] = 'MATCH'
     current_state['running'] = False
@@ -514,6 +517,11 @@ def handle_send_result():
     cols = cols_map.get(g, default_columns['rosso'])
     val_sx = current_state['fencer_right']['score'] if current_state.get('swapped') else current_state['fencer_left']['score']
     val_dx = current_state['fencer_left']['score'] if current_state.get('swapped') else current_state['fencer_right']['score']
+    prio = current_state.get('priority')
+    if val_sx == val_dx and prio in ['left', 'right']:
+        sx_has_prio = (prio == 'right') if current_state.get('swapped') else (prio == 'left')
+        if sx_has_prio: val_sx = f"V{val_sx}"
+        else: val_dx = f"V{val_dx}"
     payload = {
         "sheet_name": "display3gir", "row": current_state['current_row_idx'],
         "col_sx": letter_to_sheet_col(cols['psx']), "val_sx": val_sx,
@@ -526,11 +534,15 @@ def handle_send_result():
     next_match = None
     for m in matches:
         if m['row'] != current_state['current_row_idx']:
-            try: p_sx = int(float(m.get('p_sx', '0') or '0'))
+            s_sx = str(m.get('p_sx', '0') or '0').strip().upper()
+            s_dx = str(m.get('p_dx', '0') or '0').strip().upper()
+            v_sx = s_sx.startswith('V')
+            v_dx = s_dx.startswith('V')
+            try: p_sx = int(float(s_sx[1:] if v_sx else s_sx or '0'))
             except Exception: p_sx = 0
-            try: p_dx = int(float(m.get('p_dx', '0') or '0'))
+            try: p_dx = int(float(s_dx[1:] if v_dx else s_dx or '0'))
             except Exception: p_dx = 0
-            if p_sx == 0 and p_dx == 0:
+            if p_sx == 0 and p_dx == 0 and not v_sx and not v_dx:
                 next_match = m
                 break
     if next_match:
@@ -590,10 +602,12 @@ def handle_send_background_result(data):
     g = data['girone']
     cols_map = current_state['settings'].get('columns', default_columns)
     cols = cols_map.get(g, default_columns['rosso']) 
+    val_sx = str(data.get('val_sx', '')).strip().upper()
+    val_dx = str(data.get('val_dx', '')).strip().upper()
     payload = { 
         "sheet_name": "display3gir", "row": data['row'], 
-        "col_sx": letter_to_sheet_col(cols['psx']), "val_sx": data['val_sx'], 
-        "col_dx": letter_to_sheet_col(cols['pdx']), "val_dx": data['val_dx'] 
+        "col_sx": letter_to_sheet_col(cols['psx']), "val_sx": val_sx, 
+        "col_dx": letter_to_sheet_col(cols['pdx']), "val_dx": val_dx 
     }
     socketio.emit('action_feedback', {'status': 'info', 'msg': f"Invio risultato {data['sx']} vs {data['dx']} in background..."})
     socketio.start_background_task(process_background_upload, payload, g, socketio)
